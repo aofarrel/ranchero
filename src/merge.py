@@ -1,4 +1,8 @@
 from src.neigh import NeighLib
+import pandas as pd
+import numpy as np
+
+verbose = True  # TODO: do this better
 
 def merge_dataframes(previous, incoming, merge_upon, new_data_name, name_in_column=None):
 	"""
@@ -16,7 +20,7 @@ def merge_dataframes(previous, incoming, merge_upon, new_data_name, name_in_colu
 
 	merge = pd.merge(previous, incoming, on=merge_upon, how='outer', indicator='merge_status_unprocessed')
 	len_previous, len_incoming, len_current = len(previous.index), len(incoming.index), len(merge.index)
-	for conflict in get_x_y_column_pairs(merge):
+	for conflict in NeighLib.get_x_y_column_pairs(merge):
 		foo_x, foo_y, foo = conflict[0], conflict[1], conflict[2]
 		merge[foo_x] = merge[foo_x].fillna(merge[foo_y])
 		merge[foo_y] = merge[foo_y].fillna(merge[foo_x])
@@ -40,7 +44,7 @@ def merge_dataframes(previous, incoming, merge_upon, new_data_name, name_in_colu
 	else:
 		if verbose: print(f"{foo} seem unchanged")
 	
-	if verbose: mega_debug_merge(merge)
+	if verbose: NeighLib.mega_debug_merge(merge, merge_upon)
 
 
 

@@ -121,21 +121,6 @@ def pandas_from_bigquery(bq_file, write_intermediate_files=True, fix_attributes=
 		bq_to_merge = bq_norm if bq_norm is not None else (bq_fixed if bq_fixed is not None else bq_raw)
 		bq_to_merge.to_csv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv', sep='\t', index=False)
 		bq_jnorm = pandas_from_tsv(polars_flatten(f"./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv", upon='BioSample', input_sep='\t', try_parse_dates=True, keep_all_columns=False))
-
-	
-	print("Pandas to polars:")
-	ptp = pl.from_pandas(bq_to_merge)
-	print("Pandas to Polars to Pandas to Polars:")
-	ptptptp = pl.from_pandas(ptp.to_pandas())
-	print("Pandas to TSV to polars:")
-	ptttp = polars_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv')
-	print("Pandas to TSV to Pandas to Polars:")
-	ptttptp = pl.from_pandas(pandas_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv'))
-
-	pl.testing.assert_frame_equal(ptp, ptptptp)
-	pl.testing.assert_frame_equal(ptp, ptttp)
-	pl.testing.assert_frame_equal(ptp, ptttptp)
-
 	return bq_jnorm if bq_jnorm is not None else bq_flatdicts  # bq_flatdircts if not normalize_attributes
 
 def polars_flatten(input_file, upon='BioSample', input_sep='\t', try_parse_dates=True, keep_all_columns=False, rancheroize=True):
@@ -149,7 +134,7 @@ def polars_flatten(input_file, upon='BioSample', input_sep='\t', try_parse_dates
 	print(f"Flattening {upon}...")
 	not_flat = polars_from_tsv(input_file)
 
-	print(verify_acc_and_acc1(not_flat)) # TODO: make this actually do something, like drop acc_1
+	#print(verify_acc_and_acc1(not_flat)) # TODO: make this actually do something, like drop acc_1
 
 	if rancheroize:
 		#if verbose: print(list(not_flat.columns))

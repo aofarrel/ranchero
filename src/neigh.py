@@ -36,7 +36,7 @@ class NeighLib:
 					list_of_pairs.append([foo_x, foo_y, foo])
 				else:
 					raise ValueError("Found {foo_x}, but no {foo_y} counterpart!")
-		assert len(set(list_of_pairs)) == len(list_of_pairs)  # there should be no duplicate columns
+		assert len(set(map(tuple, list_of_pairs))) == len(list_of_pairs)  # there should be no duplicate columns
 		return list_of_pairs  # list of lists [["foo_x", "foo_y", "foo"]]
 	
 	def polars_cast(polars_df, dictionary):
@@ -84,14 +84,17 @@ class NeighLib:
 	def pandas_vs_polars():
 		"""
 		Just an example for now. Basically what we've learned is to use from_pandas() to get schemas correctly.
-		
+
 		print("Pandas to polars:")
 		ptp = pl.from_pandas(bq_to_merge)
+		print("Pandas to Polars to Pandas to Polars:")
+		ptptptp = pl.from_pandas(ptp.to_pandas())
 		print("Pandas to TSV to polars:")
 		ptttp = polars_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv')
 		print("Pandas to TSV to Pandas to Polars:")
 		ptttptp = pl.from_pandas(pandas_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv'))
 
+		pl.testing.assert_frame_equal(ptp, ptptptp)
 		pl.testing.assert_frame_equal(ptp, ptttp)
 		pl.testing.assert_frame_equal(ptp, ptttptp)
 		"""
@@ -126,10 +129,10 @@ class NeighLib:
 					not_dupes.add(column)
 			raise AssertionError(f"Pandas df has duplicate columns: {dupes}")
 
-	def mega_debug_merge(dataframe):
+	def mega_debug_merge(merge, merge_upon):
 		n_mergefails =  merge['merge_status_unprocessed'].value_counts()['right_only']
-		print(f"Added {len_incoming} {merge_upon}s to the dataframe (was {len_previous} BioSamples, current length {len_current})")
-		print(f"{n_mergefails} {merge_upon}s seem to have failed to merge")
+		#print(f"Added {len_incoming} {merge_upon}s to the dataframe (was {len_previous} BioSamples, current length {len_current})")
+		#print(f"{n_mergefails} {merge_upon}s seem to have failed to merge")
 		print("Samples that failed to merge (right_only):")
 		print(merge.loc[merge['merge_status_unprocessed'] == 'right_only', ['BioSample', 'run_accession']])
 		
@@ -159,9 +162,9 @@ class NeighLib:
 			# will break if merge_upon is BioSample but I think this will only fire on the first one which is run accessions?
 			print("Existing dataframe has nans on the column we need to merge upon, will attempt a BioSample merge")
 
-		set_A = column_to_set(unmerged_A[merge_upon])
-		set_B = column_to_set(unmerged_B[merge_upon])
-		print("unmerged set A")
-		print(set_A)
-		print("unmerged set B")
-		print(set_B)
+		#set_A = column_to_set(unmerged_A[merge_upon])
+		#set_B = column_to_set(unmerged_B[merge_upon])
+		#print("unmerged set A")
+		#print(set_A)
+		#print("unmerged set B")
+		#print(set_B)
