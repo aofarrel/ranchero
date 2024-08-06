@@ -1,0 +1,9 @@
+
+.DS_Store
+inputs/*
+Intermediate/*
+src/__pycache__/*
+src/dictionaries/__pycache__/*
+normalized_bears.tsv
+normalized_pandas.tsv
+normalized_polars.tsv
