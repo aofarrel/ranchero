@@ -168,3 +168,42 @@ class NeighLib:
 		#print(set_A)
 		#print("unmerged set B")
 		#print(set_B)
+	
+	def polars_flatten_both_ways(input_file, input_polars, upon='BioSample', keep_all_columns=False, rancheroize=True):
+		"""
+		Flattens an input file using polars group_by().agg(). This is designed to essentially turn run accession indexed dataframes
+		into BioSample-indexed dataframes. Because Ranchero uses a mixture of Pandas and Polars, this function writes the output
+		to the disk and returns the path to that file, rather than trying to retrun the dataframe itself.
+
+		If rancheroize, attempt to rename columns to ranchero format.
+		"""
+		print(f"Flattening {upon}...")
+		not_flat_1 = polars_from_tsv(input_file)
+		not_flat_2 = input_polars
+
+		#print(verify_acc_and_acc1(not_flat)) # TODO: make this actually do something, like drop acc_1
+
+		if rancheroize:
+			#if verbose: print(list(not_flat.columns))
+			not_flat = not_flat.rename(columns.bq_col_to_ranchero_col)
+			#if verbose: print(list(not_flat.columns))
+		
+		if keep_all_columns:
+			# not tested!
+			columns_to_keep = not_flat.col.copy().remove(upon)
+			flat = not_flat.group_by(upon).agg(columns_to_keep)
+			for nested_column in not_flat.col:
+				flat_neo = flat.with_columns(pl.col(nested_column).list.to_struct()).unnest(nested_column).rename({"field_0": nested_column})
+				flat = flat_neo  # silly workaround for flat = flat.with_columns(...).rename(...) throwing an error about duped columns
+		else:
+			columns_to_keep = columns.recommended_sra_columns
+			columns_to_keep.remove(upon)
+			flat = not_flat.group_by(upon).agg(pl.col(columns_to_keep))
+			for nested_column in columns.recommended_sra_columns:
+				flat_neo = flat.with_columns(pl.col(nested_column).list.to_struct()).unnest(nested_column).rename({"field_0": nested_column})
+				flat = flat_neo  # silly workaround for flat = flat.with_columns(...).rename(...) throwing an error about duped columns
+
+		flat_neo = flat_neo.unique() # doesn't seem to drop anything but may as well leave it
+		path = f"./intermediate/{os.path.basename(input_file)}_flattened.tsv"
+		polars_to_tsv(flat_neo, path)
+		return path

@@ -14,8 +14,28 @@ write_intermediate_files = True  # TODO: make args-y
 #def polars_to_pandas(polars_df):
 #
 
+def unnest_polars_list_columns(polars_df):
+	""" Unnests list data (but not the way explode() does it) so it can be writen to CSV format
+	Credit: deanm0000 on GitHub, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
+	"""
+	return polars_df.with_columns(
+		(
+			pl.lit("[")
+			+ pl.col(x).list.eval(pl.lit('"') + pl.element() + pl.lit('"')).list.join(",")
+			+ pl.lit("]")
+		).alias(x)
+		for x, y in polars_df.schema.items()
+		if y == pl.List(pl.String)
+	)
+
 def polars_to_tsv(polars_df, path):
-	polars_df.write_csv(path, separator='\t', include_header=True, null_value='')
+	columns_with_type_list = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.List]
+	if len(columns_with_type_list) > 0:
+		print("Lists will be converted to strings before writing to file")
+		if verbose: print(f"Columns to convert: {columns_with_type_list}")
+	prepared_polars_df = unnest_polars_list_columns(polars_df)
+	columns_with_type_list = [col for col, dtype in zip(prepared_polars_df.columns, prepared_polars_df.dtypes) if dtype == pl.List]
+	prepared_polars_df.write_csv(path, separator='\t', include_header=True, null_value='')
 
 def pandas_to_tsv(pandas_df, path):
 	pandas_df.to_csv(path, sep='\t', index=False)
@@ -119,11 +139,45 @@ def pandas_from_bigquery(bq_file, write_intermediate_files=True, fix_attributes=
 	
 	if merge_into_biosamples:
 		bq_to_merge = bq_norm if bq_norm is not None else (bq_fixed if bq_fixed is not None else bq_raw)
-		bq_to_merge.to_csv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv', sep='\t', index=False)
-		bq_jnorm = pandas_from_tsv(polars_flatten(f"./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv", upon='BioSample', input_sep='\t', try_parse_dates=True, keep_all_columns=False))
+		bq_jnorm = (polars_flatten(pl.from_pandas(bq_to_merge), upon='BioSample', keep_all_columns=False, rancheroize=True)).to_pandas()
 	return bq_jnorm if bq_jnorm is not None else bq_flatdicts  # bq_flatdircts if not normalize_attributes
 
-def polars_flatten(input_file, upon='BioSample', input_sep='\t', try_parse_dates=True, keep_all_columns=False, rancheroize=True):
+
+def polars_flatten(polars_df, upon='BioSample', keep_all_columns=False, rancheroize=True):
+	"""
+	Flattens an input file using polars group_by().agg(). This is designed to essentially turn run accession indexed dataframes
+	into BioSample-indexed dataframes.
+
+	If rancheroize, attempt to rename columns to ranchero format.
+	"""
+	print(f"Flattening {upon}...")
+	not_flat = polars_df
+
+	if rancheroize:
+		#if verbose: print(list(not_flat.columns))
+		not_flat = not_flat.rename(columns.bq_col_to_ranchero_col)
+		#if verbose: print(list(not_flat.columns))
+	
+	if keep_all_columns:
+		# not tested!
+		columns_to_keep = not_flat.col.copy().remove(upon)
+		flat = not_flat.group_by(upon).agg(columns_to_keep)
+		for nested_column in not_flat.col:
+			flat_neo = flat.with_columns(pl.col(nested_column).list.to_struct()).unnest(nested_column).rename({"field_0": nested_column})
+			flat = flat_neo  # silly workaround for flat = flat.with_columns(...).rename(...) throwing an error about duped columns
+	else:
+		columns_to_keep = columns.recommended_sra_columns
+		columns_to_keep.remove(upon)
+		flat = not_flat.group_by(upon).agg(pl.col(columns_to_keep))
+		for nested_column in columns.recommended_sra_columns:
+			flat_neo = flat.with_columns(pl.col(nested_column).list.to_struct()).unnest(nested_column).rename({"field_0": nested_column})
+			flat = flat_neo  # silly workaround for flat = flat.with_columns(...).rename(...) throwing an error about duped columns
+
+	flat_neo = flat_neo.unique() # doesn't seem to drop anything but may as well leave it
+	if write_intermediate_files: polars_to_tsv(flat_neo, f"./intermediate/polars_flattened.tsv")
+	return flat_neo
+
+def polars_flatten_by_file(input_file, upon='BioSample', keep_all_columns=False, rancheroize=True):
 	"""
 	Flattens an input file using polars group_by().agg(). This is designed to essentially turn run accession indexed dataframes
 	into BioSample-indexed dataframes. Because Ranchero uses a mixture of Pandas and Polars, this function writes the output
