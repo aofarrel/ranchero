@@ -41,6 +41,13 @@ ncbi_run_selector_col_to_ranchero_col = {
 	"strain": "strain"
 }
 
+bq_col_to_ranchero_col_minimal = {
+	'acc': 'run_accession', 
+	'bioproject': 'BioProject', 
+	'biosample': 'BioSample', 
+	'sample_acc': 'other_id_sra'
+}
+
 bq_col_to_ranchero_col = {
 	'acc': 'run_accession', 
 	'bioproject': 'BioProject', 
@@ -55,32 +62,73 @@ bq_col_to_ranchero_col = {
 	'strain_sam_ss_dpl139': 'strain_sra'
 }
 
-polars_cast = {
-	"bases": pl.Int16(),
-	"bytes": pl.Int16()
+not_strings = {
+	"avgspotlen": pl.Int16(),
+	"bases": pl.Int64(),
+	"bytes": pl.Int64(),
+	"ileft": pl.Int16(),
+	"ilevel": pl.Int16(),
+	"iright": pl.Int16(),
+	"mbases": pl.Int32(),
+	"mbytes": pl.Int32(),
+	"run_file_version": pl.Int16(),
+	"self_count": pl.Int32(),
+	"tax_id": pl.Int32(),
+	"total_count": pl.Int32()
 }
 
+polars_cast_not_attributes = {
+	"assay_type": str,
+	"BioProject": str,
+	"BioSample": str,
+	"collection_date_sam": str,
+	"datastore_filetype": list[str],
+	"datastore_provider": list[str],
+	'genotype_sra': str,
+	'geographic_location__country_and_or_sea__sam': str,
+	'geo_loc_name_country_calc': str,
+	'geo_loc_name_sam': str,
+	'host_sra': str,
+	'isolate_info': str,
+	'isolation_source_sam': str,
+	'library_name': str,
+	'librarylayout': str,
+	'librarysource': str,
+	'organism': str,
+	'other_id_sra': str,
+	'platform': str,
+	'primary_search': str,
+	'run_accession': set,
+	'scientific_name_sra': str,
+	'strain_sra': str
+}
+
+# includes rancherorized and non-rancheroized columns
 recommended_sra_columns = [
-	# acc --> run_accession
+	'acc'
 	'assay_type',
 	'bases',
 	'BioProject',
+	'bioproject',
 	'BioSample',
+	'biosample',
 	'collection_date_sam',
 	'datastore_filetype',
 	'datastore_provider',
-	# genotype_sam_ss_dpl92 --> 'genotype_sra'
+	'genotype_sam_ss_dpl92',
 	'genotype_sra',
 	'geographic_location__country_and_or_sea__sam',
 	'geo_loc_name_country_calc',
 	'geo_loc_name_sam',
 	'host_sra',
 	'isolate_info',
+	'isolate_sam_ss_dpl100',
 	'isolation_source_sam',
 	'library_name',
 	'librarylayout',
 	'librarysource',
-	#'lineage_sra',  too rare?
+	'lineage_sra',
+	'mbytes',
 	'organism',
 	'other_id_sra',
 	'platform',

@@ -1,10 +1,67 @@
 # general purpose functions
 
 import polars as pl
+from src.dictionaries import columns
 from polars.testing import assert_series_equal
 
 class NeighLib:
-	def concat_dicts(dict_list):
+	def guess_if_biosample_indexed_or_run_indexed(polars_df):
+		# get a column and check if list or not list
+		# should be something that doesn't get renamed nor is in attributes
+		pass
+	
+	def get_valid_recommended_columns_list(polars_df)
+		return [col for col in columns.recommended_sra_columns if col in polars_df.columns]
+	
+	def check_columns_exist(polars_df, column_list):
+		missing_columns = [col for col in column_list if col not in polars_df.columns]
+		if not missing_columns:
+			return True
+		else:
+			# TODO: only print if verbose
+			print(f"Missing columns: {missing_columns}")
+			return False
+	
+	def concat_dicts_primary_search(dict_list: list):
+		"""
+		Takes in a list of dictionaries with literal 'k' and 'v' values and
+		flattens them. For instance, this:
+		[{'k': 'bases', 'v': '326430182'}, {'k': 'bytes', 'v': '141136776'}]
+		becomes:
+		{'bases': '326430182', 'bytes': '141136776'}
+
+		This version is aware of primary_serach showing up multiple times.
+		Since these functions run as .apply() I decided to make a new function
+		rather than adding another if to 
+		"""
+		combined_dict = {}
+		primary_search = set()
+		for d in dict_list:
+			if 'k' in d and 'v' in d:
+				if d['k'] == "primary_search":
+					primary_search.add(d['v'])
+				else:
+					combined_dict[d['k']] = d['v']
+		combined_dict.update({"primary_search": primary_search})
+		return combined_dict
+
+	def concat_dicts_risky(dict_list: list):
+		"""
+		Takes in a list of dictionaries with literal 'k' and 'v' values and
+		flattens them. For instance, this:
+		[{'k': 'bases', 'v': '326430182'}, {'k': 'bytes', 'v': '141136776'}]
+		becomes:
+		{'bases': '326430182', 'bytes': '141136776'}
+
+		This version assumes 'k' and 'v' are in the dictionaries and will error otherwise.
+		"""
+		combined_dict = {}
+		for d in dict_list:
+			if 'k' in d and 'v' in d:
+				combined_dict[d['k']] = d['v']
+		return combined_dict
+	
+	def concat_dicts(dict_list: list):
 		"""
 		Takes in a list of dictionaries with literal 'k' and 'v' values and
 		flattens them. For instance, this:
@@ -17,6 +74,10 @@ class NeighLib:
 			if 'k' in d and 'v' in d:
 				combined_dict[d['k']] = d['v']
 		return combined_dict
+	
+	def super_print_pl(polars_df):
+		with pl.Config(tbl_cols=-1, fmt_str_lengths=200):
+			print(polars_df)
 		
 	def get_x_y_column_pairs(dataframe):
 		"""
@@ -29,6 +90,7 @@ class NeighLib:
 		list_of_pairs = []
 		for col in all_columns:
 			if col.endswith("_x"):
+				print(f"col {col} ends with _x")
 				foo_x = col
 				foo = foo_x[:-2]
 				foo_y = foo + "_y"
@@ -38,12 +100,6 @@ class NeighLib:
 					raise ValueError("Found {foo_x}, but no {foo_y} counterpart!")
 		assert len(set(map(tuple, list_of_pairs))) == len(list_of_pairs)  # there should be no duplicate columns
 		return list_of_pairs  # list of lists [["foo_x", "foo_y", "foo"]]
-	
-	def polars_cast(polars_df, dictionary):
-		# untested!!!
-		for col_name, cast_type in dictionary: 
-			polars_df.select(pl.col(col_name).cast(cast_type))
-		return polars_df
 	
 	def drop_some_assay_types(dataframe, to_drop=['Tn-Seq', 'ChIP-Seq']):
 		"""
@@ -74,30 +130,15 @@ class NeighLib:
 		if verbose: print(f"Dropped {dropped} metagenomic samples")
 		return dataframe
 	
-	def get_paired_illumina(dataframe):
-		return dataframe.loc[dataframe['platform'] == 'ILLUMINA'].loc[dataframe['librarylayout'] == 'PAIRED']
-	
 	def check_dataframe_type(dataframe, wanted):
 		""" Checks if dataframe is polars and pandas. If it doesn't match wanted, throw an error."""
 		pass
 	
-	def pandas_vs_polars():
-		"""
-		Just an example for now. Basically what we've learned is to use from_pandas() to get schemas correctly.
-
-		print("Pandas to polars:")
-		ptp = pl.from_pandas(bq_to_merge)
-		print("Pandas to Polars to Pandas to Polars:")
-		ptptptp = pl.from_pandas(ptp.to_pandas())
-		print("Pandas to TSV to polars:")
-		ptttp = polars_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv')
-		print("Pandas to TSV to Pandas to Polars:")
-		ptttptp = pl.from_pandas(pandas_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv'))
-
-		pl.testing.assert_frame_equal(ptp, ptptptp)
-		pl.testing.assert_frame_equal(ptp, ptttp)
-		pl.testing.assert_frame_equal(ptp, ptttptp)
-		"""
+	def rancheroize_polars(polars_df):
+		try:
+			return polars_df.rename(columns.bq_col_to_ranchero_col)
+		except pl.exceptions.SchemaFieldNotFoundError:
+			return polars_df.rename(columns.bq_col_to_ranchero_col_minimal)
 	
 	def get_dupe_columns_of_two_polars(polars_df_a, polars_df_b):
 		""" Assert two polars dataframes do not share any columns """
@@ -169,6 +210,37 @@ class NeighLib:
 		#print("unmerged set B")
 		#print(set_B)
 	
+	def cast_politely(polars_df):
+		""" 
+		polars_df.cast({k: v}) just doesn't cut it, and casting is not in-place, so
+		this does a very goofy full column replacement
+		"""
+		for k, v in columns.not_strings.items():
+			try:
+				to_replace_index = polars_df.get_column_index(k)
+			except pl.exceptions.ColumnNotFoundError:
+				continue
+			casted = polars_df.select(pl.col(k).cast(v))
+			polars_df.replace_column(to_replace_index, casted.to_series())
+			#print(f"Cast {k} to type {v}")
+		return polars_df
+
+class NeighLibDebugAndStuff:
+	# functions that are no longer used or don't really work
+	def concat_dicts_tuple(dict_list: list):
+		"""
+		Takes in a list of dictionaries with literal 'k' and 'v' values and
+		flattens them. For instance, this:
+		[{'k': 'bases', 'v': '326430182'}, {'k': 'bytes', 'v': '141136776'}]
+		becomes:
+		{'bases': '326430182', 'bytes': '141136776'}
+		"""
+		combined_dict = {}
+		for d in dict_list:
+			if 'k' in d and 'v' in d:
+				combined_dict[d['k']] = d['v']
+		return combined_dict.items()
+
 	def polars_flatten_both_ways(input_file, input_polars, upon='BioSample', keep_all_columns=False, rancheroize=True):
 		"""
 		Flattens an input file using polars group_by().agg(). This is designed to essentially turn run accession indexed dataframes
@@ -207,3 +279,21 @@ class NeighLib:
 		path = f"./intermediate/{os.path.basename(input_file)}_flattened.tsv"
 		polars_to_tsv(flat_neo, path)
 		return path
+	
+	def pandas_vs_polars():
+		"""
+		Just an example for now. Basically what we've learned is to use from_pandas() to get schemas correctly.
+
+		print("Pandas to polars:")
+		ptp = pl.from_pandas(bq_to_merge)
+		print("Pandas to Polars to Pandas to Polars:")
+		ptptptp = pl.from_pandas(ptp.to_pandas())
+		print("Pandas to TSV to polars:")
+		ptttp = polars_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv')
+		print("Pandas to TSV to Pandas to Polars:")
+		ptttptp = pl.from_pandas(pandas_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv'))
+
+		pl.testing.assert_frame_equal(ptp, ptptptp)
+		pl.testing.assert_frame_equal(ptp, ptttp)
+		pl.testing.assert_frame_equal(ptp, ptttptp)
+		"""
