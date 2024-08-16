@@ -28,6 +28,7 @@ class RancheroConfig:
 		self.cast_types = True
 		self.ignore_polars_read_errors = True
 		self.immediate_biosample_merge = False
+		self.immediate_rancheroize = True
 		self.immediate_try_parse_dates = True
 		self.intermediate_files = True
 		self.keep_all_values_of_these_shared_keys = set(["primary_search"])

@@ -7,19 +7,67 @@ from polars.testing import assert_series_equal
 # TODO: can we implement verbose without importing the whole config?
 
 class NeighLib:
-	def guess_if_biosample_indexed_or_run_indexed(polars_df):
-		# get a column and check if list or not list
-		# should be something that doesn't get renamed nor is in attributes
-		pass
+	def likely_is_run_indexed(polars_df):
+		# TODO: make more robust
+		singular_runs = ("run_index" in polars_df.schema and polars_df.schema["run_index"] == pl.Utf8) or ("run_accession" in polars_df.schema and polars_df.schema["run_accession"] == pl.Utf8)
+		if singular_runs:
+			return True
+		else:
+			return False
 
 	def check_dataframe_type(dataframe, wanted):
 		""" Checks if dataframe is polars and pandas. If it doesn't match wanted, throw an error."""
 		pass
+
+	def get_ranchero_input_columns(cls):
+		return cls.get_ranchero_column_dictionary.keys()
+
+	def get_ranchero_output_nonstandardized_columns(cls):
+		return list(set(cls.get_ranchero_column_dictionary.values ()))
+
+	@staticmethod
+	def get_ranchero_column_dictionary():
+		almost_everything_worth_keeping = {}
+		for key, value in columns.common_col_to_ranchero_col.items():
+			if key in almost_everything_worth_keeping and almost_everything_worth_keeping[key] != value:
+				raise ValueError(f"Collision detected for key '{key}' with different values: '{almost_everything_worth_keeping[key]}' and '{value}'")
+			almost_everything_worth_keeping[key] = value
+		for dictionary in columns.svr:
+			for key, value in dictionary.items():
+				if key in almost_everything_worth_keeping and almost_everything_worth_keeping[key] != value:
+					raise ValueError(f"Collision detected for key '{key}' with different values: '{almost_everything_worth_keeping[key]}' and '{value}'")
+				almost_everything_worth_keeping[key] = value
+		for key, value in columns.extended_col_to_ranchero.items():
+			if key in almost_everything_worth_keeping and almost_everything_worth_keeping[key] != value:
+				raise ValueError(f"Collision detected for key '{key}' with different values: '{almost_everything_worth_keeping[key]}' and '{value}'")
+			almost_everything_worth_keeping[key] = value
+		# we want to keep stuff that is already rancheroized too!
+		everything_worth_keeping = almost_everything_worth_keeping.copy()
+		everything_worth_keeping.update({v: v for k, v in almost_everything_worth_keeping.items() if v not in almost_everything_worth_keeping.keys()})  # yes, this is VALUE: VALUE
+		return everything_worth_keeping.copy()
+
+	@classmethod
+	def get_ranchero_column_dictionary_only_valid(cls, polars_df):
+		ranchero = cls.get_ranchero_column_dictionary()
+		return cls.get_valid_columns_dict_from_arbitrary_dict(polars_df, ranchero)
+
+	@staticmethod
+	def get_just_geoloc_columns(cls, polars_df, check_if_valid=False):
+		if check_if_valid:
+			ranchero_geoloc = [k for k, v in cls.get_ranchero_output_nonstandardized_columns().items() if k.str.startswith("geo")]
+			return get_valid_columns_from_arbitrary_list(polars_df, ranchero_geoloc)
+		else:
+			return [k for k, v in cls.get_ranchero_output_nonstandardized_columns().items() if k.str.startswith("geo")]
+
+	@staticmethod
+	def get_valid_columns_list_from_arbitrary_list(polars_df, desired_columns: list):
+		return [col for col in desired_columns if col in polars_df.columns]
+
+	@staticmethod
+	def get_valid_columns_dict_from_arbitrary_dict(polars_df, column_dict: dict):
+		return {k:v for k, v in column_dict.items() if k in polars_df.columns}
 	
-	def get_valid_recommended_columns_list(polars_df):
-		return [col for col in columns.recommended_sra_columns if col in polars_df.columns]
-	
-	def check_columns_exist(polars_df, column_list):
+	def check_columns_exist(polars_df, column_list: list):
 		missing_columns = [col for col in column_list if col not in polars_df.columns]
 		if not missing_columns:
 			return True
@@ -82,17 +130,17 @@ class NeighLib:
 		return combined_dict
 	
 	def super_print_pl(polars_df):
-		with pl.Config(tbl_cols=-1, fmt_str_lengths=200):
+		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=200):
 			print(polars_df)
 		
-	def get_x_y_column_pairs(dataframe):
+	def get_x_y_column_pairs(pandas_df):
 		"""
 		Take in a pandas dataframe and return a list of lists of all of its
 		_x and _y columns (and those columns basename). Designed for the
 		aftermath of an outer merge of two dataframes. Asserts no duplicate
 		_x and _y columns (eg, can't have two "BioSample_x" columns).
 		"""
-		all_columns = dataframe.columns
+		all_columns = pandas_df.columns
 		list_of_pairs = []
 		for col in all_columns:
 			if col.endswith("_x"):
@@ -107,44 +155,48 @@ class NeighLib:
 		assert len(set(map(tuple, list_of_pairs))) == len(list_of_pairs)  # there should be no duplicate columns
 		return list_of_pairs  # list of lists [["foo_x", "foo_y", "foo"]]
 	
-	def drop_some_assay_types(dataframe, to_drop=['Tn-Seq', 'ChIP-Seq']):
+	def drop_some_assay_types(pandas_df, to_drop=['Tn-Seq', 'ChIP-Seq']):
 		"""
 		Drops a list of values for assay_type from a Pandas dataframe
 		"""
-		if 'assay_type' in incoming.columns:
-			rows_before = len(incoming.index)
+		if 'assay_type' in pandas_df.columns:
+			rows_before = len(pandas_df.index)
 			for drop_me in to_drop:
-				incoming = incoming[~incoming['assay_type'].str.contains(drop_me, case=False, na=False)]
+				pandas_df = pandas_df[~pandas_df['assay_type'].str.contains(drop_me, case=False, na=False)]
 			rows_after = len(incoming.index)
 			print(f"Dropped {rows_before - rows_after} samples")
+		return pandas_df
 
-	def drop_metagenomic(dataframe):
+	def drop_metagenomic(pandas_df):
 		"""
 		Attempt to drop metagenomic data from a Pandas dataframe
 		"""
 		dropped = 0
-		if 'organism' in dataframe.columns:
-			rows_before = len(dataframe.index)
-			dataframe = dataframe[~dataframe['organism'].str.contains('metagenome', case=False, na=False)]
-			rows_after = len(dataframe.index)
+		if 'organism' in pandas_df.columns:
+			rows_before = len(pandas_df.index)
+			dataframe = pandas_df[~pandas_df['organism'].str.contains('metagenome', case=False, na=False)]
+			rows_after = len(pandas_df.index)
 			dropped += rows_before - rows_after
-		if 'librarysource' in dataframe.columns:
-			rows_before = len(dataframe.index)
-			dataframe = dataframe[~dataframe['librarysource'].str.contains('METAGENOMIC', case=False, na=False)]
-			rows_after = len(dataframe.index)
+		if 'librarysource' in pandas_df.columns:
+			rows_before = len(pandas_df.index)
+			dataframe = pandas_df[~pandas_df['librarysource'].str.contains('METAGENOMIC', case=False, na=False)]
+			rows_after = len(pandas_df.index)
 			dropped += rows_before - rows_after
 		#if verbose: print(f"Dropped {dropped} metagenomic samples")
-		return dataframe
+		return pandas_df
 
-	def pandas_to_tsv(pandas_df, path):
+	def pandas_to_tsv(pandas_df, path: str):
 		pandas_df.to_csv(path, sep='\t', index=False)
 	
-	def rancheroize_polars(polars_df):
+	@classmethod
+	def rancheroize_polars(cls, polars_df):
+		valid_renames = cls.get_ranchero_column_dictionary_only_valid(polars_df)
 		try:
-			return polars_df.rename(columns.bq_col_to_ranchero_col)
-		except pl.exceptions.SchemaFieldNotFoundError:
-			return polars_df.rename(columns.bq_col_to_ranchero_col_minimal)
+			return polars_df.rename(valid_renames)
+		except pl.exceptions.SchemaFieldNotFoundError:  # should never happen
+			print("WARNING: Failed to rename columns")
 
+	@staticmethod
 	def unnest_polars_list_columns(polars_df):
 		""" Unnests list data (but not the way explode() does it) so it can be writen to CSV format
 		Credit: deanm0000 on GitHub, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
@@ -159,15 +211,35 @@ class NeighLib:
 			if y == pl.List(pl.String)
 		)
 
-	def polars_to_tsv(polars_df, path):
+	@staticmethod
+	def unnest_polars_set_columns(polars_df):
+		""" Unnests set data so it can be writen to CSV format
+		Heavily based on deanm0000's code (see unnest_polars_list_columns())
+		"""
+		return polars_df.with_columns(
+			(pl.col(x).map_elements(lambda s: "{" + ', '.join(f'"{item}"' for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)).alias(x)
+			for x, y in polars_df.schema.items()
+			if y == pl.Object
+			)
+
+	@classmethod
+	def polars_to_tsv(cls, polars_df, path: str):
+		print("Writing to TSV...")
 		columns_with_type_list = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.List]
+		columns_with_type_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.Object]
+		df_to_write = polars_df
 		if len(columns_with_type_list) > 0:
 			print("Lists will be converted to strings before writing to file")
-			#if verbose: print(f"Columns to convert: {columns_with_type_list}")
-		prepared_polars_df = unnest_polars_list_columns(polars_df)
-		columns_with_type_list = [col for col, dtype in zip(prepared_polars_df.columns, prepared_polars_df.dtypes) if dtype == pl.List]
-		prepared_polars_df.write_csv(path, separator='\t', include_header=True, null_value='')
-	
+			df_to_write = cls.unnest_polars_list_columns(df_to_write)
+		if len(columns_with_type_obj) > 0:
+			print("WARNING: Columns of type object detected, will be converted as if sets")
+			df_to_write = cls.unnest_polars_set_columns(df_to_write)
+		try:
+			df_to_write.write_csv(path, separator='\t', include_header=True, null_value='')
+			print(f"Wrote to {path}")
+		except pl.exceptions.ComputeError:
+			print("WARNING: Caught ComputeError trying to write to TSV")
+
 	def get_dupe_columns_of_two_polars(polars_df_a, polars_df_b):
 		""" Assert two polars dataframes do not share any columns """
 		columns_a = list(polars_df_a.columns)

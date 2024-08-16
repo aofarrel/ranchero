@@ -33,7 +33,7 @@ class FileReader():
 	#####🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️########
 	# Functions that OUTPUT a polars dataframe (but may touch pandas at some point)
 
-	def polars_from_ncbi_run_selector(csv):
+	def polars_from_ncbi_run_selector(self, csv):
 		run_raw = pl.read_csv(csv)
 		run_renamed = run_raw.rename(columns.ncbi_run_selector_col_to_ranchero_col)  # for compatibility with other formats
 		return run_renamed
@@ -65,20 +65,24 @@ class FileReader():
 
 		Configurations used:
 		* immediate_biosample_merge (set)
+		* immediate_rancheroize (set)
 		"""
 		bq_raw = pl.read_json(bq_file)
 		if self.cfg.verbose: print(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
-		if normalize_attributes:
-			bq_norm = self.polars_fix_attributes_and_json_normalize(bq_raw)
-			rancheroized =  NeighLib.rancheroize_polars(bq_norm)
+		if self.cfg.immediate_rancheroize:
+			if normalize_attributes and bq_raw.get_column("attributes", default=False):  # if column doesn't exist, return false
+				bq_norm = self.polars_fix_attributes_and_json_normalize(bq_raw)
+				current =  NeighLib.rancheroize_polars(bq_norm)
+			else:
+				current =  NeighLib.rancheroize_polars(bq_raw)
 		else:
-			rancheroized =  NeighLib.rancheroize_polars(bq_raw)	
+			current = bq_raw
 		# create nulls here, where we have as many not-list columns as possible (eg, after normalize attributes but before biosample merge)
 		# TODO: do other replacememnts here too!
-		if nullify: rancheroized = rancheroized.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
+		if nullify: current = current.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
 		if self.cfg.immediate_biosample_merge:
-			rancheroized = self.polars_flatten(rancheroized, upon='BioSample', keep_all_columns=False)
-		return rancheroized
+			current = self.polars_flatten(current, upon='BioSample', keep_all_columns=False)
+		return current
 
 
 	def polars_json_normalize(self, polars_df, pandas_attributes_series, rancheroize=False, collection_date_sam_workaround=True):
@@ -136,7 +140,7 @@ class FileReader():
 			#	flat = flat_neo  # silly workaround for flat = flat.with_columns(...).rename(...) throwing an error about duped columns
 			flat_neo = flat
 		else:
-			columns_to_keep = get_valid_recommended_columns_list(not_flat)
+			columns_to_keep = NeighLib.get_ranchero_column_dictionary_only_valid(not_flat)
 			with suppress(ValueError): columns_to_keep.remove(upon)  # if it's not in there, who cares?
 			flat = not_flat.group_by(upon).agg(pl.col(columns_to_keep_really))
 			if self.cfg.verbose: NeighLib.super_print_pl(flat)
@@ -179,11 +183,12 @@ class FileReader():
 		shared_keys = self.cfg.keep_all_values_of_these_shared_keys.copy()
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
 		if len(self.cfg.keep_all_values_of_these_shared_keys) != 0:  # TODO: benchmark these two options
+			# concat_dicts_with_shared_keys() needs shared_keys_with_values_to_keep, so we pass that in explictly (lambda is for cowards)
 			if self.cfg.verbose:
 				print("Concatenating dictionaries with Pandas...")
-				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts_with_shared_keys, shared_keys)
+				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts_with_shared_keys, shared_keys_with_values_to_keep=shared_keys)
 			else:
-				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts_with_shared_keys, shared_keys)
+				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts_with_shared_keys, shared_keys_with_values_to_keep=shared_keys)
 		else:
 			if self.cfg.verbose:
 				print("Concatenating dictionaries with Pandas...")
@@ -193,7 +198,7 @@ class FileReader():
 		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'])
 		if rancheroize: normalized.rename(columns.bq_col_to_ranchero_col)
 		if self.cfg.cast_types: normalized = NeighLib.cast_politely(normalized)
-		if intermediate_files: NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
+		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
 		return normalized
 
 

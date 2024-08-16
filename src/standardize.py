@@ -3,6 +3,25 @@ import src.dictionaries.host_species
 import src.dictionaries.sample_sources
 import src.dictionaries.tuberculosis_lineages
 
+def merge_addlID_columns():
+	pass
+
+def merge_host_columns():
+	pass
+
+def merge_organism_columns():
+	pass
+
+def merge_strain_columns():
+	pass
+
+def merge_lineage_columns_as_if_mtbc():
+	pass
+
+def merge_lineage_columns_broadly():
+	# excludes the organism column
+	pass
+
 def standardize_countries():
 	pass
 

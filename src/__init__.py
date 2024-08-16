@@ -14,3 +14,4 @@ _FileReader = FileReader(Configuration)
 # exposed classes of global instances
 polars_from_tsv = _FileReader.polars_from_tsv
 polars_from_bigquery = _FileReader.polars_from_bigquery
+polars_from_ncbi_run_selector = _FileReader.polars_from_ncbi_run_selector
