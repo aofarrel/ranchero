@@ -15,6 +15,19 @@
 # Since it runs below ten seconds even on the full size dataframe, I consider the pandas usage acceptable,
 # even though it annoys me on priniciple.
 
+def progress_apply_with_tqdm_if_available(pandas_df, column, function, *kwargs):
+	try:
+		import tqdm
+		tqdm.pandas()
+		tqdm_exists = True
+	except ImportError:
+		tqdm_exists = False
+	if tqdm_exists:
+		# progress apply
+	else:
+		print("Failed to import tqdm -- code will continue to execute, but there will be no progress bar.")
+		# progress apply
+
 def store_known_multi_accession_metadata(pandas_df_indexed_by_runs):
 	"""
 	Stores some metadata from run accessions that share a BioSample so you can later verify things didn't get lost when

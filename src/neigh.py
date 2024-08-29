@@ -7,6 +7,7 @@ from polars.testing import assert_series_equal
 # TODO: can we implement verbose without importing the whole config?
 
 class NeighLib:
+
 	def likely_is_run_indexed(polars_df):
 		# TODO: make more robust
 		singular_runs = ("run_index" in polars_df.schema and polars_df.schema["run_index"] == pl.Utf8) or ("run_accession" in polars_df.schema and polars_df.schema["run_accession"] == pl.Utf8)
@@ -129,7 +130,10 @@ class NeighLib:
 				combined_dict[d['k']] = d['v']
 		return combined_dict
 	
-	def super_print_pl(polars_df):
+	def super_print_pl(polars_df, header):
+		print(f"┏{'━' * len(header)}┓")
+		print(f"┃{header}┃")
+		print(f"┗{'━' * len(header)}┛")
 		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=200):
 			print(polars_df)
 		

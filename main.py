@@ -11,10 +11,11 @@ print(Ranchero.NeighLib.concat_dicts_with_shared_keys(what_about_primary_search,
 #v8 = Ranchero.polars_from_tsv("./inputs/tree_metadata_v8_rc10.tsv")
 #tba5 = Ranchero.polars_from_bigquery("./inputs/bq-results-20240710-211044-1720646162304.json")
 #PRJNA834606_sra = Ranchero.polars_from_ncbi_run_selector("./inputs/PRJNA834606_sra.csv")
-basics = Ranchero.polars_from_bigquery("./inputs/test/basics.json")
-country_conflict = Ranchero.polars_from_bigquery("./inputs/test/country_conflict.json")
+left = Ranchero.polars_from_bigquery("./inputs/test/left.json")
+right = Ranchero.polars_from_bigquery("./inputs/test/right.json")
 
-Ranchero.NeighLib.super_print_pl(country_conflict)
+Ranchero.NeighLib.super_print_pl(left, "left")
+Ranchero.NeighLib.super_print_pl(right, "right")
 
 # Test analysis
 #print(Ranchero.get_paired_illumina(tiny_test))
@@ -28,5 +29,7 @@ Ranchero.NeighLib.super_print_pl(country_conflict)
 # the _x/_y comparisons.
 #zeroth_merge = Ranchero.merge_polars_dataframes(tiny_test, small_test, 'BioSample', 'small')
 
-another_merge = Ranchero.merge_polars_dataframes(country_conflict, basics, 'run_index', 'whatever')
-Ranchero.NeighLib.super_print_pl(another_merge)
+leftright_merge = Ranchero.merge_polars_dataframes(left, right, 'run_index', 'whatever')
+Ranchero.NeighLib.super_print_pl(leftright_merge)
+rightleft_merge = Ranchero.merge_polars_dataframes(right, left, 'run_index', 'whatever')
+Ranchero.NeighLib.super_print_pl(rightleft_merge)
