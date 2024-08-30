@@ -1,30 +1,52 @@
 from src.neigh import NeighLib
+import polars as pl
 verbose = True  # TODO: do this better
 
-def merge_polars_dataframes(left, right, merge_upon, new_data_name, name_in_column=None):
+def get_partial_self_matches(polars_df, column_key):
+	"""
+	Reports where the dataframe has the same key but different values
+	"""
+	from functools import reduce
+	agg_values = polars_df.group_by(column_key).agg(
+		[pl.col(c).n_unique().alias(c) for c in polars_df.columns if c != column_key]
+	)
+
+	# to match in cool_rows, ALL rows must have a value of 1
+	# to match in uncool_rows, ANY rows must have a value of not 1
+	cool_rows = agg_values.filter(pl.col(c) == 1 for c in agg_values.columns if c != column_key).sort(column_key)
+	uncool_rows = agg_values.filter(reduce(lambda acc, expr: acc | expr, (pl.col(c) != 1 for c in agg_values.columns if c != column_key)))
+	NeighLib.super_print_pl(polars_df, "merged dataframe")
+	NeighLib.super_print_pl(cool_rows, "matching rows")
+	NeighLib.super_print_pl(uncool_rows, "not matching rows")
+
+
+	# Merge back to get original rows
+	print(polars_df.join(differing_rows, on="run_index", how="inner").select(pl.col(column_key), pl.all().exclude(column_key)))
+
+
+def self_merge_polars(polars_df, merge_upon):
+	pass
+
+def merge_polars_dataframes(left, right, merge_upon, new_data_name="merged", put_name_in_this_column=None):
 	"""
 	Merge two polars dataframe upon merge_upon. 
 
-	If new_data_name is None, an new_data_name column will be created temporarily but dropped before returning.
-	name_in_column: If not None, adds a row of new_data_name to the dataframe. Designed for marking the source of data when
-	merging dataframes multiple times.
+	
+	put_name_in_this_column: If not None, adds a row of new_data_name to the dataframe. Designed for marking the source of data when
+	merging dataframes multiple times. If new_data_name is None, an new_data_name column will be created temporarily but 
+	dropped before returning.
 	"""
-	import polars as pl
 
+	# Check for continigencies
 	if merge_upon not in left.columns:
 		raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in left-hand dataframe")
 	if merge_upon not in right.columns:
 		raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in right-hand dataframe")
-
 	if merge_upon == 'run_index' or merge_upon == 'run_accession':
-
-		# check if left and right are actually indexed by run
 		if not NeighLib.likely_is_run_indexed(left):
 			print(f"WARNING: Merging upon {merge_upon}, but left-hand dataframe appears to not be indexed by run accession")
 		if not NeighLib.likely_is_run_indexed(right):
 			print(f"WARNING: Merging upon {merge_upon}, but right-hand dataframe appears to not be indexed by run accession")
-
-	# check for nulls in what we're merging upon
 	if len(left.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
 		raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the left-hand dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
 	if len(right.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
@@ -36,29 +58,23 @@ def merge_polars_dataframes(left, right, merge_upon, new_data_name, name_in_colu
 	n_right_nulls = right_nulls.sum()
 	print(f"Merging {new_data_name} on {merge_upon}")
 
-	if name_in_column is not None:
+	if put_name_in_this_column is not None:
 		# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
-		right[name_in_column] = new_data_name
+		right[put_name_in_this_column] = new_data_name
 
-	# Not sure why, but the way polars does a join is to duplicate every column, even identical ones, except for merge_upon.
-	# This means we need to iterate through every column, pair them, see if they're equal, & then decide what to do with 'em.
-	conflicts = set()
-	not_conflicts = set()
-
+	# use .join to fill in null values in both dataframes
 	nullfilled_left = left.join(right, on=merge_upon, how="left").with_columns(
 		[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in left.columns if col != merge_upon]
 	).select(left.columns).sort(merge_upon)
 	nullfilled_right = right.join(left, on=merge_upon, how="left").with_columns(
 		[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in right.columns if col != merge_upon]
 	).select(right.columns).sort(merge_upon)
-	NeighLib.super_print_pl(nullfilled_left, "sorted filled in left")
-	NeighLib.super_print_pl(nullfilled_right, "sorted filled in right")
 
-	merge_via_join = nullfilled_left.join(nullfilled_right, on=merge_upon, how="full")
-	merge_via_sort_merge = nullfilled_left.merge_sorted(nullfilled_right, merge_upon)
-	NeighLib.super_print_pl(merge_via_join, "merge_via_join")
-	NeighLib.super_print_pl(merge_via_sort_merge, "merge_via_sort_merge")
-	NeighLib.super_print_pl(merge_via_sort_merge.unique().sort(merge_upon), "merge_via_sort_merge uniq")
+	# actually merge the dataframes
+	# we'll use merge_sorted() as there is less to clean up than .join(how="full")
+	merge = nullfilled_left.merge_sorted(nullfilled_right, merge_upon).unique().sort(merge_upon)
+
+	get_partial_self_matches(merge, merge_upon)
 
 	# TODO: figure out how to handle rows with conflicts
 
@@ -67,20 +83,18 @@ def merge_polars_dataframes(left, right, merge_upon, new_data_name, name_in_colu
 	if verbose:
 		print(f"Was {len_left} rows, merged with {len_right} rows, now {len_current} rows")
 		print(f"This implies {len_new_rows} new rows were added (or failed to merge)")
-		print(f"{len(conflicts)} columns had conflicting data: {conflicts}")
-		print(f"{len(not_conflicts)} columuns merged cleanly: {not_conflicts}")
 
 	NeighLib.super_print_pl(merge, "merge")
 	exit(0)
 
 	return merge
 
-def merge_pandas_dataframes(left, right, merge_upon, new_data_name, name_in_column=None):
+def merge_pandas_dataframes(left, right, merge_upon, new_data_name="merged", put_name_in_this_column=None):
 	"""
 	Merge two pandas dataframe upon merge_upon. 
 
 	If new_data_name is None, an new_data_name column will be created temporarily but dropped before returning.
-	name_in_column: If not None, adds a row of new_data_name to the dataframe. Designed for marking the source of data when
+	put_name_in_this_column: If not None, adds a row of new_data_name to the dataframe. Designed for marking the source of data when
 	merging dataframes multiple times.
 
 	Handling _x and _y conflicts is not fully implemented.
@@ -90,9 +104,9 @@ def merge_pandas_dataframes(left, right, merge_upon, new_data_name, name_in_colu
 
 	print(f"Merging {new_data_name} on {merge_upon}")
 
-	if name_in_column is not None:
+	if put_name_in_this_column is not None:
 		# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
-		right[name_in_column] = new_data_name
+		right[put_name_in_this_column] = new_data_name
 
 	merge = pd.merge(left, right, on=merge_upon, how='outer', indicator='merge_status_unprocessed')
 	len_left, len_right, len_current = len(left.index), len(right.index), len(merge.index)
