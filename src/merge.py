@@ -2,30 +2,65 @@ from src.neigh import NeighLib
 import polars as pl
 verbose = True  # TODO: do this better
 
-def get_partial_self_matches(polars_df, column_key):
+def aggregate_conflicting_metadata(polars_df, column_key):
 	"""
-	Reports where the dataframe has the same key but different values
+	Returns a numeric representation of n_unique values for rows that have matching column_key values. This representation can later
+	be semi-merged backed to the original data if you want the real data.
 	"""
 	from functools import reduce
-	agg_values = polars_df.group_by(column_key).agg(
-		[pl.col(c).n_unique().alias(c) for c in polars_df.columns if c != column_key]
-	)
+	agg_values = polars_df.group_by(column_key).agg([pl.col(c).n_unique().alias(c) for c in polars_df.columns if c != column_key])
 
 	# to match in cool_rows, ALL rows must have a value of 1
 	# to match in uncool_rows, ANY rows must have a value of not 1
 	cool_rows = agg_values.filter(pl.col(c) == 1 for c in agg_values.columns if c != column_key).sort(column_key)
 	uncool_rows = agg_values.filter(reduce(lambda acc, expr: acc | expr, (pl.col(c) != 1 for c in agg_values.columns if c != column_key)))
-	NeighLib.super_print_pl(polars_df, "merged dataframe")
-	NeighLib.super_print_pl(cool_rows, "matching rows")
-	NeighLib.super_print_pl(uncool_rows, "not matching rows")
+
+	# to get the original data for debugging purposes you can use: semi_rows = polars_df.join(uncool_rows, on="run_index", how="semi")
+	return uncool_rows
+
+def get_columns_with_any_row_above_1(polars_df, column_key):
+	"""
+	Designed to be run on the uncool_rows output of aggregate_conflicting_metadata()
+	"""
+	filtered_uncool_rows = polars_df.select(
+		[pl.col(column_key)] + [
+			pl.col(c) for c in polars_df.columns 
+			if c != column_key and polars_df.select(pl.col(c) > 1).to_series().any()
+		]
+	)
+	return filtered_uncool_rows
+
+def get_partial_self_matches(polars_df, column_key: str):
+	"""
+	Reports all columns of all rows where (1) at least two rows share a key and (2) at least one column between rows with a matching
+	key has a mismatch.
+	"""
+	agg_table = aggregate_conflicting_metadata(polars_df, column_key)
+	columns_we_will_merge_and_their_column_keys = get_columns_with_any_row_above_1(agg_table, column_key)
+
+	print("The following columns will become catagorical due to conflicting metadata:")
+	goofy_data = columns_we_will_merge_and_their_column_keys.columns
+	goofy_data.remove(column_key)
+	print(goofy_data)
 
 
-	# Merge back to get original rows
-	print(polars_df.join(differing_rows, on="run_index", how="inner").select(pl.col(column_key), pl.all().exclude(column_key)))
+	# TODO: This needs to be fixed so that only columns in goofy_data are combined, but the other columns still exist in the dataframe.
+	semi_rows = polars_df.join(columns_we_will_merge_and_their_column_keys, on="run_index", how="semi") # get our real data back (eg, not agg integers)
+	cool_stuff = semi_rows.group_by(column_key).agg([pl.col(column).alias(column) for column in semi_rows.columns if column != column_key and column in goofy_data])
+	wow = polars_df.join(cool_stuff, on="run_index", how="inner")
+	print(cool_stuff)
+	print(wow)
 
 
-def self_merge_polars(polars_df, merge_upon):
-	pass
+	exit(1)
+
+	# merge back to get original data
+	
+	return semi_rows
+
+
+def self_merge_polars(polars_df, column_key: str):
+	result_df = polars_df.groupby("A").agg([])
 
 def merge_polars_dataframes(left, right, merge_upon, new_data_name="merged", put_name_in_this_column=None):
 	"""
