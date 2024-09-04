@@ -244,22 +244,19 @@ class NeighLib:
 		except pl.exceptions.ComputeError:
 			print("WARNING: Caught ComputeError trying to write to TSV")
 
-	def get_dupe_columns_of_two_polars(polars_df_a, polars_df_b):
-		""" Assert two polars dataframes do not share any columns """
+	def get_dupe_columns_of_two_polars(polars_df_a, polars_df_b, assert_shared_cols_equal=False):
+		""" Check two polars dataframes share any columns """
 		columns_a = list(polars_df_a.columns)
 		columns_b = list(polars_df_b.columns)
 		dupes = []
 		for column in columns_a:
 			if column in columns_b:
 				dupes.append(column)
-		for column in columns_b:
-			if column in columns_a:
-				dupes.append(column)
 		if len(dupes) >= 0:
-			#raise AssertionError(f"Polars dataframes have duplicated columns: {dupes}")
-			for dupe in dupes:
-				assert_series_equal(polars_df_a[dupe], polars_df_b[dupe])
-			return dupes	
+			if assert_shared_cols_equal:
+				for dupe in dupes:
+					assert_series_equal(polars_df_a[dupe], polars_df_b[dupe])
+		return dupes
 	
 	def assert_unique_columns(pandas_df):
 		"""Assert all columns in a pandas df are unique -- useful if converting to polars """

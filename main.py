@@ -14,9 +14,6 @@ print(Ranchero.NeighLib.concat_dicts_with_shared_keys(what_about_primary_search,
 left = Ranchero.polars_from_bigquery("./inputs/test/left.json")
 right = Ranchero.polars_from_bigquery("./inputs/test/right.json")
 
-Ranchero.NeighLib.super_print_pl(left, "left")
-Ranchero.NeighLib.super_print_pl(right, "right")
-
 # Test analysis
 #print(Ranchero.get_paired_illumina(tiny_test))
 #print(Ranchero.get_paired_illumina(tiny_test, flip=True))
@@ -29,7 +26,9 @@ Ranchero.NeighLib.super_print_pl(right, "right")
 # the _x/_y comparisons.
 #zeroth_merge = Ranchero.merge_polars_dataframes(tiny_test, small_test, 'BioSample', 'small')
 
-leftright_merge = Ranchero.merge_polars_dataframes(left, right, 'run_index', 'whatever')
-Ranchero.NeighLib.super_print_pl(leftright_merge)
-rightleft_merge = Ranchero.merge_polars_dataframes(right, left, 'run_index', 'whatever')
-Ranchero.NeighLib.super_print_pl(rightleft_merge)
+leftright_merge = Ranchero.merge_polars_dataframes(left, right, 'run_index', 'hello', 'there', 'folks')
+Ranchero.NeighLib.super_print_pl(leftright_merge, "leftright")
+rightleft_merge = Ranchero.merge_polars_dataframes(right, left, 'run_index')
+Ranchero.NeighLib.super_print_pl(rightleft_merge, "rightleft")
+zippo = Ranchero.merge_polars_dataframes(leftright_merge, rightleft_merge, 'run_index')
+Ranchero.NeighLib.super_print_pl(zippo, "zippo")
