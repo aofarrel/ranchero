@@ -35,7 +35,7 @@ class FileReader():
 
 	def polars_from_ncbi_run_selector(self, csv):
 		run_raw = pl.read_csv(csv)
-		run_renamed = run_raw.rename(columns.ncbi_run_selector_col_to_ranchero_col)  # for compatibility with other formats
+		run_renamed = NeighLib.rancheroize_polars(run_raw)  # for compatibility with other formats
 		return run_renamed
 
 	def polars_from_tsv(self, tsv, sep='\t', immediate_try_parse_dates=None, ignore_polars_read_errors=None, null_values=null_values.null_values):
@@ -70,7 +70,7 @@ class FileReader():
 		bq_raw = pl.read_json(bq_file)
 		if self.cfg.verbose: print(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
 		if self.cfg.immediate_rancheroize:
-			if normalize_attributes and bq_raw.get_column("attributes", default=False):  # if column doesn't exist, return false
+			if normalize_attributes and "attributes" in bq_raw.columns:  # if column doesn't exist, return false
 				bq_norm = self.polars_fix_attributes_and_json_normalize(bq_raw)
 				current =  NeighLib.rancheroize_polars(bq_norm)
 			else:
@@ -109,7 +109,7 @@ class FileReader():
 			bq_jnorm = pl.concat([polars_df.drop('attributes'), just_attributes], how="horizontal")
 		print(f"An additional {len(just_attributes.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
 		if self.cfg.verbose: print(f"Columns added: {just_attributes.columns}")
-		with suppress(pl.exceptions.SchemaFieldNotFoundError): bq_jnorm.rename(columns.bq_col_to_ranchero_col)
+		with suppress(pl.exceptions.SchemaFieldNotFoundError): bq_jnorm.rename(columns.common_col_to_ranchero_col)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
 

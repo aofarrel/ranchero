@@ -134,7 +134,7 @@ class NeighLib:
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
-		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=200):
+		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=50):
 			print(polars_df)
 		
 	def get_x_y_column_pairs(pandas_df):
@@ -204,6 +204,8 @@ class NeighLib:
 	def unnest_polars_list_columns(polars_df):
 		""" Unnests list data (but not the way explode() does it) so it can be writen to CSV format
 		Credit: deanm0000 on GitHub, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
+
+		LIMITATIONS: This will leave pl.List(pl.null) as-is.
 		"""
 		return polars_df.with_columns(
 			(
@@ -227,22 +229,38 @@ class NeighLib:
 			)
 
 	@classmethod
+	def print_polars_cols_and_dtypes(cls, polars_df):
+		[print(f"{col}: {dtype}") for col, dtype in zip(polars_df.columns, polars_df.dtypes)]
+
+	@classmethod
+	def drop_null_columns(cls, polars_df):
+		""" Drop columns of type null or list(null) """
+		import polars.selectors as cs
+		polars_df = polars_df.drop(cs.by_dtype(pl.Null))
+		polars_df = polars_df.drop(cs.by_dtype(pl.List(pl.Null)))
+		return polars_df
+
+	@classmethod
 	def polars_to_tsv(cls, polars_df, path: str):
-		print("Writing to TSV...")
+		print("Writing to TSV. Lists and objects will converted to strings, and columns full of nulls will be dropped.")
+		df_to_write = cls.drop_null_columns(polars_df)
 		columns_with_type_list = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.List]
 		columns_with_type_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.Object]
-		df_to_write = polars_df
 		if len(columns_with_type_list) > 0:
-			print("Lists will be converted to strings before writing to file")
 			df_to_write = cls.unnest_polars_list_columns(df_to_write)
 		if len(columns_with_type_obj) > 0:
-			print("WARNING: Columns of type object detected, will be converted as if sets")
 			df_to_write = cls.unnest_polars_set_columns(df_to_write)
 		try:
+			### DEBUG ###
+			debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})
+			print(debug)
 			df_to_write.write_csv(path, separator='\t', include_header=True, null_value='')
 			print(f"Wrote to {path}")
 		except pl.exceptions.ComputeError:
-			print("WARNING: Caught ComputeError trying to write to TSV")
+			print("WARNING: Failed to write to TSV due to ComputeError. This is likely a data type issue.")
+			debug = pl.DataFrame({col:  f"Was {dtype1}, now {dtype2}" for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if col in df_to_write.columns and dtype2 != pl.String and dtype2 != pl.List(pl.String)})
+			cls.super_print_pl(debug, "Potentially problematic that may have caused the TSV write failure:")
+			exit(2)
 
 	def get_dupe_columns_of_two_polars(polars_df_a, polars_df_b, assert_shared_cols_equal=False):
 		""" Check two polars dataframes share any columns """
