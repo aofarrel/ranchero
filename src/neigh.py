@@ -10,21 +10,21 @@ class NeighLib:
 
 	def likely_is_run_indexed(polars_df):
 		# TODO: make more robust
-		singular_runs = ("run_index" in polars_df.schema and polars_df.schema["run_index"] == pl.Utf8) or ("run_accession" in polars_df.schema and polars_df.schema["run_accession"] == pl.Utf8)
+		singular_runs = (
+			("run_index" in polars_df.schema and polars_df.schema["run_index"] == pl.String) or
+			("run_accession" in polars_df.schema and polars_df.schema["run_accession"] == pl.String) or
+			("acc" in polars_df.schema and polars_df.schema["acc"] == pl.String)
+		)
 		if singular_runs:
 			return True
 		else:
 			return False
 
-	def check_dataframe_type(dataframe, wanted):
-		""" Checks if dataframe is polars and pandas. If it doesn't match wanted, throw an error."""
-		pass
-
 	def get_ranchero_input_columns(cls):
 		return cls.get_ranchero_column_dictionary.keys()
 
 	def get_ranchero_output_nonstandardized_columns(cls):
-		return list(set(cls.get_ranchero_column_dictionary.values ()))
+		return list(set(cls.get_ranchero_column_dictionary.values()))
 
 	@staticmethod
 	def get_ranchero_column_dictionary():
@@ -77,7 +77,7 @@ class NeighLib:
 			print(f"Missing columns: {missing_columns}")
 			return False
 	
-	def concat_dicts_with_shared_keys(dict_list: list, shared_keys_with_values_to_keep: set):
+	def concat_dicts_with_shared_keys(dict_list: list):
 		"""
 		Takes in a list of dictionaries with literal 'k' and 'v' values and
 		flattens them. For instance, this:
@@ -85,15 +85,14 @@ class NeighLib:
 		becomes:
 		{'bases': '326430182', 'bytes': '141136776'}
 
-		This version is aware of primary_serach showing up multiple times.
-		Since these functions run as .apply() I decided to make a new function
-		rather than adding another if to 
+		This version is aware of primary_search showing up multiple times and will
+		keep all values for primary_search.
 		"""
 		combined_dict = {}
 		primary_search = set()
 		for d in dict_list:
 			if 'k' in d and 'v' in d:
-				if d['k'] in shared_keys_with_values_to_keep:
+				if d['k'] == 'primary_search':
 					primary_search.add(d['v'])
 				else:
 					combined_dict[d['k']] = d['v']
@@ -108,7 +107,8 @@ class NeighLib:
 		becomes:
 		{'bases': '326430182', 'bytes': '141136776'}
 
-		This version assumes 'k' and 'v' are in the dictionaries and will error otherwise.
+		This version assumes 'k' and 'v' are in the dictionaries and will error otherwise,
+		and doesn't support shared keys (eg, it will pick a primary_serach value at random)
 		"""
 		combined_dict = {}
 		for d in dict_list:

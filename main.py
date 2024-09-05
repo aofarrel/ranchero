@@ -5,7 +5,7 @@ print(f"Import time: {time.time() - start}")
 
 start = time.time()
 what_about_primary_search = [{"k":"bases","v":1000},{"k":"primary_search","v":"foo"},{"k":"primary_search","v":"bar"}]
-print(Ranchero.NeighLib.concat_dicts_with_shared_keys(what_about_primary_search, set(["primary_search"])))
+print(Ranchero.NeighLib.concat_dicts_with_shared_keys(what_about_primary_search))
 print(f"Primary search split time: {time.time() - start}")
 
 

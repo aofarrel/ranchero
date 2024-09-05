@@ -35,6 +35,10 @@ def store_known_multi_accession_metadata(pandas_df_indexed_by_runs):
 	"""
 	pass
 
+def check_dataframe_type(dataframe, wanted):
+	""" Checks if dataframe is polars and pandas. If it doesn't match wanted, throw an error."""
+	pass
+
 def concat_dicts_tuple(dict_list: list):
 	"""
 	Takes in a list of dictionaries with literal 'k' and 'v' values and

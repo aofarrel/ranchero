@@ -17,7 +17,6 @@ class RancheroConfig:
 		# TODO: this doesn't handle self.unwanted properly
 		stuff = self.__dict__.copy()
 		del stuff['unwanted']
-		del stuff['keep_all_values_of_these_shared_keys']
 		print(pl.from_dict(stuff, strict=False))
 
 	def read_config(self, config_file: str):
@@ -30,8 +29,7 @@ class RancheroConfig:
 		self.immediate_biosample_merge = False
 		self.immediate_rancheroize = True
 		self.immediate_try_parse_dates = True
-		self.intermediate_files = True
-		self.keep_all_values_of_these_shared_keys = set(["primary_search"])
+		self.intermediate_files = False
 		self.polars_normalize = True
 		self.verbose = True
 		self.unwanted = {

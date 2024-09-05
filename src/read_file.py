@@ -157,7 +157,7 @@ class FileReader():
 		#if intermediate_files: NeighLib.polars_to_tsv(flat_neo, f"./intermediate/polars_flattened.tsv")
 		return flat
 
-	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False):
+	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search=True):
 		"""
 		Uses NeighLib.concat_dicts to turn the weird format of the attributes column into flat dictionaries,
 		then do some JSON normalization to output a polars dataframe.
@@ -177,18 +177,15 @@ class FileReader():
 		Configurations used:
 		* cast_types (set)
 		* intermediate_files (set)
-		* keep_all_values_of_these_shared_keys (set)
 		* verbose (set)
 		"""
-		shared_keys = self.cfg.keep_all_values_of_these_shared_keys.copy()
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
-		if len(self.cfg.keep_all_values_of_these_shared_keys) != 0:  # TODO: benchmark these two options
-			# concat_dicts_with_shared_keys() needs shared_keys_with_values_to_keep, so we pass that in explictly (lambda is for cowards)
+		if keep_all_primary_search:  # TODO: benchmark these two options
 			if self.cfg.verbose:
 				print("Concatenating dictionaries with Pandas...")
-				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts_with_shared_keys, shared_keys_with_values_to_keep=shared_keys)
+				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts_with_shared_keys)
 			else:
-				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts_with_shared_keys, shared_keys_with_values_to_keep=shared_keys)
+				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts_with_shared_keys)
 		else:
 			if self.cfg.verbose:
 				print("Concatenating dictionaries with Pandas...")

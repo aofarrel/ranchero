@@ -124,7 +124,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 			raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in {name} dataframe")
 		if merge_upon == 'run_index' or merge_upon == 'run_accession':
 			if not NeighLib.likely_is_run_indexed(df):
-				print(f"WARNING: Merging upon {merge_upon}, but {name} dataframe appears to not be indexed by run accession")
+				print(f"WARNING: Merging upon {merge_upon}, which looks like a run accession, but {name} dataframe appears to not be indexed by run accession")
 		if len(df.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
 			raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
 
@@ -162,7 +162,6 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 
 	# we can use agg tables to check for partial self matches
 	elif len(left_list_cols) == 0 and len(right_list_cols) == 0:
-		print("No list columns detected")
 
 		# fill in null values
 		nullfilled_left = left.join(right, on=merge_upon, how="left").with_columns(
