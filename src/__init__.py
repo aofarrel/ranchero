@@ -10,8 +10,15 @@ Configuration = RancheroConfig()  # creates a default config
 
 # global instances
 _FileReader = FileReader(Configuration)
+_NeighLib = NeighLib()
 
 # exposed classes of global instances
-polars_from_tsv = _FileReader.polars_from_tsv
-polars_from_bigquery = _FileReader.polars_from_bigquery
-polars_from_ncbi_run_selector = _FileReader.polars_from_ncbi_run_selector
+from_tsv = _FileReader.polars_from_tsv
+from_bigquery = _FileReader.polars_from_bigquery
+from_ncbi_run_selector = _FileReader.polars_from_ncbi_run_selector
+run_index_to_sample_index = _FileReader.polars_run_to_sample
+
+to_tsv = _NeighLib.polars_to_tsv
+flatten_nested_list_cols = _NeighLib.flatten_nested_list_cols
+hella_flat = _NeighLib.flatten_all_list_cols_as_much_as_possible
+drop_non_tb_columns = _NeighLib.drop_non_tb_columns

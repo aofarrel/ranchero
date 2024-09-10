@@ -113,17 +113,21 @@ class FileReader():
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
 
+	def polars_run_to_sample(self, polars_df):
+		"""Public wrapper for polars_flatten()"""
+		if 'sample_index' not in polars_df.columns:
+			print("Could not find a sample-based column to make as the index!")
+			exit(1)
+		return self.polars_flatten(polars_df, upon='sample_index')
+
 	def polars_flatten(self, polars_df, upon='BioSample', keep_all_columns=False):
 		"""
 		Flattens an input file using polars group_by().agg(). This is designed to essentially turn run accession indexed dataframes
 		into BioSample-indexed dataframes. Assumes columns are already rancheroized.
-
-		If rancheroize, attempt to rename columns to ranchero format.
 		"""
 		print(f"Flattening {upon}s...")
 
 		not_flat = polars_df
-		print(not_flat)
 		if self.cfg.verbose:
 			non_uniques = not_flat.group_by(upon).count().filter(pl.col("count") > 1)[upon]
 			number_non_unique = len(non_uniques)
@@ -141,9 +145,9 @@ class FileReader():
 			flat_neo = flat
 		else:
 			columns_to_keep = NeighLib.get_ranchero_column_dictionary_only_valid(not_flat)
-			with suppress(ValueError): columns_to_keep.remove(upon)  # if it's not in there, who cares?
-			flat = not_flat.group_by(upon).agg(pl.col(columns_to_keep_really))
-			if self.cfg.verbose: NeighLib.super_print_pl(flat)
+			with suppress(ValueError): del columns_to_keep[upon]  # if it's not in there, who cares?
+			flat = not_flat.group_by(upon).agg(pl.col(columns_to_keep))
+			#if self.cfg.verbose: NeighLib.super_print_pl(flat, "flat") # this breaks on tba5
 			
 			#for nested_column in columns.recommended_sra_columns:
 			#	if nested_column not in columns_in_df:
@@ -193,7 +197,7 @@ class FileReader():
 			else:
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts)
 		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'])
-		if rancheroize: normalized.rename(columns.bq_col_to_ranchero_col)
+		if rancheroize: normalized.rename(columns.common_col_to_ranchero_col)
 		if self.cfg.cast_types: normalized = NeighLib.cast_politely(normalized)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
 		return normalized

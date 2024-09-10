@@ -28,6 +28,7 @@ class NeighLib:
 
 	@staticmethod
 	def get_ranchero_column_dictionary():
+		"""WARNING: This will generate duplicate values. Don't pipe directly to rename, filter out first."""
 		almost_everything_worth_keeping = {}
 		for key, value in columns.common_col_to_ranchero_col.items():
 			if key in almost_everything_worth_keeping and almost_everything_worth_keeping[key] != value:
@@ -45,6 +46,7 @@ class NeighLib:
 		# we want to keep stuff that is already rancheroized too!
 		everything_worth_keeping = almost_everything_worth_keeping.copy()
 		everything_worth_keeping.update({v: v for k, v in almost_everything_worth_keeping.items() if v not in almost_everything_worth_keeping.keys()})  # yes, this is VALUE: VALUE
+
 		return everything_worth_keeping.copy()
 
 	@classmethod
@@ -66,7 +68,12 @@ class NeighLib:
 
 	@staticmethod
 	def get_valid_columns_dict_from_arbitrary_dict(polars_df, column_dict: dict):
-		return {k:v for k, v in column_dict.items() if k in polars_df.columns}
+		key_exists = {k:v for k, v in column_dict.items() if k in polars_df.columns}
+		# force unique values only
+		# TODO: there's better ways of handling similar columns; ideally we should merge them
+		temp = {val: key for key, val in key_exists.items()}
+		everything_worth_keeping = {val: key for key, val in temp.items()}
+		return everything_worth_keeping
 	
 	def check_columns_exist(polars_df, column_list: list):
 		missing_columns = [col for col in column_list if col not in polars_df.columns]
@@ -96,7 +103,7 @@ class NeighLib:
 					primary_search.add(d['v'])
 				else:
 					combined_dict[d['k']] = d['v']
-		combined_dict.update({"primary_search": primary_search})
+		combined_dict.update({"primary_search": list(primary_search)}) # convert to a list to avoid the polars column becoming type object
 		return combined_dict
 
 	def concat_dicts_risky(dict_list: list):
@@ -134,7 +141,7 @@ class NeighLib:
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
-		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=50):
+		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=500, fmt_table_cell_list_len=10):
 			print(polars_df)
 		
 	def get_x_y_column_pairs(pandas_df):
@@ -200,32 +207,110 @@ class NeighLib:
 		except pl.exceptions.SchemaFieldNotFoundError:  # should never happen
 			print("WARNING: Failed to rename columns")
 
+	@classmethod
+	def flatten_all_list_cols_as_much_as_possible(cls, polars_df, verbose=False, hard_stop=False):
+		"""If intelligent, assume sample indexed, and check lists actually make sense. For example,
+		a country shouldn't be a list at all in a sample-indexed dataframe as a sample can only come
+		from one country since NCBI data doesn't really make a distinction between host and prior
+		nation for refugees/travelers"""
+
+		# unnest nested lists (recursive)
+		polars_df = cls.flatten_nested_list_cols(polars_df)
+
+		# flatten lists of only one value
+		for col, datatype in polars_df.schema.items():
+			if datatype == pl.List:
+				n_rows_prior = polars_df.shape[0]
+				temp_df = polars_df.explode(col).unique()
+				n_rows_now = temp_df.shape[0]
+				if n_rows_now > n_rows_prior:
+					if col in columns.list_to_float_via_sum:  # ignores temp_df
+						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
+						polars_df = polars_df.drop(col)
+					elif col in columns.drop:  # ignores temp_df
+						polars_df = polars_df.drop(col)
+					elif col in columns.keep_as_list:  # ignores temp_df
+						polars_df = polars_df
+					elif col in columns.keep_as_set:  # because we exploded with unique(), we now have a set (sort of), but I think this is better than trying to do a column merge
+						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
+					elif col in columns.warn_if_list_with_unique_values:
+						print(f"WARNING: Expected {col} to only have one non-null per sample, but that's not the case.")
+						if verbose:
+							cls.super_print_pl(polars_df.select(col), "as passed in")
+						else:
+							print(polars_df.select(col))
+						if hard_stop:
+							exit(1)
+						else:
+							continue
+					else:
+						if verbose: print(f"WARNING: Unsure what to do with {col}, so we'll leave it as-is")
+						polars_df = polars_df
+					
+					# debug
+					if verbose:
+						if col in polars_df.columns:
+							print(polars_df.select(col))
+						elif f"{col}_sum" in polars_df.columns:
+							print(polars_df.select(f"{col}_sum"))
+						else:
+							pass
+				else:
+					polars_df = temp_df
+
+		return polars_df
+
+	@classmethod
+	def drop_non_tb_columns(cls, polars_df, and_their_rows=False):
+		return polars_df.select([col for col in polars_df.columns if col not in columns.clearly_not_tuberculosis])
+
 	@staticmethod
-	def unnest_polars_list_columns(polars_df):
+	def flatten_nested_list_cols(polars_df):
+		"""Flatten nested list columns"""
+
+		# This version seems to breaking the schema:
+		#polars_df = polars_df.with_columns(
+		#	[pl.col(x).list.eval(pl.lit("'") + pl.element() + pl.lit('"')).list.join(",").alias(x) for x, y in polars_df.schema.items() if isinstance(y, pl.List) and isinstance(y.inner, pl.List)]
+		#)
+
+		nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
+		for col in nested_lists:
+			#new_col = pl.col(col).list.eval(pl.element().cast(pl.Utf8).map_elements(lambda s: f"'{s}'")).alias(f"{col}_flattened")
+			#new_col = pl.col(col).list.eval(pl.element().cast(pl.Utf8).map_elements(lambda s: f"'{s}'", return_dtype=str)).list.join(",").alias(f"{col}_flattened")
+			polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten().drop_nulls()))
+		
+		# this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
+		remaining_nests = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
+		if len(remaining_nests) != 0:
+			polars_df = flatten_nested_list(polars_df)
+		return(polars_df)
+
+	@staticmethod
+	def stringify_list_columns(polars_df):
 		""" Unnests list data (but not the way explode() does it) so it can be writen to CSV format
 		Credit: deanm0000 on GitHub, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
 
-		LIMITATIONS: This will leave pl.List(pl.null) as-is.
+		LIMITATIONS: This seems to leave pl.List(pl.null) as-is.
 		"""
 		return polars_df.with_columns(
 			(
 				pl.lit("[")
-				+ pl.col(x).list.eval(pl.lit('"') + pl.element() + pl.lit('"')).list.join(",")
+				+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
 				+ pl.lit("]")
-			).alias(x)
-			for x, y in polars_df.schema.items()
-			if y == pl.List(pl.String)
+			).alias(col)
+			for col, datatype in polars_df.schema.items()
+			if datatype == pl.List(pl.String)
 		)
 
 	@staticmethod
-	def unnest_polars_set_columns(polars_df):
+	def stringify_set_columns(polars_df):
 		""" Unnests set data so it can be writen to CSV format
-		Heavily based on deanm0000's code (see unnest_polars_list_columns())
+		Heavily based on deanm0000's code (see stringify_list_columns())
 		"""
 		return polars_df.with_columns(
-			(pl.col(x).map_elements(lambda s: "{" + ', '.join(f'"{item}"' for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)).alias(x)
-			for x, y in polars_df.schema.items()
-			if y == pl.Object
+			(pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)).alias(col)
+			for col, datatype in polars_df.schema.items()
+			if datatype == pl.Object
 			)
 
 	@classmethod
@@ -247,9 +332,9 @@ class NeighLib:
 		columns_with_type_list = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.List]
 		columns_with_type_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.Object]
 		if len(columns_with_type_list) > 0:
-			df_to_write = cls.unnest_polars_list_columns(df_to_write)
+			df_to_write = cls.stringify_list_columns(df_to_write)
 		if len(columns_with_type_obj) > 0:
-			df_to_write = cls.unnest_polars_set_columns(df_to_write)
+			df_to_write = cls.stringify_set_columns(df_to_write)
 		try:
 			### DEBUG ###
 			debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})

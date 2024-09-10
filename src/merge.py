@@ -155,8 +155,8 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 	
 	# no columns are shared except merge_upon, just use merge_sorted()
 	if len(shared_columns) == 0:
-		left = left.sort(merge_upon)
-		right = right.sort(merge_upon)
+		left = NeighLib.drop_null_columns(left.sort(merge_upon))
+		right = NeighLib.drop_null_columns(right.sort(merge_upon))
 		initial_merge = left.merge_sorted(right, merge_upon).unique().sort(merge_upon)
 		return initial_merge
 
@@ -167,11 +167,11 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		nullfilled_left = left.join(right, on=merge_upon, how="left").with_columns(
 				[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in left.columns if col != merge_upon and col in right.columns]
 		).select(left.columns).sort(merge_upon)
-		if verbose: NeighLib.super_print_pl(nullfilled_left, "nullfilled left")
 		nullfilled_right = right.join(left, on=merge_upon, how="left").with_columns(
 			[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in right.columns if col != merge_upon and col in left.columns]
 		).select(right.columns).sort(merge_upon)
-		if verbose: NeighLib.super_print_pl(nullfilled_right, "nullfilled right")
+		nullfilled_left = NeighLib.drop_null_columns(nullfilled_left)
+		nullfilled_right = NeighLib.drop_null_columns(nullfilled_right)
 	
 		# TODO: not convinced get_partial_self_matches() (agg table) is better than the approach in the else block
 		# it might be best to drop the agg table entirely. commenting it out for now...
@@ -195,48 +195,18 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		nullfilled_left = left.join(right, on=merge_upon, how="left").with_columns(
 				[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in left.columns if col != merge_upon and col in right.columns]
 		).select(left.columns).sort(merge_upon)
-		if verbose: NeighLib.super_print_pl(nullfilled_left, "nullfilled left")
 		nullfilled_right = right.join(left, on=merge_upon, how="left").with_columns(
 			[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in right.columns if col != merge_upon and col in left.columns]
 		).select(right.columns).sort(merge_upon)
-		if verbose: NeighLib.super_print_pl(nullfilled_right, "nullfilled right")
+		
+		nullfilled_left = NeighLib.drop_null_columns(nullfilled_left)
+		nullfilled_right = NeighLib.drop_null_columns(nullfilled_right)
+
 		initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 		really_merged = merge_right_columns(initial_merge, quick_cast=False)
 
 		really_merged_no_dupes = really_merged.unique()
 		return really_merged_no_dupes
-
-
-
-	left_nulls = left.select(pl.all().is_null().sum())
-	right_nulls = right.select(pl.all().is_null().sum())
-	n_left_nulls = left_nulls.sum()
-	n_right_nulls = right_nulls.sum()
-	
-
-	
-
-	# use .join to fill in null values in both dataframes
-	
-
-	# actually merge the dataframes
-	# we'll use merge_sorted() as there is less to clean up than .join(how="full")
-	initial_merge = nullfilled_left.merge_sorted(nullfilled_right, merge_upon).unique().sort(merge_upon)
-	NeighLib.super_print_pl(initial_merge, "initial_merge")
-	restored_catagorical_data = get_partial_self_matches(initial_merge, merge_upon).sort(merge_upon)
-	merged = initial_merge.join(restored_catagorical_data, on=merge_upon, how="left")
-	NeighLib.super_print_pl(merged, "merged left")
-	really_merged = merge_right_columns(merged)
-	really_merged_no_dupes = really_merged.unique()
-	NeighLib.super_print_pl(really_merged_no_dupes, "really_merged_no_dupes")
-
-	len_current =really_merged_no_dupes.shape[0]
-	len_new_rows = len_current - rows_left
-	if verbose:
-		print(f"Was {rows_left} rows, merged with {rows_right} rows, now {len_current} rows")
-		print(f"This implies {len_new_rows} new rows were added (or failed to merge)")
-
-	return really_merged_no_dupes
 
 def merge_pandas_dataframes(left, right, merge_upon, right_name="merged", put_right_name_in_this_column=None):
 	"""
