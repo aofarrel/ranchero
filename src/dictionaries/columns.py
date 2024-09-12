@@ -258,6 +258,8 @@ polars_cast_not_attributes = {
 
 # for context: tuberculosis is Bacteria -> Actinomycetota -> Actinomycetia -> Mycobacteriales -> Mycobacteriaceae -> Mycobacterium
 # turicibacter and mycoplasmataceae are a whole 'nuther phylum
+tb_but_not_used = ['mycobacteriaceae_family_sam', 'mycobacterium_genus_sam']
+
 clearly_not_tuberculosis = [
 	'abiotrophia_defectiva_species_sam',
 	'abiotrophia_genus_sam',

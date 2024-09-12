@@ -22,3 +22,4 @@ to_tsv = _NeighLib.polars_to_tsv
 flatten_nested_list_cols = _NeighLib.flatten_nested_list_cols
 hella_flat = _NeighLib.flatten_all_list_cols_as_much_as_possible
 drop_non_tb_columns = _NeighLib.drop_non_tb_columns
+super_print = _NeighLib.super_print_pl

@@ -11,6 +11,10 @@ null_values = [
 	'not applicable',
 	'Not Applicable',
 	'Not applicable',
+
+	'Not available',
+	'Not Available',
+	'not available',
 	
 	'nan',
 	'Nan',
@@ -24,6 +28,13 @@ null_values = [
 	'not collected',
 	'Not collected',
 	'Not Collected',
+	'NOT COLLECTED',
+
+	'Not Provided',
+	'Not provided',
+
+	'Not specified',
+	'not specified',
 
 	'null',
 	'Null',

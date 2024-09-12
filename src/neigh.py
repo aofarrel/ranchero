@@ -137,6 +137,7 @@ class NeighLib:
 				combined_dict[d['k']] = d['v']
 		return combined_dict
 	
+	@staticmethod
 	def super_print_pl(polars_df, header):
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
@@ -287,31 +288,33 @@ class NeighLib:
 
 	@staticmethod
 	def stringify_list_columns(polars_df):
-		""" Unnests list data (but not the way explode() does it) so it can be writen to CSV format
-		Credit: deanm0000 on GitHub, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
+		""" Unnests list/object data (but not the way explode() does it) so it can be writen to CSV format
+		Heavily based on deanm0000 code, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
 
-		LIMITATIONS: This seems to leave pl.List(pl.null) as-is.
+		LIMITATIONS: This may not work as expected on pl.List(pl.Null). You may also see oddities on some pl.Object types.
 		"""
-		return polars_df.with_columns(
-			(
-				pl.lit("[")
-				+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
-				+ pl.lit("]")
-			).alias(col)
-			for col, datatype in polars_df.schema.items()
-			if datatype == pl.List(pl.String)
-		)
+		for col, datatype in polars_df.schema.items():
+			if datatype == pl.List(pl.String):
+				polars_df = polars_df.with_columns((
+					pl.lit("[")
+					+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
+					+ pl.lit("]")
+				).alias(col))
+			
+			# TODO: pl.Int doesn't exist, but is there some kind of superset? pl.List(int) doesn't seem to work
+			elif (datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64)):
+				polars_df = polars_df.with_columns((
+					pl.lit("[")
+					+ pl.col(col).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
+					+ pl.lit("]")
+				).alias(col))
+			
+			elif datatype == pl.Object:
+				polars_df = polars_df.with_columns((
+					pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)
+				).alias(col))
 
-	@staticmethod
-	def stringify_set_columns(polars_df):
-		""" Unnests set data so it can be writen to CSV format
-		Heavily based on deanm0000's code (see stringify_list_columns())
-		"""
-		return polars_df.with_columns(
-			(pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)).alias(col)
-			for col, datatype in polars_df.schema.items()
-			if datatype == pl.Object
-			)
+		return polars_df
 
 	@classmethod
 	def print_polars_cols_and_dtypes(cls, polars_df):
@@ -329,12 +332,9 @@ class NeighLib:
 	def polars_to_tsv(cls, polars_df, path: str):
 		print("Writing to TSV. Lists and objects will converted to strings, and columns full of nulls will be dropped.")
 		df_to_write = cls.drop_null_columns(polars_df)
-		columns_with_type_list = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.List]
-		columns_with_type_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if dtype == pl.Object]
-		if len(columns_with_type_list) > 0:
+		columns_with_type_list_or_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if (dtype == pl.List or dtype == pl.Object)]
+		if len(columns_with_type_list_or_obj) > 0:
 			df_to_write = cls.stringify_list_columns(df_to_write)
-		if len(columns_with_type_obj) > 0:
-			df_to_write = cls.stringify_set_columns(df_to_write)
 		try:
 			### DEBUG ###
 			debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})
