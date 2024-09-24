@@ -27,6 +27,25 @@ print(Ranchero.get_paired_illumina(tiny_test))
 print("Or not!")
 print(Ranchero.get_paired_illumina(tiny_test, inverse=True))
 
+
+
+print("Ranchero can also identify different types of mycobacteria in your data.")
+import polars as pl
+data = pl.DataFrame({"organism": [
+	"Mycobacterium", 
+	"Mycobacterium [tuberculosis] TKK-01-0051",
+	"Mycobacterium avium", 
+	"MycobACTERIUm avium", 
+	"Mycobacterium AVIUM complex",
+	"Mycobacterium avium complex sp.",
+	"Mycobacterium canettii",
+	"Mycobacterium canettii CIPT 140010059",
+	"Mycobacterium smegmatis"
+] } )
+print(Ranchero.classify_bacterial_family(data))
+
+
+
 print("The recommended way to squeeze as much strain information out as possible, while dropping as much extraneous information, is as follows:")
 print("1) Drop everything that doesn't start with 'myco' in the organism column")
 print("2) Use the strainify function")

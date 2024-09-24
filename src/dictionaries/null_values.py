@@ -11,6 +11,7 @@ null_values = [
 	'not applicable',
 	'Not Applicable',
 	'Not applicable',
+	'not abblicable',
 
 	'Not available',
 	'Not Available',

@@ -55,6 +55,21 @@ class FileReader():
 			dataframe = polars_flatten(dataframe, upon='BioSample', keep_all_columns=False)
 		return dataframe
 
+	def fix_bigquery_file(self, bq_file):
+		out_file_path = f"{bq_file}_modified.json"
+		with open(bq_file, 'r') as in_file:
+			lines = in_file.readlines()
+		with open(out_file_path, 'w') as out_file:
+			out_file.write("[\n")
+			for i, line in enumerate(lines):
+				if i < len(lines) - 1:
+					out_file.write(line.strip() + ",\n")
+				else:
+					out_file.write(line.strip() + "\n")
+			out_file.write("]\n")
+		print(f"Reformatted JSON saved to {out_file_path}")
+		return out_file_path
+
 	def polars_from_bigquery(self, bq_file, nullify=True, normalize_attributes=True):
 		""" 
 		1. Reads a bigquery JSON into a polars dataframe
@@ -67,8 +82,19 @@ class FileReader():
 		* immediate_biosample_merge (set)
 		* immediate_rancheroize (set)
 		"""
-		bq_raw = pl.read_json(bq_file)
-		if self.cfg.verbose: print(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
+		try:
+			bq_raw = pl.read_json(bq_file)
+			if self.cfg.verbose: print(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
+		except pl.exceptions.ComputeError:
+			print("Caught exception reading JSON file. Attempting to reformat it...")
+			try:
+				bq_raw = pl.read_json(self.fix_bigquery_file(bq_file))
+				if self.cfg.verbose: print(f"Fixed input file has {bq_raw.width} columns and {len(bq_raw)} rows")
+			except pl.exceptions.ComputeError:
+				print("Caught exception reading JSON file after attempting to fix it. Giving up!")
+				exit(1)
+
+		
 		if self.cfg.immediate_rancheroize:
 			if normalize_attributes and "attributes" in bq_raw.columns:  # if column doesn't exist, return false
 				bq_norm = self.polars_fix_attributes_and_json_normalize(bq_raw)
@@ -119,6 +145,37 @@ class FileReader():
 			print("Could not find a sample-based column to make as the index!")
 			exit(1)
 		return self.polars_flatten(polars_df, upon='sample_index')
+
+	def get_not_unique_in_col(self, polars_df, column):
+		return polars_df.filter(pl.col(column).is_duplicated()).select(column).unique()
+		# polars_df.filter(pl.col(column).is_duplicated()).select(column).unique()
+
+	def polars_explode_delimited_rows_recklessly(self, polars_df, column="run_index", delimter=";", drop_new_non_unique=True):
+		"""
+		column 			some_other_column		
+		"SRR123;SRR124"	SchemaFieldNotFoundError
+		"SRR125" 		TapeError
+
+		becomes
+
+		column 			some_other_column		
+		"SRR123"		SchemaFieldNotFoundError
+		"SRR124"		SchemaFieldNotFoundError
+		"SRR125" 		TapeError
+		"""
+		exploded = polars_df.with_columns(pl.col(column).str.split(delimter)).explode(column)
+		if len(polars_df) == len(polars_df.select(column).unique()):
+			if len(exploded) != len(exploded.select(column).unique()):
+				print(f"Exploding created non-unique values for the previously unique-only column {column}")
+				print(self.get_not_unique_in_col(exploded, column))
+				print(len(exploded.select(column).unique()))
+				print(len(exploded))
+		else:
+			# there aren't unique values to begin with so who cares lol
+			pass
+		return exploded
+
+
 
 	def polars_flatten(self, polars_df, upon='BioSample', keep_all_columns=False):
 		"""

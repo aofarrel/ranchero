@@ -1,12 +1,41 @@
 # general purpose functions
 
 import polars as pl
-from src.dictionaries import columns, null_values
+from src.dictionaries import columns, drop_zone, null_values
 from polars.testing import assert_series_equal
 
 # TODO: can we implement verbose without importing the whole config?
 
 class NeighLib:
+
+	def print_col_where(polars_df, column="source", equals="Coscolla"):
+		print(polars_df.filter(pl.col(column) == equals))
+
+	def mark_rows_with_value(polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
+		#polars_df = polars_df.with_columns(pl.lit("").alias(new_column))
+		polars_df = polars_df.with_columns(
+			pl.when(pl.col('organism').str.contains_any("Mycobacterium avium"))  # contains should return boolean
+			.then(pl.lit(true_value))  # Set true_value where condition is True
+			.otherwise(pl.lit(false_value))  # Set false_value otherwise
+			.alias(new_column)  # Alias as the new column
+		)
+		#polars_df.with_columns(pl.when(pl.col("organism").str.contains_any(["Mycobacterium avium", "lalala"])).then(pl.lit(true_value)).alias(new_column))
+		print(polars_df.select(pl.col(new_column).value_counts()))
+
+		polars_df = polars_df.with_columns(
+			pl.when(pl.col('organism').str.contains("Mycobacterium"))
+			.then(pl.lit(true_value))
+			.otherwise(pl.lit(false_value))
+			.alias(new_column)
+		)
+
+		#polars_df = polars_df.with_columns(
+		#	pl.when(filter_func(polars_df, **kwargs))
+		#	.then(pl.lit(true_value))
+		#	.otherwise(pl.lit(false_value))
+		#	.alias(new_column)
+		#)
+		print(polars_df.select(pl.col(new_column).value_counts()))
 
 	def likely_is_run_indexed(polars_df):
 		# TODO: make more robust
@@ -25,6 +54,15 @@ class NeighLib:
 
 	def get_ranchero_output_nonstandardized_columns(cls):
 		return list(set(cls.get_ranchero_column_dictionary.values()))
+
+	def print_value_counts(polars_df, skip_ids=True):
+		ids = ['sample_index', 'biosample', 'BioSample', 'acc', 'acc_1', 'run_index', 'run_accession'] + columns.addl_ids
+		for column in polars_df.columns:
+			if skip_ids and column not in ids:
+				counts = polars_df.select([pl.col(column).value_counts(sort=True)])
+				print(counts)
+			else:
+				continue
 
 	@staticmethod
 	def get_ranchero_column_dictionary():
@@ -75,15 +113,16 @@ class NeighLib:
 		everything_worth_keeping = {val: key for key, val in temp.items()}
 		return everything_worth_keeping
 	
-	def check_columns_exist(polars_df, column_list: list):
+	def check_columns_exist(polars_df, column_list: list, err=False, verbose=False):
 		missing_columns = [col for col in column_list if col not in polars_df.columns]
-		if not missing_columns:
+		if len(missing_columns) == 0:
+			if verbose: print("All requested columns exist in dataframe")
 			return True
 		else:
-			# TODO: only print if verbose
-			print(f"Missing columns: {missing_columns}")
+			if verbose: print(f"Missing these columns: {missing_columns}")
+			if err: exit(1)
 			return False
-	
+
 	def concat_dicts_with_shared_keys(dict_list: list):
 		"""
 		Takes in a list of dictionaries with literal 'k' and 'v' values and
@@ -225,16 +264,16 @@ class NeighLib:
 				temp_df = polars_df.explode(col).unique()
 				n_rows_now = temp_df.shape[0]
 				if n_rows_now > n_rows_prior:
-					if col in columns.list_to_float_via_sum:  # ignores temp_df
+					if col in columns.rts__list_to_float_via_sum:  # ignores temp_df
 						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
 						polars_df = polars_df.drop(col)
-					elif col in columns.drop:  # ignores temp_df
+					elif col in columns.rts__drop:  # ignores temp_df
 						polars_df = polars_df.drop(col)
-					elif col in columns.keep_as_list:  # ignores temp_df
+					elif col in columns.rts__keep_as_list:  # ignores temp_df
 						polars_df = polars_df
-					elif col in columns.keep_as_set:  # because we exploded with unique(), we now have a set (sort of), but I think this is better than trying to do a column merge
+					elif col in columns.rts__keep_as_set:  # because we exploded with unique(), we now have a set (sort of), but I think this is better than trying to do a column merge
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
-					elif col in columns.warn_if_list_with_unique_values:
+					elif col in columns.rts__warn_if_list_with_unique_values:
 						print(f"WARNING: Expected {col} to only have one non-null per sample, but that's not the case.")
 						if verbose:
 							cls.super_print_pl(polars_df.select(col), "as passed in")
@@ -262,8 +301,12 @@ class NeighLib:
 		return polars_df
 
 	@classmethod
-	def drop_non_tb_columns(cls, polars_df, and_their_rows=False):
-		return polars_df.select([col for col in polars_df.columns if col not in columns.clearly_not_tuberculosis])
+	def drop_non_tb_columns(cls, polars_df):
+		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.clearly_not_tuberculosis])
+
+	@classmethod
+	def drop_known_unwanted_columns(cls, polars_df):
+		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.silly_columns])
 
 	@staticmethod
 	def flatten_nested_list_cols(polars_df):

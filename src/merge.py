@@ -102,7 +102,33 @@ def merge_right_columns(polars_df, quick_cast=True):
 	# non-unique rows might be dropped here, fyi
 	return polars_df
 
-	
+def check_if_unexpected_rows(merged_df, 
+	merge_upon,
+	intersection_values, 
+	exclusive_left_values, 
+	exclusive_right_values, 
+	n_rows_left, 
+	n_rows_right,
+	right_name,
+	right_name_in_this_column):
+	n_rows_merged = merged_df.shape[0]
+	n_row_expected = sum([len(intersection_values), len(exclusive_left_values), len(exclusive_right_values)])
+
+	# we expect n_rows_merged = intersection_values + exclusive_left_values + exclusive_right_values
+	if n_rows_merged == n_row_expected:
+		return
+	else:
+		print(f"Expected {n_row_expected} rows in merged dataframe but got {n_rows_merged}")
+		print(f"Duplicated values for {merge_upon}:")
+		print(merged_df.filter(pl.col(merge_upon).is_duplicated()).select(merge_upon).unique())
+		if right_name_in_this_column is not None:
+			print("%s n_rows_right (%s exclusive)" % (n_rows_right, len(exclusive_right_values)))
+			print("%s n_rows_left (%s exclusive)" % (n_rows_left, len(exclusive_left_values)))
+			print("%s intersections" % len(intersection_values))
+			print("%s has right_name " % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name)))
+			print("%s has right_name and in intersection" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(intersection_values))))
+			print("%s has right_name and in exclusive left" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(exclusive_left_values))))
+			print("%s has right_name and in exclusive right" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(exclusive_right_values))))
 
 def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_name="right", put_right_name_in_this_column=None):
 	"""
@@ -110,7 +136,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 
 	
 	put_right_name_in_this_column: If not None, adds a row of right_name to the dataframe. Designed for marking the source of data when
-	merging dataframes multiple times. If right_name is None, an right_name column will be created temporarily but 
+	merging dataframes multiple times. If right_name is None, a right_name column will be created temporarily but 
 	dropped before returning.
 	"""
 	n_rows_left, n_rows_right = left.shape[0], right.shape[0]
@@ -130,9 +156,22 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 
 			# TODO: add a check for columns with duplicate names (if thats even possible in polars)
 
+	left_values, right_values = left[merge_upon], right[merge_upon]
+	intersection = left_values.is_in(right_values)
+	intersection_values = left.filter(intersection).select(merge_upon)
+	exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
+	exclusive_left_values, exclusive_right_values = left.filter(exclusive_left).select(merge_upon), right.filter(exclusive_right).select(merge_upon)
+	if len(intersection) == 0:
+		print(f"WARNING: No values in {merge_upon} are shared across the dataframes")
+	if verbose:
+		print(f"Intersection: {len(intersection_values)}")
+		print(f"Exclusive to {left_name}: {len(exclusive_left_values)}")
+		print(f"Exclusive to {right_name}: {len(exclusive_right_values)}")
+		print_me = exclusive_right_values[:10] if len(exclusive_right_values) > 10 else exclusive_right_values
+		print("{print_me}")
 	
 	# everything passed, let's get started
-	print(f"Merging {left_name} and {right_name} on {merge_upon}")
+	if verbose: print(f"Merging {left_name} and {right_name} on {merge_upon}")
 	if put_right_name_in_this_column is not None:
 		# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
 		right = right.with_columns(pl.lit(right_name).alias(put_right_name_in_this_column))
@@ -157,8 +196,15 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 	if len(shared_columns) == 0:
 		left = NeighLib.drop_null_columns(left.sort(merge_upon))
 		right = NeighLib.drop_null_columns(right.sort(merge_upon))
+		
+		# update left values and right values for later debugging
+		left_values, right_values = left[merge_upon], right[merge_upon]
+		exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
+
+		# actually merge
 		initial_merge = left.merge_sorted(right, merge_upon).unique().sort(merge_upon)
-		return initial_merge
+		if verbose: print(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {initial_merge.shape[0]} rows (difference: {initial_merge.shape[0] - n_rows_left})")
+		merged_dataframe = initial_merge
 
 	# we can use agg tables to check for partial self matches
 	elif len(left_list_cols) == 0 and len(right_list_cols) == 0:
@@ -187,8 +233,13 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 			initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 			really_merged = merge_right_columns(initial_merge, quick_cast=False)
 		
+		# update left values and right values for later debugging
+		left_values, right_values = nullfilled_left[merge_upon], nullfilled_right[merge_upon]
+		exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
+
 		really_merged_no_dupes = really_merged.unique()
-		return really_merged_no_dupes
+		if verbose: print(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")
+		merged_dataframe = really_merged_no_dupes
 
 	else:
 		# fill in null values
@@ -202,11 +253,21 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		nullfilled_left = NeighLib.drop_null_columns(nullfilled_left)
 		nullfilled_right = NeighLib.drop_null_columns(nullfilled_right)
 
+		# update left values and right values for later debugging
+		left_values, right_values = nullfilled_left[merge_upon], nullfilled_right[merge_upon]
+		exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
+
 		initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 		really_merged = merge_right_columns(initial_merge, quick_cast=False)
 
 		really_merged_no_dupes = really_merged.unique()
-		return really_merged_no_dupes
+		if verbose: print(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")
+		merged_dataframe = really_merged_no_dupes
+
+	check_if_unexpected_rows(merged_dataframe, merge_upon=merge_upon, 
+		intersection_values=intersection_values, exclusive_left_values=exclusive_left_values, exclusive_right_values=exclusive_right_values, 
+		n_rows_left=n_rows_left, n_rows_right=n_rows_right, right_name=right_name, right_name_in_this_column=put_right_name_in_this_column)
+	return merged_dataframe
 
 def merge_pandas_dataframes(left, right, merge_upon, right_name="merged", put_right_name_in_this_column=None):
 	"""

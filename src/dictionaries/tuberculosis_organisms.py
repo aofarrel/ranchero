@@ -1,72 +1,114 @@
-# loose matching using regex
-# --> use shave_tuberculosis_suffixes() instead
-#import re
-#regex_m_tuberculosis = re.compile("Mycobacterium tuberculosis.*")
-#regex_mycobacterium = re.compile("Mycobacterium (?!\w*phage)(?:\w*[^\W_])?")
-#regex_mycobacteri = re.compile("Mycobacteri.*")  # This includes Mycobacteriales, but unfortunately will also include phages!
+# All information here correctly represents the general consensus of tuberculosis classification
+# as far as I'm aware, however, I cannot make any guarantees of perfect accuracy. If your research
+# requires you correctly identify all known members of the Mycobacterium avium complex (for example),
+# double-check the lists written here.
+#
+# Please submit any corrections or updates in the form of a PR, preferably with supporting literature.
+#
+# Classification system:
+#
+# |------------------------------------------------- Mycobacterium flavored --------------------------------------------------|
+#
+#   |--leprosy--|  |----------NTM-----------|  |--mycolicibacterium--|   |---------------MTBC--------------|      |--other--|
+#   | * leprosy |  |  * abscessus_complex   |                            | |--MTBC--|   |--tuberculosis--|
+#    -----------   |  * avium_complex       |                            |                 * sensu_stricto
+#                  |  * other_NTM           |                            |                 * in_general
+#
+#
 
 
-# non-standard terms
-non_standard_MTBC = [
-	"chimpanzee bacillus",
-	"dassie bacillus",
-	"Koch's bacillus",
-	"M. tb complex",
-	"M. tb",
-	"M. tuberculosis",
-	"M.tb"
-	"MTB complex",
-	"mtb complex",
-	"Mtb complex",
-	"Mtb",
-	"MTB",
-	"MTBC"
-	"MYCOBACTERIUM TUBERCULOSIS"
-	"TB",
-	"tb",
-	"Tb",
-	"Tuberculosis"
-	"tuberculosis",
-	"TUBERCULOSIS",
-]
+def convert_to_regex(list_to_convert, case_insensitive=True):
+	"""
+	["Mycobacterium avium", "Mycobacterium canettii"] -->  "Mycobacterium avium|Mycobacterium canettii"
+	"""
+	if case_insensitive:
+		return("(?i)" + "|".join(list_to_convert))
+	else:
+		return("|".join(list_to_convert))
+		
 
-# NCBI-style terms
-unidentified_but_not_metagenomic = [
-	"bacterium",
-	"uncultured prokaryote",
-	"unidentified"
-]
+def convert_to_regex_no_substrings(list_to_convert):
+	"""
+	["Mycobacterium avium", "Mycobacterium canettii"] --> "^Mycobacterium avium$|^Mycobacterium canettii$" 
+	"""
+	return("^"+"$|^".join(list_to_convert)+"$")
 
-tuberculosis_sensu_stricto = ["Mycobacterium tuberculosis", "Mycobacterium tuberculosis sensu stricto"]
 
-# Note that this excludes all stuff like "Mycobacterium tuberculosis TB_RSA75",
-# so use shave_tuberculosis_suffixes() first
-tuberculosis = tuberculosis_sensu_stricto + [
+tuberculosis_sensu_stricto = ["Mycobacterium tuberculosis sensu stricto", "M. tuberculosis sensu stricto"]
+
+tuberculosis_in_general = tuberculosis_sensu_stricto + [
+	"Mycobacterium tuberculosis",
+
+	"Mycobacterium africanum",
 	"Mycobacterium tuberculosis variant africanum",
+
+	"Mycobacterium bovis",
 	"Mycobacterium tuberculosis variant bovis",
+
+	"Mycobacterium caprae",
 	"Mycobacterium tuberculosis variant caprae",
+
+	"Mycobacterium microti",
 	"Mycobacterium tuberculosis variant microti",
+
+	"Mycobacterium pinnipedii",
 	"Mycobacterium tuberculosis variant pinnipedii"
 ]
 
-tuberculosis_complex_strict = tuberculosis + [
-	"Mycobacterium canetti", # common typo
+tuberculosis_complex_specific = tuberculosis_in_general + [
 	"Mycobacterium canettii",
-	"Mycobacterium canettii CIPT 140010059",
-	"Mycobacterium canettii CIPT 140060008",
-	"Mycobacterium canettii CIPT 140070002",
-	"Mycobacterium canettii CIPT 140070005",
-	"Mycobacterium canettii CIPT 140070007",
-	"Mycobacterium canettii CIPT 140070008",
-	"Mycobacterium canettii CIPT 140070010",
 	"Mycobacterium tuberculosis complex",
 	"Mycobacterium tuberculosis complex sp.",
 	"Mycobacterium mungi",
 	"Mycobacterium orygis",
 	"Mycobacterium suricattae"
 ]
+recommended_tuberculosis_regex = convert_to_regex(tuberculosis_complex_specific)
 
-tuberculosis_complex_loose = tuberculosis_complex_strict + non_standard_MTBC
+other_MTBC_terms = [
+	# WARNING: If regexing use convert_to_regex_no_substrings() or else "TB" will match "seatbelt", etc
+	"chimpanzee bacillus", # MTBC member proposed by Coscolla et al. (doi: 10.3201/eid1906.121012)
+	"dassie bacillus",     # MTBC member found only in Procavia capensis
+	"Koch's bacillus",     # another name for Mycobacterium tuberculosis 
+	"Kochs bacillus",      # typo of above
+	"M. tb complex",
+	"M. tb",
+	"M. africanum",
+	"M. bovis",
+	"M. canetti",  # surprisingly common typo
+	"M. canettii",
+	"M. caprae",
+	"M. microti",
+	"M. mungi",
+	"M. orygis",
+	"M. pinnipedii",
+	"M. suricattae",
+	"M. tuberculosis",
+	"M.tb"
+	"MTB complex",
+	"Mtb",
+	"MTBC",
+	"Mycobacterium canetti",  # surprisingly common typo
+	"Mycobacteria tuberculosis",
+	"Mycobacteria tuberculosis complex",
+	"Mycobacterium tb complex",
+	"Mycobacterium tuberculosis complex",
+	"TB",
+	"Tuberculosis", # English, Spanish
+	"Tuberkulose",  # German
+	"Tuberculose",  # Dutch, French, Portuguese
+	"Tubercolosi",  # Italian
+	"Tuberkulozo",  # Esperanto
+	"Tuberkulosis"  # Bahasa Indonesia, Bahasa Melayu, Tagalog
+]
+# See also tuberculosis_other_names.py
+
+tuberculosis_complex_loose = tuberculosis_complex_specific + other_MTBC_terms
+recommended_MTBC_regex = convert_to_regex_no_substrings(other_MTBC_terms) + convert_to_regex(tuberculosis_complex_specific)
+
+############
+# Non-MTBC # 
+############
 
 abscessus_complex = [
 	"Mycobacterium abscessus",
@@ -76,6 +118,7 @@ abscessus_complex = [
 	"Mycobacteroides chelonae",
 	"Mycobacterium massiliense",
 ]
+abscessus_regex = convert_to_regex(abscessus_complex)
 
 # Mycobacterium avium avium, Mycobacterium avium hominissuis, Mycobacterium avium subsp. hominissuis logically inferred from:
 # https://www.merckvetmanual.com/generalized-conditions/overview-of-tuberculosis-in-animals/overview-of-tuberculosis-in-animals
@@ -94,13 +137,45 @@ avium_complex = [
 	"Mycobacterium intracellulare subsp. chimaera",
 	"Mycobacterium intracellulare subsp. yongonense",
 	"Mycobacterium marseillense",
-	"Mycobacterium sp. TKK-01-0059" # Mycobacterium yongonense, doi:10.1016/j.ijid.2018.04.796
+	"Mycobacterium sp. TKK-01-0059", # Mycobacterium yongonense, doi:10.1016/j.ijid.2018.04.796
 	"Mycobacterium timonense",
 	"Mycobacterium yongonense" # doi:10.1016/j.ijid.2018.04.796
 ]
+avium_regex = convert_to_regex(avium_complex)
+
+# there seems to be some disagreement as to whether mycolicibacterium
+# are technically NTM or not, so they're excluded here
+NTM = avium_complex + abscessus_complex + [
+	"Mycobacterium kansasii",
+	"Mycobacterium kansasi",  # if canettii is any indication, people will typo this
+	"Mycobacterium lentiflavum",
+	"Mycobacterium malmoense",
+	"Mycobacterium mantenii",
+	"Mycobacterium manteni",  # if canettii is any indication, people will typo this
+	"Mycobacterium marinum",
+	"Mycobacterium paragordonae",
+	"Mycobacterium peregrinum", # doi:10.1128/JCM.43.12.5925-5935.2005
+	"Mycobacterium riyadhense",
+	"Mycobacterium scrofulaceum",
+	"Mycobacterium senegalense",
+	"Mycobacterium triplex",
+	"Mycobacterium ulcerans",
+	"NTM",
+	"Nontuberculosis mycobacteria",
+	"Nontuberculosis mycobacterium",
+	"Non-tuberculosis mycobacteria",
+	"Non-tuberculosis mycobacterium",
+	"Non-TB mycobacterium",
+]
+NTM_regex = convert_to_regex_no_substrings(NTM)
+
 
 # aka "Mycobacterium fortuitum complex"
 mycolicibacterium = [
+	"Mycolicibacterium",
+	"Mycolicibacterium sp.",
+	"Mycolicibacteria",
+
 	"Mycolicibacterium agri",
 	"Mycobacterium agri",
 	
@@ -120,6 +195,7 @@ mycolicibacterium = [
 	"Mycobacterium austroafricanum",
 	
 	"Mycolicibacterium fortuitum",
+	"Mycolicibacterium fortuitum complex",
 	"Mycobacterium fortuitum",
 	"Mycobacterium fortuitum complex",
 	
@@ -131,32 +207,20 @@ mycolicibacterium = [
 	
 	"Mycobacterium smegmatis",
 	"Mycolicibacterium smegmatis",
-	"Mycolicibacterium smegmatis MC2 155",
+	"Mycolicibacterium smegmatis MC2 155"
 ]
-
-# there seems to be some disagreement as to whether mycolicibacterium
-# are technically NTM or not, so they're excluded here
-NTM = avium_complex + abscessus_complex + [
-	"Mycobacterium kansasii",
-	"Mycobacterium lentiflavum",
-	"Mycobacterium malmoense",
-	"Mycobacterium mantenii",
-	"Mycobacterium marinum",
-	"Mycobacterium paragordonae",
-	"Mycobacterium peregrinum", # doi:10.1128/JCM.43.12.5925-5935.2005
-	"Mycobacterium riyadhense",
-	"Mycobacterium scrofulaceum",
-	"Mycobacterium senegalense",
-	"Mycobacterium triplex",
-	"Mycobacterium ulcerans"
-]
+mycolicibacterium_regex = convert_to_regex(mycolicibacterium)
 
 leprosy = [
+	"Leprosy",
+	"Hansen's disease",
 	"Mycobacterium leprae",
 	"Mycobacterium lepromatosis"
 ]
+leprosy_regex = convert_to_regex(leprosy)
 
 other_mycobacteria = [
+	# WARNING: Remove phages first or use convert_to_regex_no_substrings() if you intend on regexing 
 	"Mycobacterium",
 	"Mycobacterium alsense",
 	"Mycobacterium asiaticum",
@@ -166,6 +230,19 @@ other_mycobacteria = [
 	"Mycobacterium sp.",
 	"Mycobacterium szulgai"
 ]
+other_mycobacteria_regex = convert_to_regex_no_substrings(other_mycobacteria)
 
-everything_mycobacterium_flavored = tuberculosis_complex_loose + NTM + mycolicibacterium + leprosy + other_mycobacteria
+unidentified_but_not_metagenomic = [
+	# WARNING: Use convert_to_regex_no_substrings() if you intend on regexing 
+	"bacteria",
+	"bacterium",
+	"uncultured prokaryote",
+	"unidentified"
+]
+
+non_mtbc_mycobacteria = NTM + mycolicibacterium + mycolicibacterium + leprosy + other_mycobacteria
+recommended_mycobacteria_regex = recommended_MTBC_regex + convert_to_regex(non_mtbc_mycobacteria)
+everything_mycobacterium_flavored = tuberculosis_complex_loose + non_mtbc_mycobacteria
 everything_mycobacterium_flavored_and_unknowns = everything_mycobacterium_flavored + unidentified_but_not_metagenomic
+
+

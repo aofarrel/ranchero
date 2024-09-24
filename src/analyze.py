@@ -4,9 +4,7 @@ from src.neigh import NeighLib
 from src.dictionaries import tuberculosis_organisms
 
 def get_paired_illumina(polars_df, inverse=False):
-	if not NeighLib.check_columns_exist(polars_df, ['platform', 'librarylayout']):
-		print("Cannot check if paired Illumina due to missing columns: platform, librarylayout")
-		exit(1)
+	NeighLib.check_columns_exist(polars_df, ['platform', 'librarylayout'], err=True, verbose=True)
 	if not inverse:
 		return polars_df.filter(
 			(pl.col('platform') == 'ILLUMINA') & 
@@ -18,43 +16,41 @@ def get_paired_illumina(polars_df, inverse=False):
 			(pl.col('librarylayout') != 'PAIRED')
 		)
 
+def drop_lowcount_columns(polars_df, cutoff=3, verbose=True):
+	dropped = []
+	starting_columns = len(polars_df.columns)
+	for column in polars_df.columns:
+		if column == 'plaftorm' or column == 'librarylayout' or column == 'taxid':
+			continue
+		counts = polars_df.select([pl.col(column).value_counts(sort=True)])
+		if len(counts) < cutoff:
+			dropped.append(column)
+			polars_df = polars_df.drop(column)
+	ending_columns = len(polars_df.columns)
+	if verbose: print(f"Removed {starting_columns - ending_columns} columns with less than {cutoff} unique values")
+	if verbose: print(dropped)
+	return polars_df
+
+
 def rm_all_phages(polars_df, inverse=False, column='organism'):
-	if not NeighLib.check_columns_exist(polars_df, [column]):
-		print(f"Wanted to check column {column} but it doesn't exist in the dataframe")
-		exit(1)
+	NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=True)
 	if not inverse:
 		return polars_df.filter(~pl.col(column).str.contains_any(["phage"]))
 	else:
 		return polars_df.filter(pl.col(column).str.contains_any(["phage"]))
 
 def rm_all_not_beginning_with_myco(polars_df, inverse=False, column='organism'):
-	if not NeighLib.check_columns_exist(polars_df, [column]):
-		print(f"Wanted to check column {column} but it doesn't exist in the dataframe")
-		exit(1)
-
+	NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=True)
 	if not inverse:
 		return polars_df.filter(pl.col(column).str.starts_with("Myco", case=False))
 	else:
 		return polars_df.filter(~pl.col(column).str.starts_with("Myco", case=False))
 
-def get_organism_tuberculosis_strict(polars_df, inverse=False, column='organism'):
-	if not NeighLib.check_columns_exist(polars_df, [column]):
-		print(f"Wanted to check column {column} but it doesn't exist in the dataframe")
-		exit(1)
-
-	if strict:
-		if not inverse:
-			return polars_df.filter(pl.col(column).str.contains_any(['Mycobacterium tuberculosis']))
-		else:
-			return polars_df.filter(~pl.col(column).str.contains_any(['Mycobacterium tuberculosis']))
-		
 def rm_tuberculosis_suffixes(polars_df, rm_variants=False, clean_variants=True, column='organism'):
 	"""
 	polars regex doesn't support look-ahead/look-behind, so this is very cringe
 	"""
-	if not NeighLib.check_columns_exist(polars_df, [column]):
-		print(f"Wanted to check column {column} but it doesn't exist in the dataframe")
-		exit(1)
+	NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=True)
 
 	# manually handle the avium complex's weirdest member
 	polars_df = polars_df.with_columns(
@@ -110,40 +106,75 @@ def rm_tuberculosis_suffixes(polars_df, rm_variants=False, clean_variants=True, 
 		polars_df = polars_df.with_columns(pl.col(column).str.replace(
 			r"Mycobacterium canettii .*", "Mycobacterium canettii"))
 		polars_df = polars_df.with_columns(pl.col(column).str.replace(
-			r"Mycolicibacterium smegmatis .*", "Mycolicibacterium smegmatis"))  # old name Mycobacterium smegmatis on NCBI but seems to have no suffixes
+			r"Mycolicibacterium smegmatis .*", "Mycolicibacterium smegmatis"))  # old name Mycobacterium smegmatis is on NCBI but seems to have no suffixes
 		polars_df = polars_df.with_columns(pl.col(column).str.replace(
-			r"Mycobacteroides abscessus .*", " abscessus"))  # old name Mycobacterium abscessus on NCBI but seems to have no suffixes
+			r"Mycobacteroides abscessus .*", " abscessus"))  # old name Mycobacterium abscessus is on NCBI but seems to have no suffixes
 		
 	else:
 		polars_df = polars_df.with_columns(pl.col(column).str.replace(
 			r"HOVERCRAFT_OF_EELS_VARIANT", "Mycobacterium tuberculosis variant"))
 	return polars_df
 
-# This should be run after rm_tuberculosis_suffixes(), as it doesn't have regex matches
-def get_known_mycobacteria(polars_df, inverse=False, column='organism', include_unknowns=False):
-	if not NeighLib.check_columns_exist(polars_df, [column]):
-		print(f"Wanted to check column {column} but it doesn't exist in the dataframe")
+def get_known_organisms(polars_df, 
+		regex=tuberculosis_organisms.recommended_mycobacteria_regex, # match to this regex string
+		inverse=False, # returns what does NOT match the regex
+		column='organism', # column to look for regex match
+		rm=False, # remove rows that match regex (or don't match if inverse)
+		flag_column=None,                # if not None, create new column with this name, and in that column...
+		match_value="Mycobacteria",      # ...flag matches with this string
+	):
+	NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=False)
+
+	if flag_column is not None:
+		if not NeighLib.check_columns_exist(polars_df, [flag_column], err=False, verbose=False):
+			# flag column doesn't already exist, we can just throw anything in it without fear of overwriting
+			polars_df = polars_df.with_columns(
+				pl.when(
+					pl.col(column).str.count_matches(f"{regex}") == 1
+				)
+				.then(pl.lit(match_value))
+				.alias(flag_column)
+			)
+		else:
+			# flag column already exists, don't overwrite existing columns
+			polars_df = polars_df.with_columns(
+			pl.when(
+				(pl.col(column).str.count_matches(f"{regex}") == 1) & (pl.col(flag_column).is_null())
+			)
+			.then(pl.lit(match_value))
+			.otherwise(pl.col(flag_column))  # Keep the original value if it exists
+			.alias(flag_column)
+			)
+	if rm:
+		if inverse:
+			polars_df = polars_df.filter(~pl.col(column).str.contains(regex))
+		else:
+			polars_df = polars_df.filter(pl.col(column).str.contains(regex))
+	return polars_df
+
+def rm_not_MTBC(polars_df):
+	polars_df = get_known_organisms(polars_df, inverse=False, regex=tuberculosis_organisms.recommended_MTBC_regex, rm=True)
+	return polars_df
+
+def rm_row_if_col_null(polars_df, column='mycobact_type'):
+	return polars_df.filter(~pl.col(column).is_null())
+
+def classify_bacterial_family(polars_df, in_column='organism', out_column='mycobact_type', avium_and_abscess_separate_from_NTM=True):
+	NeighLib.check_columns_exist(polars_df, [in_column], err=True, verbose=True)
+	if NeighLib.check_columns_exist(polars_df, [out_column], err=False, verbose=False):
+		print(f"Wanted to create new column {out_column} but it already exists!")
 		exit(1)
-
-	if include_unknowns:
-		matches = tuberculosis_organisms.everything_mycobacterium_flavored_and_unknowns
-	else:
-		matches = tuberculosis_organisms.everything_mycobacterium_flavored
-
-	return polars_df.filter(pl.col(column).str.contains_any(matches))
-
-def get_known_NTM(polars_df, inverse=False, column='organism'):
-	pass
-def get_known_leprosy(polars_df, inverse=False, column='organism'):
-	pass
-def get_known_MTBC(polars_df, inverse=False, column='organism'):
-	pass
-def get_known_avium_complex(polars_df, inverse=False, column='organism'):
-	pass
-def get_known_abscessus_complex(polars_df, inverse=False, column='organism'):
-	pass
-def get_known_tuberculosis(polars_df, inverse=False, column='organism'):
-	pass
+	# start with most specific
+	if avium_and_abscess_separate_from_NTM:
+		polars_df = get_known_organisms(polars_df, regex=tuberculosis_organisms.avium_regex, match_value="M. avium complex", flag_column=out_column, column=in_column)
+		polars_df = get_known_organisms(polars_df, regex=tuberculosis_organisms.abscessus_regex, match_value="M. abscessus complex", flag_column=out_column, column=in_column)
+	polars_df = get_known_organisms(polars_df, regex=tuberculosis_organisms.mycolicibacterium_regex, match_value="mycolicibacteria", flag_column=out_column, column=in_column)
+	polars_df = get_known_organisms(polars_df, regex=tuberculosis_organisms.leprosy_regex, match_value="Leprosy", flag_column=out_column, column=in_column)
+	polars_df = get_known_organisms(polars_df, regex=tuberculosis_organisms.NTM_regex, match_value="NTM", flag_column=out_column, column=in_column)
+	polars_df = get_known_organisms(polars_df, regex=tuberculosis_organisms.recommended_MTBC_regex, match_value="MTBC", flag_column=out_column, column=in_column)
+	polars_df = get_known_organisms(polars_df, regex=tuberculosis_organisms.recommended_mycobacteria_regex, column=in_column, match_value="Unclassified mycobacteria", flag_column=out_column)
+	print(polars_df)
+	return polars_df
 
 def print_unique_rows(polars_df, column='organisms', sort=True):
 	if sort:
