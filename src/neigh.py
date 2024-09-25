@@ -183,72 +183,18 @@ class NeighLib:
 		print(f"┗{'━' * len(header)}┛")
 		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=500, fmt_table_cell_list_len=10):
 			print(polars_df)
-		
-	def get_x_y_column_pairs(pandas_df):
-		"""
-		Take in a pandas dataframe and return a list of lists of all of its
-		_x and _y columns (and those columns basename). Designed for the
-		aftermath of an outer merge of two dataframes. Asserts no duplicate
-		_x and _y columns (eg, can't have two "BioSample_x" columns).
-		"""
-		all_columns = pandas_df.columns
-		list_of_pairs = []
-		for col in all_columns:
-			if col.endswith("_x"):
-				print(f"col {col} ends with _x")
-				foo_x = col
-				foo = foo_x[:-2]
-				foo_y = foo + "_y"
-				if foo_y in all_columns:
-					list_of_pairs.append([foo_x, foo_y, foo])
-				else:
-					raise ValueError("Found {foo_x}, but no {foo_y} counterpart!")
-		assert len(set(map(tuple, list_of_pairs))) == len(list_of_pairs)  # there should be no duplicate columns
-		return list_of_pairs  # list of lists [["foo_x", "foo_y", "foo"]]
-	
-	def drop_some_assay_types(pandas_df, to_drop=['Tn-Seq', 'ChIP-Seq']):
-		"""
-		Drops a list of values for assay_type from a Pandas dataframe
-		"""
-		if 'assay_type' in pandas_df.columns:
-			rows_before = len(pandas_df.index)
-			for drop_me in to_drop:
-				pandas_df = pandas_df[~pandas_df['assay_type'].str.contains(drop_me, case=False, na=False)]
-			rows_after = len(incoming.index)
-			print(f"Dropped {rows_before - rows_after} samples")
-		return pandas_df
-
-	def drop_metagenomic(pandas_df):
-		"""
-		Attempt to drop metagenomic data from a Pandas dataframe
-		"""
-		dropped = 0
-		if 'organism' in pandas_df.columns:
-			rows_before = len(pandas_df.index)
-			dataframe = pandas_df[~pandas_df['organism'].str.contains('metagenome', case=False, na=False)]
-			rows_after = len(pandas_df.index)
-			dropped += rows_before - rows_after
-		if 'librarysource' in pandas_df.columns:
-			rows_before = len(pandas_df.index)
-			dataframe = pandas_df[~pandas_df['librarysource'].str.contains('METAGENOMIC', case=False, na=False)]
-			rows_after = len(pandas_df.index)
-			dropped += rows_before - rows_after
-		#if verbose: print(f"Dropped {dropped} metagenomic samples")
-		return pandas_df
-
-	def pandas_to_tsv(pandas_df, path: str):
-		pandas_df.to_csv(path, sep='\t', index=False)
 	
 	@classmethod
 	def rancheroize_polars(cls, polars_df):
 		valid_renames = cls.get_ranchero_column_dictionary_only_valid(polars_df)
 		try:
-			return polars_df.rename(valid_renames)
+			polars_df = polars_df.rename(valid_renames)
 		except pl.exceptions.SchemaFieldNotFoundError:  # should never happen
 			print("WARNING: Failed to rename columns")
+		return cls.drop_known_unwanted_columns(polars_df)
 
 	@classmethod
-	def flatten_all_list_cols_as_much_as_possible(cls, polars_df, verbose=False, hard_stop=False):
+	def flatten_all_list_cols_as_much_as_possible(cls, polars_df, verbose=False, hard_stop=False, force_strings=False):
 		"""If intelligent, assume sample indexed, and check lists actually make sense. For example,
 		a country shouldn't be a list at all in a sample-indexed dataframe as a sample can only come
 		from one country since NCBI data doesn't really make a distinction between host and prior
@@ -269,8 +215,6 @@ class NeighLib:
 						polars_df = polars_df.drop(col)
 					elif col in columns.rts__drop:  # ignores temp_df
 						polars_df = polars_df.drop(col)
-					elif col in columns.rts__keep_as_list:  # ignores temp_df
-						polars_df = polars_df
 					elif col in columns.rts__keep_as_set:  # because we exploded with unique(), we now have a set (sort of), but I think this is better than trying to do a column merge
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 					elif col in columns.rts__warn_if_list_with_unique_values:
@@ -286,18 +230,11 @@ class NeighLib:
 					else:
 						if verbose: print(f"WARNING: Unsure what to do with {col}, so we'll leave it as-is")
 						polars_df = polars_df
-					
-					# debug
-					if verbose:
-						if col in polars_df.columns:
-							print(polars_df.select(col))
-						elif f"{col}_sum" in polars_df.columns:
-							print(polars_df.select(f"{col}_sum"))
-						else:
-							pass
 				else:
 					polars_df = temp_df
 
+		if force_strings:
+			polars_df = cls.stringify_list_columns(polars_df)
 		return polars_df
 
 	@classmethod
@@ -338,11 +275,22 @@ class NeighLib:
 		"""
 		for col, datatype in polars_df.schema.items():
 			if datatype == pl.List(pl.String):
-				polars_df = polars_df.with_columns((
-					pl.lit("[")
-					+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
-					+ pl.lit("]")
-				).alias(col))
+				polars_df = polars_df.with_columns(
+					pl.when(pl.col(col).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
+					.then(pl.col(col).list.eval(pl.element()).list.join(""))
+					.otherwise(
+						pl.lit("[")
+						+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
+						+ pl.lit("]")
+					).alias(col)
+				)
+
+			#if datatype == pl.List(pl.String):
+			#	polars_df = polars_df.with_columns((
+			#		pl.lit("[")
+			#		+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
+			#		+ pl.lit("]")
+			#	).alias(col))
 			
 			# TODO: pl.Int doesn't exist, but is there some kind of superset? pl.List(int) doesn't seem to work
 			elif (datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64)):

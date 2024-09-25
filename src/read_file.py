@@ -28,11 +28,6 @@ class FileReader():
 		else:
 			return getattr(self.cfg, config_arg_name)
 
-	#####🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️########
-	##                         polars functions                                  ##
-	#####🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️🐻‍❄️########
-	# Functions that OUTPUT a polars dataframe (but may touch pandas at some point)
-
 	def polars_from_ncbi_run_selector(self, csv):
 		run_raw = pl.read_csv(csv)
 		run_renamed = NeighLib.rancheroize_polars(run_raw)  # for compatibility with other formats
@@ -147,8 +142,16 @@ class FileReader():
 		return self.polars_flatten(polars_df, upon='sample_index')
 
 	def get_not_unique_in_col(self, polars_df, column):
-		return polars_df.filter(pl.col(column).is_duplicated()).select(column).unique()
+		return polars_df.filter(pl.col(column).is_duplicated())
 		# polars_df.filter(pl.col(column).is_duplicated()).select(column).unique()
+
+	def merge_row_duplicates(self, polars_df, column):
+		'''SRR1196512, 4.8, null + SRR1196512, 4.8, South Africa --> SRR1196512, 4.8, South Africa'''
+		polars_df = polars_df.sort(column)
+		polars_df = polars_df.group_by(column).agg(
+			[pl.col(col).forward_fill().last().alias(col) for col in polars_df.columns if col != column]
+		)
+		return polars_df
 
 	def polars_explode_delimited_rows_recklessly(self, polars_df, column="run_index", delimter=";", drop_new_non_unique=True):
 		"""
@@ -163,13 +166,20 @@ class FileReader():
 		"SRR124"		SchemaFieldNotFoundError
 		"SRR125" 		TapeError
 		"""
-		exploded = polars_df.with_columns(pl.col(column).str.split(delimter)).explode(column)
+		exploded = (polars_df.with_columns(pl.col(column).str.split(delimter)).explode(column)).unique()
 		if len(polars_df) == len(polars_df.select(column).unique()):
 			if len(exploded) != len(exploded.select(column).unique()):
-				print(f"Exploding created non-unique values for the previously unique-only column {column}")
-				print(self.get_not_unique_in_col(exploded, column))
-				print(len(exploded.select(column).unique()))
-				print(len(exploded))
+				print(f"Exploding created non-unique values for the previously unique-only column {column}, so we'll be merging...")
+				exploded = self.merge_row_duplicates(exploded, column)
+				if len(exploded) != len(exploded.select(column).unique()): # probably should never happen
+					print("Attempted to merge duplicates caused by exploding, but it didn't work.")
+					print(exploded)
+					print(len(exploded.select(column).unique()))
+					print(len(exploded))
+					print(self.get_not_unique_in_col(exploded, column))
+					print(len(exploded.select(column).unique()))
+					print(len(exploded))
+					exit(1)
 		else:
 			# there aren't unique values to begin with so who cares lol
 			pass
@@ -258,120 +268,3 @@ class FileReader():
 		if self.cfg.cast_types: normalized = NeighLib.cast_politely(normalized)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
 		return normalized
-
-
-	#####🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼########
-	##                          pandas functions                                 ##
-	#####🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼🐼########
-	# Functions that OUTPUT a pandas dataframe (but may touch polars at some point)
-	#
-	# Generally speaking, it's recommended to use polars instead.
-
-	def pandas_from_ncbi_run_selector(csv):
-		run_raw = pd.read_csv(csv)
-		run_renamed = run_raw.rename(columns=columns.ncbi_run_selector_col_to_ranchero_col)  # for compatibility with other formats
-		return run_renamed
-
-	def pandas_json_normalize(self, pandas_df, use_polars=True, rancheroize=False):
-		"""
-		JSON-normalize the "attributes" column into new columns. use_polars is faster but might break things.
-		Regardless of use_polars, input and output are pandas dataframes. Assumes pandas_fix_attributes_dictionaries() was run but
-		that shouldn't be necessary.
-
-		Config used:
-		* intermediate_files (set)
-		* verbose (set)
-		"""
-		outfile = './intermediate/normalized.tsv'
-		print("Normalizing...")
-
-		if use_polars:
-			# polars-and-pandas version
-			# Even if you set this up to not read the intermedite file to set pandas_df, you'll get less columns in the end?
-			# However, this does seem to correctly pull out "bytes" and other JSON data, so we'll take it.
-			just_attributes = pl.json_normalize(pandas_df['attributes'], strict=False)  # just_attributes is a polars dataframe
-			# collection_date_sam is likely present in both dataframes, so rename one of them
-			just_attributes = just_attributes.rename({'collection_date_sam': 'collection_date_from_attributes'})
-			dupe_columns = NeighLib.get_dupe_columns_of_two_polars(just_attributes, pl.from_pandas(pandas_df))
-			if len(dupe_columns) > 0:
-				# TODO: just rename the columns like we did with collection_date_sam!!
-				raise AssertionError("Found columns from the attributes section that conflict with an existing column")
-			bq_jnorm = pd.concat([pandas_df.drop(columns=['attributes']), just_attributes.to_pandas()], axis=1)
-			if self.cfg.verbose: print(f"An additional {len(just_attributes.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
-			if rancheroize: bq_jnorm.rename(columns=columns.bq_col_to_ranchero_col, inplace=True)
-			if self.cfg.intermediate_files:
-				NeighLib.pandas_to_tsv(bq_jnorm, outfile)
-				print(f"Wrote JSON-normalized dataframe to {outfile}")
-		else:
-			# pure pandas version
-			# This is the slowest, but it acceptable enough. 
-			just_attributes = pd.json_normalize(pandas_df['attributes'])  # just_attributes is a Python dictionary
-			# collection_date_sam is likely present in both dataframes, so rename one of them
-			just_attributes['collection_date_from_attributes'] = just_attributes.pop('collection_date_sam')
-			bq_jnorm = pd.concat([pandas_df.drop(columns=['attributes']), just_attributes], axis=1)
-			if self.cfg.verbose: print(f"An additional {len(just_attributes.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
-			if rancheroize: bq_jnorm.rename(columns=columns.bq_col_to_ranchero_col, inplace=True)
-			if self.cfg.intermediate_files: 
-				NeighLib.pandas_to_tsv(bq_jnorm, outfile)
-				print(f"Wrote JSON-normalized dataframe to {outfile}")
-		
-		return bq_jnorm
-
-	def pandas_from_bigquery(self, bq_file, fix_attributes=True, normalize_attributes=True, polars_normalize=None):
-		"""
-		1) Read bigquery JSON
-		2) if fix_attributes or normalize_attributes: Turns "attributes" column's lists of one-element k/v pairs into dictionaries
-		3) if normalize_attributes: JSON-normalize the "attributes" column into their own columns
-		4) if merge_into_biosamples: Merge run accessions with the same BioSample, under the assumption that they've the same metadata
-
-		Notes:
-		* normalize_attributes and fix_attributes work on the "attributes" column, not the "j_attr" column
-		* if polars_normalize, use the under development polars version of json normalize -- this is faster but could be unstable
-
-		Configurations used:
-		* immediate_biosample_merge (set)
-		* intermediate_files (set)
-		* polars_normalize (can be overwritten)
-		* verbose (set)
-
-
-		TODO: intermediate_files() not used?
-		"""
-		polars_normalize = _get_cfg_if_not_overwritten(polars_normalize)
-
-		bq_raw = pd.read_json(bq_file)
-		if self.cfg.verbose: print(f"{bq_file} has {len(bq_raw.columns)} columns and {len(bq_raw.index)} rows")
-
-		if fix_attributes or normalize_attributes:
-			bq_fixed = self.pandas_fix_attributes_dictionaries(bq_raw)
-			if self.cfg.verbose: print(f"{bq_file} has {len(bq_fixed.columns)} columns and {len(bq_fixed.index)} rows")
-		if normalize_attributes:  # requires pandas_fix_attributes_dictionaries() to happen first
-			bq_norm = self.pandas_json_normalize(bq_fixed, use_polars=polars_normalize)
-			NeighLib.assert_unique_columns(bq_norm)
-			if self.cfg.verbose: print(f"{bq_file} has {len(bq_norm.columns)} columns and {len(bq_norm.index)} rows")
-		if cfg.immediate_biosample_merge:
-			bq_to_merge = bq_norm if bq_norm is not None else (bq_fixed if bq_fixed is not None else bq_raw)
-			bq_jnorm = (self.polars_flatten(pl.from_pandas(bq_to_merge), upon='BioSample', keep_all_columns=False, rancheroize=True)).to_pandas()
-		return bq_jnorm if bq_jnorm is not None else bq_flatdicts  # bq_flatdircts if not normalize_attributes
-
-	def pandas_fix_attributes_dictionaries(self, pandas_df, rancheroize=False):
-		"""
-		Uses NeighLib.concat_dicts to turn the weird format of the attributes column into flat dictionaries
-
-		Configurations used:
-		* intermediate_files (set)
-		* verbose (set)
-		"""
-		if self.cfg.verbose:
-			print("Concatenating dictionaries...")
-			pandas_df['attributes'] = pandas_df['attributes'].progress_apply(NeighLib.concat_dicts)
-		else:
-			pandas_df['attributes'] = pandas_df['attributes'].apply(NeighLib.concat_dicts)
-		pandas_flatdic, pandas_df = pandas_df.copy(), None  # supposedly increases effeciency
-		if rancheroize: pandas_flatdic.rename(columns=columns.bq_col_to_ranchero_col, inplace=True)
-		if self.cfg.intermediate_files: NeighLib.pandas_to_tsv(pandas_flatdic, f'./intermediate/flatdicts.tsv')
-		return pandas_flatdic
-	
-	def pandas_from_tsv(tsv):
-		return pd.read_csv(tsv, sep='\t')
-

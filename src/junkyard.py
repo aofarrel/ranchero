@@ -15,19 +15,6 @@
 # Since it runs below ten seconds even on the full size dataframe, I consider the pandas usage acceptable,
 # even though it annoys me on priniciple.
 
-def progress_apply_with_tqdm_if_available(pandas_df, column, function, *kwargs):
-	try:
-		import tqdm
-		tqdm.pandas()
-		tqdm_exists = True
-	except ImportError:
-		tqdm_exists = False
-	if tqdm_exists:
-		# progress apply
-	else:
-		print("Failed to import tqdm -- code will continue to execute, but there will be no progress bar.")
-		# progress apply
-
 def store_known_multi_accession_metadata(pandas_df_indexed_by_runs):
 	"""
 	Stores some metadata from run accessions that share a BioSample so you can later verify things didn't get lost when
@@ -92,60 +79,3 @@ def polars_flatten_both_ways(input_file, input_polars, upon='BioSample', keep_al
 	polars_to_tsv(flat_neo, path)
 	return path
 
-def pandas_vs_polars():
-	"""
-	Just an example for now. Basically what we've learned is to use from_pandas() to get schemas correctly.
-
-	print("Pandas to polars:")
-	ptp = pl.from_pandas(bq_to_merge)
-	print("Pandas to Polars to Pandas to Polars:")
-	ptptptp = pl.from_pandas(ptp.to_pandas())
-	print("Pandas to TSV to polars:")
-	ptttp = polars_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv')
-	print("Pandas to TSV to Pandas to Polars:")
-	ptttptp = pl.from_pandas(pandas_from_tsv(f'./intermediate/{os.path.basename(bq_file)}_temp_read_polars.tsv'))
-
-	pl.testing.assert_frame_equal(ptp, ptptptp)
-	pl.testing.assert_frame_equal(ptp, ptttp)
-	pl.testing.assert_frame_equal(ptp, ptttptp)
-	"""
-
-def mega_debug_merge(merge, merge_upon):
-	n_mergefails =  merge['merge_status_unprocessed'].value_counts()['right_only']
-	#print(f"Added {len_incoming} {merge_upon}s to the dataframe (was {len_previous} BioSamples, current length {len_current})")
-	#print(f"{n_mergefails} {merge_upon}s seem to have failed to merge")
-	print("Samples that failed to merge (right_only):")
-	print(merge.loc[merge['merge_status_unprocessed'] == 'right_only', ['BioSample', 'run_accession']])
-	
-	#definitely_shouldve_merged = get_paired_illumina(dataframe)
-	#print(f"--> Of these, {len(definitely_shouldve_merged)} seem to be paired-end Illumina")
-	#if len(definitely_shouldve_merged) > 0:
-	#	print("Unmerged paired illumina:")
-	#	print(definitely_shouldve_merged[['BioSample', 'run_accession', 'assay_type']])
-
-	unmerged_A = merge[merge['merge_status_unprocessed'] == 'right_only']  # incoming
-	unmerged_B = merge[merge['merge_status_unprocessed'] == 'left_only']   # previous
-	unmerged_A_nans = unmerged_A[unmerged_A[merge_upon].isna()]
-	unmerged_B_nans = unmerged_B[unmerged_B[merge_upon].isna()]
-	print("unmerged_A")
-	print(unmerged_A[['BioSample', 'run_accession']])
-	print("unmerged_B")
-	print(unmerged_B[['BioSample', 'run_accession']])
-	print("unmerged_A_nans")
-	print(unmerged_A_nans[['BioSample', 'run_accession']])
-	print("unmerged_B_nans")
-	print(unmerged_B_nans[['BioSample', 'run_accession']])
-
-	if not unmerged_A_nans.empty:
-		print("Incoming dataframe has nans on the column we need to merge upon")
-		exit(1)
-	if not unmerged_B_nans.empty:
-		# will break if merge_upon is BioSample but I think this will only fire on the first one which is run accessions?
-		print("Existing dataframe has nans on the column we need to merge upon, will attempt a BioSample merge")
-
-	#set_A = column_to_set(unmerged_A[merge_upon])
-	#set_B = column_to_set(unmerged_B[merge_upon])
-	#print("unmerged set A")
-	#print(set_A)
-	#print("unmerged set B")
-	#print(set_B)

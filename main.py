@@ -28,22 +28,28 @@ print(f"Imported tba6 file without extremely irrelevant columns in {time.time() 
 # merge with run-indexed data
 coscolla = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/coscolla_sans_weird.tsv"))
 coscolla = Ranchero.explode_delimited_index(coscolla)
+print("Processed Coscolla data")
+
 napier = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/napier_samples_github.csv", sep=","))
 napier = Ranchero.explode_delimited_index(napier, delimter="_")
-Ranchero.NeighLib.print_col_where(napier, "run_index", "SRR1182980")
+print("Processed Napier data")
 
-nextstrain = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/nextstrain_tb_global_metadata.tsv"))
-nextstrain = Ranchero.explode_delimited_index(nextstrain)
+#nextstrain = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/nextstrain_tb_global_metadata.tsv"))
+#nextstrain = Ranchero.explode_delimited_index(nextstrain)
+#print("Processed Nextstrain data")
+
 PRJNA834606 = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/PRJNA834606_sra.csv", sep=","))
-print("----")
+print("Processed PRJNA834606 data")
+
 merged = Ranchero.merge_polars_dataframes(tba6, coscolla, merge_upon="run_index", right_name="Coscolla", put_right_name_in_this_column="source")
-Ranchero.NeighLib.print_col_where(merged, "run_index", "SRR1182980")
-print("----")
 merged = Ranchero.merge_polars_dataframes(merged, napier, merge_upon="run_index", right_name="Napier", put_right_name_in_this_column="source")
-print("----")
-merged = Ranchero.merge_polars_dataframes(merged, nextstrain, merge_upon="run_index", right_name="nextstrain", put_right_name_in_this_column="source")
-print("----")
+#merged = Ranchero.merge_polars_dataframes(merged, nextstrain, merge_upon="run_index", right_name="nextstrain", put_right_name_in_this_column="source")
 merged = Ranchero.merge_polars_dataframes(merged, PRJNA834606, merge_upon="run_index", right_name="PRJNA834606", put_right_name_in_this_column="source")
+merged = Ranchero.merge_polars_dataframes(merged,)
+
+
+Ranchero.to_tsv(merged, "./merged_by_run.tsv")
+
 
 # merged with sample-indexed data
 start, merged_by_sample = time.time(), Ranchero.run_index_to_sample_index(merged)
