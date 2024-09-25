@@ -187,12 +187,14 @@ class FileReader():
 
 
 
-	def polars_flatten(self, polars_df, upon='BioSample', keep_all_columns=False):
+	def polars_flatten(self, polars_df, upon='sample_index', keep_all_columns=False):
 		"""
 		Flattens an input file using polars group_by().agg(). This is designed to essentially turn run accession indexed dataframes
 		into BioSample-indexed dataframes. Assumes columns are already rancheroized.
 		"""
 		print(f"Flattening {upon}s...")
+
+		NeighLib.print_col_where(polars_df, upon, "SAMN41453963")
 
 		not_flat = polars_df
 		if self.cfg.verbose:
@@ -226,6 +228,7 @@ class FileReader():
 
 		#flat_neo = flat_neo.unique() # doesn't seem to drop anything but may as well leave it
 		#if intermediate_files: NeighLib.polars_to_tsv(flat_neo, f"./intermediate/polars_flattened.tsv")
+		NeighLib.print_col_where(flat, upon, "SAMN41453963")
 		return flat
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search=True):

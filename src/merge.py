@@ -64,15 +64,16 @@ def get_partial_self_matches(polars_df, column_key: str):
 def merge_right_columns(polars_df, quick_cast=True):
 
 	right_columns = [col for col in polars_df.columns if col.endswith("_right")]
+	print(right_columns)
 	for right_col in right_columns:
 		base_col = right_col.replace("_right", "")
 
 		if base_col not in polars_df.columns:
 			print(f"WARNING: Found {right_col}, but {base_col} not in dataframe -- will continue, but this may break things later")
-			NeighLib.super_print_pl(polars_df, "DEBUG: Current dataframe")
+			if veryverbose: NeighLib.super_print_pl(polars_df, "DEBUG: Current dataframe")
 			continue
 
-		if veryverbose: NeighLib.super_print_pl(polars_df, f"before fill null for {base_col}") # WARNING: This is super laggy!!
+		if veryverbose: NeighLib.super_print_pl(polars_df.select(base_col), f"before fill null for {base_col}")
 		polars_df = polars_df.with_columns(pl.col(base_col).fill_null(pl.col(right_col)))
 		polars_df = polars_df.with_columns(pl.col(right_col).fill_null(pl.col(base_col)))
 		if veryverbose: NeighLib.super_print_pl(polars_df, f"after fill null for {base_col}")
@@ -98,7 +99,7 @@ def merge_right_columns(polars_df, quick_cast=True):
 					.otherwise(pl.concat_list([base_col]))                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
 					.alias(base_col)
 				).drop(right_col)
-				if veryverbose: NeighLib.super_print_pl(polars_df, f"after merging to make {base_col} to a list") # WARNING: This is super laggy!!
+				if veryverbose: NeighLib.super_print_pl(polars_df.select(base_col), f"after merging to make {base_col} to a list")
 
 	# non-unique rows might be dropped here, fyi
 	return polars_df
@@ -143,10 +144,8 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 	if verbose: print(f"Merging {left_name} and {right_name} upon {merge_upon}")
 	n_rows_left, n_rows_right = left.shape[0], right.shape[0]
 	n_cols_left, n_cols_right = left.shape[1], right.shape[1]
-
 	assert n_rows_left != 0 and n_rows_right != 0
 	assert n_cols_left != 0 and n_cols_right != 0
-
 	for df, name in zip([left,right], [left_name,right_name]):
 		if merge_upon not in df.columns:
 			raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in {name} dataframe")
@@ -155,9 +154,6 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 				print(f"WARNING: Merging upon {merge_upon}, which looks like a run accession, but {name} dataframe appears to not be indexed by run accession")
 		if len(df.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
 			raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
-
-			# TODO: add a check for columns with duplicate names (if thats even possible in polars)
-
 	left_values, right_values = left[merge_upon], right[merge_upon]
 	intersection = left_values.is_in(right_values)
 	intersection_values = left.filter(intersection).select(merge_upon)
@@ -173,11 +169,13 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 			print_me = exclusive_right_values[:10] if len(exclusive_right_values) > 10 else exclusive_right_values
 			print(f"Some values exclusive to {right_name}: {print_me}")
 	
-	# everything passed, let's get started
+	# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
 	if put_right_name_in_this_column is not None:
-		# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
-		right = right.with_columns(pl.lit(right_name).alias(put_right_name_in_this_column))
+		if put_right_name_in_this_column not in left.columns:
+			left = left.with_columns(pl.lit(left_name).alias(put_right_name_in_this_column))
+		right = right.with_columns(pl.lit(right_name).alias(f"{put_right_name_in_this_column}_right")) # will be handled by merge_right_columns()
 		n_cols_right = right.shape[1]
+		n_cols_left = left.shape[1]
 
 	# check columns
 	#                                   | at least one column with type list exists?
@@ -194,8 +192,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 	left_list_cols = [col for col, dtype in zip(left.columns, left.dtypes) if dtype == pl.List]
 	right_list_cols = [col for col, dtype in zip(right.columns, right.dtypes) if dtype == pl.List]
 	
-	# no columns are shared except merge_upon, just use merge_sorted()
-	if len(shared_columns) == 0:
+	if len(shared_columns) == 0 and n_cols_right == n_cols_left:
 		left = NeighLib.drop_null_columns(left.sort(merge_upon))
 		right = NeighLib.drop_null_columns(right.sort(merge_upon))
 		
@@ -208,10 +205,8 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		if verbose: print(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {initial_merge.shape[0]} rows (difference: {initial_merge.shape[0] - n_rows_left})")
 		merged_dataframe = initial_merge
 
-	# we can use agg tables to check for partial self matches
 	elif len(left_list_cols) == 0 and len(right_list_cols) == 0:
 
-		# fill in null values
 		nullfilled_left = left.join(right, on=merge_upon, how="left").with_columns(
 				[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in left.columns if col != merge_upon and col in right.columns]
 		).select(left.columns).sort(merge_upon)
@@ -244,22 +239,28 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		merged_dataframe = really_merged_no_dupes
 
 	else:
-		# squish
-		left = NeighLib.flatten_all_list_cols_as_much_as_possible(left, force_strings=True)
-		right = NeighLib.flatten_all_list_cols_as_much_as_possible(right, force_strings=True)
-		left_list_cols = [col for col, dtype in zip(left.columns, left.dtypes) if dtype == pl.List]
-		right_list_cols = [col for col, dtype in zip(right.columns, right.dtypes) if dtype == pl.List]
-		print(left_list_cols)
-		print(left.get_column('source'))
+		# shared list columns will be concatenated (such as the put_right_name_in_this_column column)
+		for left_column in left_list_cols:
+			if left_column in right_list_cols:
+				# workaround for pl.concat_list() propagating nulls
+				left = left.with_columns(pl.col(left_column).fill_null(value=pl.lit("null")))
+				right = right.with_columns(pl.col(left_column).fill_null(value=pl.lit("null")).alias(f"{left_column}_right"))
+			else:
+				left = NeighLib.stringify_one_list_column(left, left_column)
 
-		# fill in null values
+		# flatten exclusive right list columns
+		for right_column in right_list_cols:
+			if right_column in left_list_cols:
+				continue
+			else:
+				right = NeighLib.stringify_one_list_column(right, right_column)
+
 		nullfilled_left = left.join(right, on=merge_upon, how="left").with_columns(
 				[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in left.columns if col != merge_upon and col in right.columns]
 		).select(left.columns).sort(merge_upon)
 		nullfilled_right = right.join(left, on=merge_upon, how="left").with_columns(
 			[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in right.columns if col != merge_upon and col in left.columns]
 		).select(right.columns).sort(merge_upon)
-		
 		nullfilled_left = NeighLib.drop_null_columns(nullfilled_left)
 		nullfilled_right = NeighLib.drop_null_columns(nullfilled_right)
 

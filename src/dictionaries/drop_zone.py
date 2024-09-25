@@ -3,6 +3,8 @@
 tb_but_not_used = ['mycobacteriaceae_family_sam', 'mycobacterium_genus_sam']
 datastore = ['datastore_filetype', 'datastore_region']
 
+mildly_problematic = ['biosamplemodel', 'run_file_version', 'host_disease_sam', 'library_name']
+
 sample_ids_that_are_not_uuids = [
 	'accession_number_sam',
 	'alias_sam',
@@ -304,7 +306,7 @@ other = [
 	'zmw_set_run',
 ]
 
-silly_columns = other + redundant + tb_but_not_used + datastore + metadata_dates + sample_ids_that_are_not_uuids + submitter
+silly_columns = other + redundant + mildly_problematic + tb_but_not_used + datastore + metadata_dates + sample_ids_that_are_not_uuids + submitter
 
 clearly_not_tuberculosis = [
 	'abiotrophia_defectiva_species_sam',

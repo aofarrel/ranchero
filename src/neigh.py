@@ -1,6 +1,7 @@
 # general purpose functions
 
 import polars as pl
+import datetime
 from src.dictionaries import columns, drop_zone, null_values
 from polars.testing import assert_series_equal
 
@@ -187,6 +188,7 @@ class NeighLib:
 	@classmethod
 	def rancheroize_polars(cls, polars_df):
 		valid_renames = cls.get_ranchero_column_dictionary_only_valid(polars_df)
+		print(valid_renames)
 		try:
 			polars_df = polars_df.rename(valid_renames)
 		except pl.exceptions.SchemaFieldNotFoundError:  # should never happen
@@ -205,7 +207,8 @@ class NeighLib:
 
 		# flatten lists of only one value
 		for col, datatype in polars_df.schema.items():
-			if datatype == pl.List:
+			if verbose: print(f"Flattening {col} with type {datatype}...")
+			if datatype == pl.List and datatype.inner != datetime.datetime:
 				n_rows_prior = polars_df.shape[0]
 				temp_df = polars_df.explode(col).unique()
 				n_rows_now = temp_df.shape[0]
@@ -234,7 +237,7 @@ class NeighLib:
 					polars_df = temp_df
 
 		if force_strings:
-			polars_df = cls.stringify_list_columns(polars_df)
+			polars_df = cls.stringify_all_list_columns(polars_df)
 		return polars_df
 
 	@classmethod
@@ -267,7 +270,47 @@ class NeighLib:
 		return(polars_df)
 
 	@staticmethod
-	def stringify_list_columns(polars_df):
+	def stringify_one_list_column(polars_df, column):
+		for col, datatype in polars_df.schema.items():
+			if col==column and datatype == pl.List(pl.String):
+				polars_df = polars_df.with_columns(
+					pl.when(pl.col(col).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
+					.then(pl.col(col).list.eval(pl.element()).list.join(""))
+					.otherwise(
+						pl.lit("[")
+						+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
+						+ pl.lit("]")
+					).alias(col)
+				)
+				return polars_df
+			
+			# pl.Int doesn't exist and pl.List(int) doesn't seem to work, so we'll take the silly route
+			elif col==column and (datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64)):
+				polars_df = polars_df.with_columns((
+					pl.lit("[")
+					+ pl.col(col).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
+					+ pl.lit("]")
+				).alias(col))
+				return polars_df
+			
+			elif col==column and datatype == pl.Object:
+				polars_df = polars_df.with_columns((
+					pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)
+				).alias(col))
+				return polars_df
+
+			elif col==column:
+				print(f"Tried to make {col} into a string column, but we don't know what to do with type {datatype}")
+				exit(1)
+
+			else:
+				continue
+		print(f"Could not find {col} in dataframe")
+		exit(1)
+	
+
+	@staticmethod
+	def stringify_all_list_columns(polars_df):
 		""" Unnests list/object data (but not the way explode() does it) so it can be writen to CSV format
 		Heavily based on deanm0000 code, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
 
@@ -285,14 +328,7 @@ class NeighLib:
 					).alias(col)
 				)
 
-			#if datatype == pl.List(pl.String):
-			#	polars_df = polars_df.with_columns((
-			#		pl.lit("[")
-			#		+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
-			#		+ pl.lit("]")
-			#	).alias(col))
-			
-			# TODO: pl.Int doesn't exist, but is there some kind of superset? pl.List(int) doesn't seem to work
+			# pl.Int doesn't exist and pl.List(int) doesn't seem to work, so we'll take the silly route
 			elif (datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64)):
 				polars_df = polars_df.with_columns((
 					pl.lit("[")
@@ -325,7 +361,7 @@ class NeighLib:
 		df_to_write = cls.drop_null_columns(polars_df)
 		columns_with_type_list_or_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if (dtype == pl.List or dtype == pl.Object)]
 		if len(columns_with_type_list_or_obj) > 0:
-			df_to_write = cls.stringify_list_columns(df_to_write)
+			df_to_write = cls.stringify_all_list_columns(df_to_write)
 		try:
 			### DEBUG ###
 			debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})

@@ -20,99 +20,88 @@ mtbc_lineage = ['strain_geno', 'strain', 'organism', 'organism_common', 'organis
 
 # when going from run-level to sample-level, how should we treat these columns?
 rts__list_to_float_via_sum = ['mbytes', 'mybytes', 'bases', 'bytes']
-rts__drop = ['library_name', 'avgspotlen', 'datastore_region', 'release_date', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
+rts__drop = ['release_date', 'create_date', 'library_name', 'avgspotlen', 'datastore_region', 'release_date', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
 rts__keep_as_list = ['librarylayout', 'libraryselection', 'librarysource', 'instrument', 'platform', 'assay_type', 'run_file_version', 'isolate_info'] # non-unique values will be kept
 rts__keep_as_set = ['BioProject', 'datastore_filetype', 'datastore_provider', 'primary_search', 'run_index', 'SRX_id', 'sra_study'] # non-unique values will be dropped
 rts__warn_if_list_with_unique_values = ['center_name', 'center_name_insdc', 'isolation_source', 'date_collected', 'geoloc_country_calc', 'geoloc_country_or_sea', 'host_sciname', 'organism_common', 'release_date']
 
-date = ['patient_inclusion_sam', 'run_date_run', 'collection_year_sam', 'collection_month_sam', 'collectiondateym_sam', 'date_collected', 'year_isolated_sam', 'collection_date_sam', 'collection_date_orig_sam', 'run_file_create_date']
+date = ['collection_year_sam', 'collection_month_sam', 'collectiondateym_sam',  'year_isolated_sam']
 organism = ['phenotype_sam', 'organism_sciname', 'organism_common']
 source_information = ['specimen_sam', 'isolation_source_sam_ss_dpl261', 'sample_type_exp', 'host_body_product_sam', 'tissue_source_sam', 'env_biome_sam', 'env_feature_sam', 'env_material_sam', 'sample_type_sam_ss_dpl131', 'isolation_source_sam', 'isolate_sam_ss_dpl100', 'source_name_sam', 'sample_type_sam_ss_dpl131']
 host_information = ['patient_year_of_birth_sam', 'patient_sex_sam', 'patient_has_hiv_sam', 'host_status_sam', 'patientid_sam', 'patient_finished_treatment_sam', 'patient_has_hiv_sam', 'patient_sex_sam', 'patient_year_of_birth_sam', 'specific_host_sam', 'anonymised_badger_id_sam', 'patient_number_sam_s_dpl111', 'age_sam', 'host_disease_outcome_sam', 'host_disease_stage_sam', 'host_sex_sam', 'env_broad_scale_sam', 'env_local_scale_sam', 'env_medium_sam', 'mouse_strain_sam', 'host_age_sam', 'host_disease_sam', 'host_sam', 'host_sciname', 'host_health_state_sam', 'host_subject_id_sam', 'host_description_sam', 'age_at_death_sam', 'age_at_death_units_sam', 'age_atdeath_weeks_sam']
-location = ['doi_location_sam', 'region_sam', 'geoloc_country_or_sea_region', 'patient_country_of_birth_sam', 'country_sam', 'geoloc_name', 'altitude_sam_s_dpl11', 'isolation_country_sam', 'latitude_and_longitude_sam', 'lat_lon_sam_s_dpl34', 'geo_accession_exp', 'geoloc_country_calc', 'geoloc_country_or_sea']
+location = ['doi_location_sam', 'geoloc_country_or_sea_region', 'patient_country_of_birth_sam', 'country_sam', 'geoloc_name', 'altitude_sam_s_dpl11', 'isolation_country_sam', 'latitude_and_longitude_sam', 'lat_lon_sam_s_dpl34', 'geo_accession_exp', 'geoloc_country_calc', 'geoloc_country_or_sea']
 geno = ['genotype_variation_sam', 'strain_name_alias_sam', 'orgmod_note_sam_s_dpl305', 'atpe_mutation_sam', 'rv0678_mutation_sam', 'subsource_note_sam', 'mutant_sam', 'lineage_sam','note_sam','linege_sam',
 'subspecf_gen_lin_sam', 'species_sam', 
 'spoligotype_sam', 'vntr_sam', 'organism_sam', 'subtype_sam', 'pathotype_sam', 'serotype_sam', 'serovar_sam', 'genotype', 'subgroup_sam', 'arrayexpress_species_sam', 'strain', 'organism', 'organism_common', 'organism_sciname', 'mlva___spoligotype_sam']
 
-# sample-level versus run-level stuff
-svr = [
-	{
+# these columns are considered "equivalent" and nullfill each other
+equivalence = {
+		'collected_by': 'collected_by',
 		'collected_by_sam': 'collected_by',
-		'collected_by_run': 'collected_by'
-	},
-	{
-		'collection_date_sam': 'date_collected',
-		'collection_date_run': 'date_collected'
-	},
-	{
-		'lat_lon_sam_s_dpl34': 'geoloc_latlon',
-		'lat_lon_run': 'geoloc_latlon'
-	},
-	{
-		'geo_loc_name_sam': 'geoloc_name',
-		'geo_loc_name_run': 'geoloc_name'
-	},
-	{
-		'host_sam': 'host',
-		'host_run': 'host'
-	},
-	{
-		'host_disease_sam': 'host_disease',
-		'host_disease_run': 'host_disease'
-	},
+		'collected_by_run': 'collected_by',
 
-	# these are HYPOTHETICAL - I've not found any host_scientific_name_run (etc) yet,
-	# but it's probably worth having these just in case
-	{
-		'assay_type_sam': 'assay_type',
-		'assay_type_run': 'assay_type_run'
-	},
-	{
-		'cell_line_sam': 'cell_line',
-		'cell_line_run': 'cell_line'
-	},
-	{
-		'common_name_sam': 'organism_common',
-		'common_name_run': 'organism_common',
-	},
-	{
-		'geographic_location__country_and_or_sea__sam': 'geoloc_country_or_sea',
-		'geographic_location__country_and_or_sea__run': 'geoloc_country_or_sea'
-	},
-	{
-		'geographic_location__country_and_or_sea__region__sam': 'geoloc_country_or_sea_region',
-		'geographic_location__country_and_or_sea__region__run': 'geoloc_country_or_sea_region'
-	},
-	{
-		'host_common_name_sam': 'host_common',
-		'host_common_name_run': 'host_common'
-	},
-	{
-		'host_scientific_name_sam': 'host_sciname',
-		'host_scientific_name_run': 'host_sciname'
-	},
-	{
 		'isolation_source_sam': 'isolation_source',
-		'isolation_source_run': 'isolation_source'
-	},
-	{   # this one is all over the place - info, sample ids...
+		'isolation_source_sam_ss_dpl261': 'isolation_source',
+		'isolation_source_host_associated_sam_s_dpl264': 'isolation_source',
+		'isolation_source_host_associated_sam_s_dpl263': 'isolation_source',
+		'isolation_source_run': 'isolation_source',
+
+		'collection_date_sam': 'date_collected',
+		'collection_date_run': 'date_collected',
+		'collection_date_orig_sam': 'date_collected',
+		'date_collected': 'date_collected',
+
+		'lat_lon_sam_s_dpl34': 'geoloc_latlon',
+		'lat_lon_run': 'geoloc_latlon',
+
+		'geo_loc_name_sam': 'geoloc_name',
+		'geo_loc_name_run': 'geoloc_name',
+		'region_sam': 'geoloc_name',
+
+		'host': 'host',
+		'host_sam': 'host',
+		'host_run': 'host',
+
+		'host_disease': 'host_disease',
+		'host_disease_sam': 'host_disease',
+		'host_disease_run': 'host_disease',
+  		
+  		 # this one is all over the place - info, sample ids...
+		'isolate_info': 'isolate_info',
 		'isolate_sam_ss_dpl100': 'isolate_info',
 		'isolate_run': 'isolate_info',
 
-	},
-	{ # keeping distinct from platform as it seems to have other information
+		'assay_type_sam': 'assay_type',
+		'assay_type_run': 'assay_type',
+
+		'cell_line_sam': 'cell_line',
+		'cell_line_run': 'cell_line',
+
+		'common_name_sam': 'organism_common',
+		'common_name_run': 'organism_common',
+
+		'geographic_location__country_and_or_sea__sam': 'geoloc_country_or_sea',
+		'geographic_location__country_and_or_sea__run': 'geoloc_country_or_sea',
+
+		'geographic_location__country_and_or_sea__region__sam': 'geoloc_country_or_sea_region',
+		'geographic_location__country_and_or_sea__region__run': 'geoloc_country_or_sea_region',
+
+		'host_common_name_sam': 'host_common',
+		'host_common_name_run': 'host_common',
+
+		'host_scientific_name_sam': 'host_sciname',
+		'host_scientific_name_run': 'host_sciname',
+ 
+ 		# keeping distinct from platform as it seems to have other information
 		'platform_sam': 'platform_other',
-		'platform_run': 'platform_other'
-	},
-	{
+		'platform_run': 'platform_other',
+
 		'sample_type_sam_ss_dpl131': 'sample_type',
-		'sample_type_run_s_dpl517': 'sample_type'
-	},
-	{
+		'sample_type_run_s_dpl517': 'sample_type',
+
 		'scientific_name_sam': 'organism_sciname',
 		'scientific_name_run': 'organism_sciname'
 	}
-]
 
 # everything here has been checked against a massive BQ file to see if they have run/sample
 # specific versions. for run and sample specific versions (including hypotheticals) see SVR.
@@ -214,7 +203,7 @@ extended_col_to_ranchero = {
 	'lineage': 'lineage_mtb'
 }
 
-# NOT EXHAUSTIVE list of real and hypothetical confusing fields that should be dropped
+# some real and hypothetical confusing fields that should be dropped
 purposeful_exclusions = [
 	"additional_instrument_model_run",
 	"experimental_factor__genotype_exp", 
@@ -228,6 +217,7 @@ not_strings = {
 	"avgspotlen": pl.Int32(),  # tba5 is fine with Int16, but tba6 needs Int32
 	"bases": pl.Int64(),
 	"bytes": pl.Int64(),
+	"date_collected": pl.Date,
 	"ileft": pl.Int16(),
 	"ilevel": pl.Int16(),
 	"iright": pl.Int16(),
@@ -239,6 +229,7 @@ not_strings = {
 	"total_count": pl.Int32()
 }
 
+# currently unused
 polars_cast_not_attributes = {
 	"assay_type": str,
 	"BioProject": str,

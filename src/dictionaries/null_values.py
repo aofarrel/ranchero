@@ -40,6 +40,8 @@ null_values = [
 	'null',
 	'Null',
 
+	'uncalculated',
+
 	'unspecified',
 	'Unspecified',
 	
