@@ -10,7 +10,7 @@ Configuration = RancheroConfig()  # creates a default config
 
 # global instances
 _FileReader = FileReader(Configuration)
-_NeighLib = NeighLib()
+_NeighLib = NeighLib(Configuration)
 
 # exposed classes of global instances
 from_tsv = _FileReader.polars_from_tsv

@@ -4,13 +4,29 @@ import polars as pl
 import datetime
 from src.dictionaries import columns, drop_zone, null_values
 from polars.testing import assert_series_equal
-
-# TODO: can we implement verbose without importing the whole config?
+from .config import RancheroConfig
 
 class NeighLib:
 
+	def __init__(cls, configuration: RancheroConfig = None):
+		if configuration is None:
+			raise ValueError("No configuration was passed to NeighLib class. Ranchero is designed to be initialized with a configuration.")
+		else:
+			cls._actually_set_config(configuration=configuration)
+
+	def _actually_set_config(cls, configuration: RancheroConfig):
+		cls.cfg = configuration
+
+	@classmethod
+	def nullify(cls, polars_df):
+		return polars_df.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
+
 	def print_col_where(polars_df, column="source", equals="Coscolla"):
-		print(polars_df.filter(pl.col(column) == equals))
+		cols_of_interest = ['acc', 'run_index', 'date_collected', 'Collection_Date', 'collection_date_sam', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam']
+		cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
+		print(cols_to_print)
+		with pl.Config(tbl_cols=-1):
+			print(polars_df.filter(pl.col(column) == equals).select(cols_to_print))
 
 	def mark_rows_with_value(polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
 		#polars_df = polars_df.with_columns(pl.lit("").alias(new_column))
@@ -50,12 +66,6 @@ class NeighLib:
 		else:
 			return False
 
-	def get_ranchero_input_columns(cls):
-		return cls.get_ranchero_column_dictionary.keys()
-
-	def get_ranchero_output_nonstandardized_columns(cls):
-		return list(set(cls.get_ranchero_column_dictionary.values()))
-
 	def print_value_counts(polars_df, skip_ids=True):
 		ids = ['sample_index', 'biosample', 'BioSample', 'acc', 'acc_1', 'run_index', 'run_accession'] + columns.addl_ids
 		for column in polars_df.columns:
@@ -65,62 +75,16 @@ class NeighLib:
 			else:
 				continue
 
-	@staticmethod
-	def get_ranchero_column_dictionary():
-		"""WARNING: This will generate duplicate values. Don't pipe directly to rename, filter out first."""
-		almost_everything_worth_keeping = {}
-		for key, value in columns.common_col_to_ranchero_col.items():
-			if key in almost_everything_worth_keeping and almost_everything_worth_keeping[key] != value:
-				raise ValueError(f"Collision detected for key '{key}' with different values: '{almost_everything_worth_keeping[key]}' and '{value}'")
-			almost_everything_worth_keeping[key] = value
-		for dictionary in columns.svr:
-			for key, value in dictionary.items():
-				if key in almost_everything_worth_keeping and almost_everything_worth_keeping[key] != value:
-					raise ValueError(f"Collision detected for key '{key}' with different values: '{almost_everything_worth_keeping[key]}' and '{value}'")
-				almost_everything_worth_keeping[key] = value
-		for key, value in columns.extended_col_to_ranchero.items():
-			if key in almost_everything_worth_keeping and almost_everything_worth_keeping[key] != value:
-				raise ValueError(f"Collision detected for key '{key}' with different values: '{almost_everything_worth_keeping[key]}' and '{value}'")
-			almost_everything_worth_keeping[key] = value
-		# we want to keep stuff that is already rancheroized too!
-		everything_worth_keeping = almost_everything_worth_keeping.copy()
-		everything_worth_keeping.update({v: v for k, v in almost_everything_worth_keeping.items() if v not in almost_everything_worth_keeping.keys()})  # yes, this is VALUE: VALUE
-
-		return everything_worth_keeping.copy()
-
-	@classmethod
-	def get_ranchero_column_dictionary_only_valid(cls, polars_df):
-		ranchero = cls.get_ranchero_column_dictionary()
-		return cls.get_valid_columns_dict_from_arbitrary_dict(polars_df, ranchero)
-
-	@staticmethod
-	def get_just_geoloc_columns(cls, polars_df, check_if_valid=False):
-		if check_if_valid:
-			ranchero_geoloc = [k for k, v in cls.get_ranchero_output_nonstandardized_columns().items() if k.str.startswith("geo")]
-			return get_valid_columns_from_arbitrary_list(polars_df, ranchero_geoloc)
-		else:
-			return [k for k, v in cls.get_ranchero_output_nonstandardized_columns().items() if k.str.startswith("geo")]
-
-	@staticmethod
 	def get_valid_columns_list_from_arbitrary_list(polars_df, desired_columns: list):
 		return [col for col in desired_columns if col in polars_df.columns]
 
-	@staticmethod
-	def get_valid_columns_dict_from_arbitrary_dict(polars_df, column_dict: dict):
-		key_exists = {k:v for k, v in column_dict.items() if k in polars_df.columns}
-		# force unique values only
-		# TODO: there's better ways of handling similar columns; ideally we should merge them
-		temp = {val: key for key, val in key_exists.items()}
-		everything_worth_keeping = {val: key for key, val in temp.items()}
-		return everything_worth_keeping
-	
 	def check_columns_exist(polars_df, column_list: list, err=False, verbose=False):
 		missing_columns = [col for col in column_list if col not in polars_df.columns]
 		if len(missing_columns) == 0:
-			if verbose: print("All requested columns exist in dataframe")
+			#if cls.cfg.verbose: print("All requested columns exist in dataframe")
 			return True
 		else:
-			if verbose: print(f"Missing these columns: {missing_columns}")
+			#if cls.cfg.verbose: print(f"Missing these columns: {missing_columns}")
 			if err: exit(1)
 			return False
 
@@ -184,19 +148,52 @@ class NeighLib:
 		print(f"┗{'━' * len(header)}┛")
 		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=500, fmt_table_cell_list_len=10):
 			print(polars_df)
+
+	@classmethod
+	def nullfill_and_merge_these_columns(cls, polars_df, particular_columns: list, final_name: str):
+		# THIS IGNORES ANY DISAGREEMENT AMONG COLUMNS!
+		for i in range(len(particular_columns) - 1):
+			col_A, col_B = particular_columns[i], particular_columns[i + 1]
+			if polars_df.get_column(col_A).dtype == pl.List:
+				polars_df = cls.stringify_one_list_column(polars_df, col_A)
+			if polars_df.get_column(col_B).dtype == pl.List:
+				polars_df = cls.stringify_one_list_column(polars_df, col_B)
+			
+			polars_df = polars_df.with_columns(pl.col(f"{col_B}").fill_null(pl.col(f"{col_A}")).alias(col_B))
+			print(f"[{i}] filled {col_B} with {col_A}, dropping {col_A}")
+			
+			are_equal_now = polars_df.select(f"{col_A}").equals(polars_df.select(f"{col_A}"), null_equal=True)
+			if any(particular_columns) in columns.rancheroize__warn_if_list_with_unique_values and not are_equal_now:
+				print(f"Warning: {col_A} and {col_B} had different values.")
+			polars_df = polars_df.drop(col_A)
+			if i == (len(particular_columns) - 2):
+				print(f"Renaming {col_B} to {final_name}")
+				polars_df = polars_df.rename({col_B: final_name})
+			
+		return polars_df
 	
 	@classmethod
 	def rancheroize_polars(cls, polars_df):
-		valid_renames = cls.get_ranchero_column_dictionary_only_valid(polars_df)
-		print(valid_renames)
-		try:
-			polars_df = polars_df.rename(valid_renames)
-		except pl.exceptions.SchemaFieldNotFoundError:  # should never happen
-			print("WARNING: Failed to rename columns")
-		return cls.drop_known_unwanted_columns(polars_df)
+		polars_df = cls.drop_known_unwanted_columns(polars_df)
+		polars_df = cls.nullify(polars_df)
+		for key, value in columns.equivalence.items():
+			merge_these_columns = [v_col for v_col in value if v_col in polars_df.columns]
+			if len(merge_these_columns) > 0:
+				print(f"Discovered {key} in column via {merge_these_columns}")
+				if len(merge_these_columns) > 1:
+					#polars_df = polars_df.with_columns(pl.implode(merge_these_columns)) # this gets sigkilled; don't bother!
+					if key in columns.rts__drop:
+						polars_df = polars_df.drop(col)
+					else:
+						polars_df = cls.nullfill_and_merge_these_columns(polars_df, merge_these_columns, key)
+				else:
+					print(f"Renamed {merge_these_columns[0]} to {key}")
+					polars_df = polars_df.rename({merge_these_columns[0]: key})
+			
+		return polars_df
 
 	@classmethod
-	def flatten_all_list_cols_as_much_as_possible(cls, polars_df, verbose=False, hard_stop=False, force_strings=False):
+	def flatten_all_list_cols_as_much_as_possible(cls, polars_df, hard_stop=False, force_strings=False):
 		"""If intelligent, assume sample indexed, and check lists actually make sense. For example,
 		a country shouldn't be a list at all in a sample-indexed dataframe as a sample can only come
 		from one country since NCBI data doesn't really make a distinction between host and prior
@@ -207,7 +204,7 @@ class NeighLib:
 
 		# flatten lists of only one value
 		for col, datatype in polars_df.schema.items():
-			if verbose: print(f"Flattening {col} with type {datatype}...")
+			#if cls.cfg.verbose: print(f"Flattening {col} with type {datatype}...")
 			if datatype == pl.List and datatype.inner != datetime.datetime:
 				n_rows_prior = polars_df.shape[0]
 				temp_df = polars_df.explode(col).unique()
@@ -221,17 +218,15 @@ class NeighLib:
 					elif col in columns.rts__keep_as_set:  # because we exploded with unique(), we now have a set (sort of), but I think this is better than trying to do a column merge
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 					elif col in columns.rts__warn_if_list_with_unique_values:
+						# TODO: this should probablya ctuallly handle this better
 						print(f"WARNING: Expected {col} to only have one non-null per sample, but that's not the case.")
-						if verbose:
-							cls.super_print_pl(polars_df.select(col), "as passed in")
-						else:
-							print(polars_df.select(col))
+						print(polars_df.select(col))
 						if hard_stop:
 							exit(1)
 						else:
 							continue
 					else:
-						if verbose: print(f"WARNING: Unsure what to do with {col}, so we'll leave it as-is")
+						#if cls.cfg.verbose: print(f"WARNING: Unsure what to do with {col}, so we'll leave it as-is")
 						polars_df = polars_df
 				else:
 					polars_df = temp_df
@@ -242,7 +237,9 @@ class NeighLib:
 
 	@classmethod
 	def drop_non_tb_columns(cls, polars_df):
-		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.clearly_not_tuberculosis])
+		dont_drop_these = [col for col in polars_df.columns if col not in drop_zone.clearly_not_tuberculosis]
+		print(dont_drop_these)
+		return polars_df.select(dont_drop_these)
 
 	@classmethod
 	def drop_known_unwanted_columns(cls, polars_df):

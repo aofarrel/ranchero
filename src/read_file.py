@@ -65,7 +65,7 @@ class FileReader():
 		print(f"Reformatted JSON saved to {out_file_path}")
 		return out_file_path
 
-	def polars_from_bigquery(self, bq_file, nullify=True, normalize_attributes=True):
+	def polars_from_bigquery(self, bq_file, normalize_attributes=True):
 		""" 
 		1. Reads a bigquery JSON into a polars dataframe
 		2. (optional) Splits the attributes columns into new columns (combines fixing the attributes column and JSON normalizing)
@@ -75,7 +75,6 @@ class FileReader():
 
 		Configurations used:
 		* immediate_biosample_merge (set)
-		* immediate_rancheroize (set)
 		"""
 		try:
 			bq_raw = pl.read_json(bq_file)
@@ -89,18 +88,10 @@ class FileReader():
 				print("Caught exception reading JSON file after attempting to fix it. Giving up!")
 				exit(1)
 
-		
-		if self.cfg.immediate_rancheroize:
-			if normalize_attributes and "attributes" in bq_raw.columns:  # if column doesn't exist, return false
-				bq_norm = self.polars_fix_attributes_and_json_normalize(bq_raw)
-				current =  NeighLib.rancheroize_polars(bq_norm)
-			else:
-				current =  NeighLib.rancheroize_polars(bq_raw)
-		else:
-			current = bq_raw
-		# create nulls here, where we have as many not-list columns as possible (eg, after normalize attributes but before biosample merge)
-		# TODO: do other replacememnts here too!
-		if nullify: current = current.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
+		if normalize_attributes and "attributes" in bq_raw.columns:  # if column doesn't exist, return false
+			current = self.polars_fix_attributes_and_json_normalize(bq_raw)
+			current =  NeighLib.rancheroize_polars(current) # more drops
+			if self.cfg.verbose: print(current.columns)
 		if self.cfg.immediate_biosample_merge:
 			current = self.polars_flatten(current, upon='BioSample', keep_all_columns=False)
 		return current
@@ -130,7 +121,7 @@ class FileReader():
 			bq_jnorm = pl.concat([polars_df.drop('attributes'), just_attributes], how="horizontal")
 		print(f"An additional {len(just_attributes.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
 		if self.cfg.verbose: print(f"Columns added: {just_attributes.columns}")
-		with suppress(pl.exceptions.SchemaFieldNotFoundError): bq_jnorm.rename(columns.common_col_to_ranchero_col)
+		if rancheroize: bq_jnorm = NeighLib.rancheroize_polars(bq_jnorm)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
 
@@ -213,8 +204,8 @@ class FileReader():
 			#	flat = flat_neo  # silly workaround for flat = flat.with_columns(...).rename(...) throwing an error about duped columns
 			flat_neo = flat
 		else:
-			columns_to_keep = NeighLib.get_ranchero_column_dictionary_only_valid(not_flat)
-			with suppress(ValueError): del columns_to_keep[upon]  # if it's not in there, who cares?
+			columns_to_keep = list(item for item in columns.columns_to_keep if item in not_flat.columns)
+			with suppress(ValueError):  columns_to_keep.remove(upon)  # if it's not in there, who cares?
 			flat = not_flat.group_by(upon).agg(pl.col(columns_to_keep))
 			#if self.cfg.verbose: NeighLib.super_print_pl(flat, "flat") # this breaks on tba5
 			
@@ -267,7 +258,7 @@ class FileReader():
 			else:
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts)
 		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'])
-		if rancheroize: normalized.rename(columns.common_col_to_ranchero_col)
+		if rancheroize: normalized = NeighLib.rancheroize_polars(normalized)
 		if self.cfg.cast_types: normalized = NeighLib.cast_politely(normalized)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
 		return normalized

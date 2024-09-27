@@ -153,6 +153,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 			if not NeighLib.likely_is_run_indexed(df):
 				print(f"WARNING: Merging upon {merge_upon}, which looks like a run accession, but {name} dataframe appears to not be indexed by run accession")
 		if len(df.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
+			print(df.filter(pl.col(merge_upon).is_null()))
 			raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
 	left_values, right_values = left[merge_upon], right[merge_upon]
 	intersection = left_values.is_in(right_values)
@@ -274,6 +275,8 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		really_merged_no_dupes = really_merged.unique()
 		if verbose: print(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")
 		merged_dataframe = really_merged_no_dupes
+
+	merged_dataframe.drop_nulls()
 
 	check_if_unexpected_rows(merged_dataframe, merge_upon=merge_upon, 
 		intersection_values=intersection_values, exclusive_left_values=exclusive_left_values, exclusive_right_values=exclusive_right_values, 

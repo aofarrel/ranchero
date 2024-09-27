@@ -28,7 +28,7 @@ class RancheroConfig:
 		self.ignore_polars_read_errors = True
 		self.immediate_biosample_merge = False
 		self.immediate_rancheroize = True
-		self.immediate_try_parse_dates = False
+		self.immediate_try_parse_dates = True
 		self.intermediate_files = False
 		self.polars_normalize = True
 		self.verbose = True
