@@ -88,9 +88,15 @@ class FileReader():
 				print("Caught exception reading JSON file after attempting to fix it. Giving up!")
 				exit(1)
 
+		NeighLib.print_col_where(bq_raw, 'acc', 'ERR1768638') # disappears
+
 		if normalize_attributes and "attributes" in bq_raw.columns:  # if column doesn't exist, return false
 			current = self.polars_fix_attributes_and_json_normalize(bq_raw)
-			current =  NeighLib.rancheroize_polars(current) # more drops
+
+
+			NeighLib.print_col_where(current, 'acc', 'ERR1768638') # disappears
+
+
 			if self.cfg.verbose: print(current.columns)
 		if self.cfg.immediate_biosample_merge:
 			current = self.polars_flatten(current, upon='BioSample', keep_all_columns=False)
@@ -192,21 +198,26 @@ class FileReader():
 			non_uniques = not_flat.group_by(upon).count().filter(pl.col("count") > 1)[upon]
 			number_non_unique = len(non_uniques)
 			print(f"Found {number_non_unique} non-unique values for {upon}: {non_uniques}")
+
+		more_flat = NeighLib.rancheroize_polars(not_flat)
 		
-		if keep_all_columns:
-			# not tested!
-			columns_to_keep = list(not_flat.columns)
-			with suppress(ValueError): columns_to_keep.remove(upon)  # if it's not in there, who cares?
-			
-			flat = not_flat.group_by(upon).agg(columns_to_keep)
-			#for nested_column in not_flat.columns:
-			#	flat_neo = flat.with_columns(pl.col(nested_column).list.to_struct()).unnest(nested_column).rename({"field_0": nested_column})
-			#	flat = flat_neo  # silly workaround for flat = flat.with_columns(...).rename(...) throwing an error about duped columns
-			flat_neo = flat
-		else:
-			columns_to_keep = list(item for item in columns.columns_to_keep if item in not_flat.columns)
-			with suppress(ValueError):  columns_to_keep.remove(upon)  # if it's not in there, who cares?
-			flat = not_flat.group_by(upon).agg(pl.col(columns_to_keep))
+		
+
+
+#		if keep_all_columns:
+#			# not tested!
+#			columns_to_keep = list(not_flat.columns)
+#			with suppress(ValueError): columns_to_keep.remove(upon)  # if it's not in there, who cares?
+#			
+#			flat = not_flat.group_by(upon).agg(columns_to_keep)
+#			for nested_column in not_flat.columns:
+#				flat_neo = flat.with_columns(pl.col(nested_column).list.to_struct()).unnest(nested_column).rename({"field_0": nested_column})
+#				flat = flat_neo  # silly workaround for flat = flat.with_columns(...).rename(...) throwing an error about duped columns
+#			flat_neo = flat
+#		else:
+#			columns_to_keep = list(item for item in columns.columns_to_keep if item in not_flat.columns)
+#			with suppress(ValueError):  columns_to_keep.remove(upon)  # if it's not in there, who cares?
+#			flat = not_flat.group_by(upon).agg(pl.col(columns_to_keep))
 			#if self.cfg.verbose: NeighLib.super_print_pl(flat, "flat") # this breaks on tba5
 			
 			#for nested_column in columns.recommended_sra_columns:
@@ -219,8 +230,8 @@ class FileReader():
 
 		#flat_neo = flat_neo.unique() # doesn't seem to drop anything but may as well leave it
 		#if intermediate_files: NeighLib.polars_to_tsv(flat_neo, f"./intermediate/polars_flattened.tsv")
-		NeighLib.print_col_where(flat, upon, "SAMN41453963")
-		return flat
+		NeighLib.print_col_where(more_flat, upon, "SAMN41453963")
+		return more_flat
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search=True):
 		"""

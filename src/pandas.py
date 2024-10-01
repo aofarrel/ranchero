@@ -236,4 +236,65 @@ def drop_metagenomic(pandas_df):
 def pandas_to_tsv(pandas_df, path: str):
 	pandas_df.to_csv(path, sep='\t', index=False)
 
+def merge_pandas_dataframes(left, right, merge_upon, right_name="merged", put_right_name_in_this_column=None):
+	"""
+	Merge two pandas dataframe upon merge_upon. 
+
+	If right_name is None, an right_name column will be created temporarily but dropped before returning.
+	put_right_name_in_this_column: If not None, adds a row of right_name to the dataframe. Designed for marking the source of data when
+	merging dataframes multiple times.
+
+	Handling _x and _y conflicts is not fully implemented.
+	"""
+	import pandas as pd
+	import numpy as np
+
+	print(f"Merging {right_name} on {merge_upon}")
+
+	# TODO: this doesn't work!!
+	if put_right_name_in_this_column is not None:
+		# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
+		right[put_right_name_in_this_column] = right_name
+
+	merge = pd.merge(left, right, on=merge_upon, how='outer', indicator='merge_status_unprocessed')
+	rows_left, rows_right, len_current = len(left.index), len(right.index), len(merge.index)
+	for conflict in NeighLib.get_x_y_column_pairs(merge):
+		foo_x, foo_y, foo = conflict[0], conflict[1], conflict[2]
+		merge[foo_x] = merge[foo_x].fillna(merge[foo_y])
+		merge[foo_y] = merge[foo_y].fillna(merge[foo_x])
+		if not merge[foo_x].equals(merge[foo_y]):
+			# try again, but avoid the NaN != NaN curse
+			merge[foo_x] = merge[foo_x].fillna("missing")
+			merge[foo_y] = merge[foo_y].fillna("missing")
+			if not merge[foo_x].equals(merge[foo_y]):
+				print(f"Inconsistent {foo} found")
+				if verbose:
+					uh_oh = merge.loc[np.where(merge[foo_x] != merge[foo_y])]
+					print(uh_oh[[foo_x, foo_y]])
+
+				#merge[['BioSample'] == 'SAMEA3318415', 'BioProject_x'] == 'PRJEB9003' # falling back to what's on SRA web
+
+			# TODO: actually implement fixing this
+
+			merge = merge.rename(columns={foo_x: foo})
+			merge = merge.drop(foo_y, axis=1)
+			# TODO: drop the "missing" values into nans
+	else:
+		if verbose: print(f"{foo} seem unchanged")
+	
+	if verbose: NeighLib.mega_debug_merge(merge, merge_upon)
+
+
+
+	#perhaps_merged_rows = not_merged_rows.apply(merge_unmerged_rows_pandas, axis=1)
+	#print(perhaps_merged_rows)
+
+	#merged_df = pd.concat([merged_df, not_merged_rows])
+
+	# make new right_name column
+	merge[right_name] = merge['merge_status_unprocessed'].apply(lambda x: True if x in ['right_only', 'both'] else False)
+	merge.drop('merge_status_unprocessed', axis=1, inplace=True) 
+	
+	return merge
+
 

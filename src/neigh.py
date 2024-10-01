@@ -21,10 +21,8 @@ class NeighLib:
 	def nullify(cls, polars_df):
 		return polars_df.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
 
-	def print_col_where(polars_df, column="source", equals="Coscolla"):
-		cols_of_interest = ['acc', 'run_index', 'date_collected', 'Collection_Date', 'collection_date_sam', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam']
+	def print_col_where(polars_df, column="source", equals="Coscolla", cols_of_interest=['acc', 'run_index', 'source', 'literature_lineage', 'Biosample', 'sample_index', 'date_collected', 'Collection_Date', 'collection_date_sam', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam', 'collection', 'collection_right', 'concat_list']):
 		cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
-		print(cols_to_print)
 		with pl.Config(tbl_cols=-1):
 			print(polars_df.filter(pl.col(column) == equals).select(cols_to_print))
 
@@ -164,10 +162,11 @@ class NeighLib:
 			
 			are_equal_now = polars_df.select(f"{col_A}").equals(polars_df.select(f"{col_A}"), null_equal=True)
 			if any(particular_columns) in columns.rancheroize__warn_if_list_with_unique_values and not are_equal_now:
-				print(f"Warning: {col_A} and {col_B} had different values.")
+				print(f"ERROR: {col_A} and {col_B} had different values.")
+				exit(1)
 			polars_df = polars_df.drop(col_A)
 			if i == (len(particular_columns) - 2):
-				print(f"Renaming {col_B} to {final_name}")
+				#print(f"Renaming {col_B} to {final_name}")
 				polars_df = polars_df.rename({col_B: final_name})
 			
 		return polars_df
@@ -176,29 +175,33 @@ class NeighLib:
 	def rancheroize_polars(cls, polars_df):
 		polars_df = cls.drop_known_unwanted_columns(polars_df)
 		polars_df = cls.nullify(polars_df)
+
 		for key, value in columns.equivalence.items():
 			merge_these_columns = [v_col for v_col in value if v_col in polars_df.columns]
 			if len(merge_these_columns) > 0:
-				print(f"Discovered {key} in column via {merge_these_columns}")
+				#print(f"Discovered {key} in column via {merge_these_columns}")
 				if len(merge_these_columns) > 1:
 					#polars_df = polars_df.with_columns(pl.implode(merge_these_columns)) # this gets sigkilled; don't bother!
 					if key in columns.rts__drop:
 						polars_df = polars_df.drop(col)
+					if key in columns.rts__keep_as_list:
+						polars_df = cls.nullfill_and_merge_these_columns(polars_df, merge_these_columns, key)
 					else:
 						polars_df = cls.nullfill_and_merge_these_columns(polars_df, merge_these_columns, key)
 				else:
-					print(f"Renamed {merge_these_columns[0]} to {key}")
+					#print(f"Renamed {merge_these_columns[0]} to {key}")
 					polars_df = polars_df.rename({merge_these_columns[0]: key})
 			
 		return polars_df
 
 	@classmethod
 	def flatten_all_list_cols_as_much_as_possible(cls, polars_df, hard_stop=False, force_strings=False):
-		"""If intelligent, assume sample indexed, and check lists actually make sense. For example,
-		a country shouldn't be a list at all in a sample-indexed dataframe as a sample can only come
-		from one country since NCBI data doesn't really make a distinction between host and prior
-		nation for refugees/travelers"""
+		"""
+		Flatten list columns as much as possible. If a column is just a bunch of one-element lists, for
+		instance, then just take the 0th value of that list and make a column that isn't a list.
 
+		If force_strings, any remaining columns that are still lists are forced into strings.
+		"""
 		# unnest nested lists (recursive)
 		polars_df = cls.flatten_nested_list_cols(polars_df)
 
@@ -207,30 +210,39 @@ class NeighLib:
 			#if cls.cfg.verbose: print(f"Flattening {col} with type {datatype}...")
 			if datatype == pl.List and datatype.inner != datetime.datetime:
 				n_rows_prior = polars_df.shape[0]
-				temp_df = polars_df.explode(col).unique()
+				exploded = polars_df.explode(col)
+				temp_df = exploded.unique()
 				n_rows_now = temp_df.shape[0]
 				if n_rows_now > n_rows_prior:
+
+					non_unique_rows = exploded.filter(pl.col("sample_index").is_duplicated()).select(["sample_index", col])
+					print(f"DEBUG: Non-unique values in column {col}:")
+					print(non_unique_rows)
+					print(f"DEBUG: Number of non-unique rows in {col}: {non_unique_rows.shape[0]}")
+
+
+
 					if col in columns.rts__list_to_float_via_sum:  # ignores temp_df
 						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
-						polars_df = polars_df.drop(col)
-					elif col in columns.rts__drop:  # ignores temp_df
 						polars_df = polars_df.drop(col)
 					elif col in columns.rts__keep_as_set:  # because we exploded with unique(), we now have a set (sort of), but I think this is better than trying to do a column merge
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 					elif col in columns.rts__warn_if_list_with_unique_values:
-						# TODO: this should probablya ctuallly handle this better
-						print(f"WARNING: Expected {col} to only have one non-null per sample, but that's not the case.")
-						print(polars_df.select(col))
+						print(f"WARNING: Expected {col} to only have one non-null per sample, but that's not the case. Will keep as a set.")
+						#####
+						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 						if hard_stop:
 							exit(1)
 						else:
 							continue
 					else:
-						#if cls.cfg.verbose: print(f"WARNING: Unsure what to do with {col}, so we'll leave it as-is")
-						polars_df = polars_df
+						print(f"WARNING: Not sure how to handle {col}. Will treat it as a set.")
+						#####
+						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 				else:
 					polars_df = temp_df
-
+			elif datatype == pl.List and datatype.inner == datetime.date:
+				print(f"WARNING: {col} is a list of datetimes. Datetimes break typical handling of lists, so this column will be left alone.")
 		if force_strings:
 			polars_df = cls.stringify_all_list_columns(polars_df)
 		return polars_df

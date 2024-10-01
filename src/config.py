@@ -30,6 +30,7 @@ class RancheroConfig:
 		self.immediate_rancheroize = True
 		self.immediate_try_parse_dates = True
 		self.intermediate_files = False
+		self.indicator_column = "collection"
 		self.polars_normalize = True
 		self.verbose = True
 		self.unwanted = {

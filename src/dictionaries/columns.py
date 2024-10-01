@@ -23,9 +23,16 @@ rts__list_to_float_via_sum = ['mbytes', 'mybytes', 'bases', 'bytes']
 rts__drop = ['release_date', 'create_date', 'library_name', 'avgspotlen', 'datastore_region', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
 rts__keep_as_list = ['librarylayout', 'libraryselection', 'librarysource', 'instrument', 'platform', 'assay_type', 'run_file_version', 'isolate_info'] # non-unique values will be kept
 rts__keep_as_set = ['BioProject', 'datastore_filetype', 'datastore_provider', 'primary_search', 'run_index', 'SRX_id', 'sra_study'] # non-unique values will be dropped
-rts__warn_if_list_with_unique_values = ['center_name', 'center_name_insdc', 'isolation_source', 'date_collected', 'geoloc_country_calc', 'geoloc_country_or_sea', 'host_sciname', 'organism_common', 'release_date']
+rts__warn_if_list_with_unique_values = [
+	'center_name', 'center_name_insdc', 
+	'isolation_source',
+	'date_collected', 
+	'geoloc_latlon', 'geoloc_name', 'geoloc_country_calc', 'geoloc_country_or_sea', 
+	'host', 'host_sciname', 
+	'organism_common', 
+	'release_date']
 
-rancheroize__warn_if_list_with_unique_values = rts__warn_if_list_with_unique_values + rts__list_to_float_via_sum
+rancheroize__warn_if_list_with_unique_values = rts__warn_if_list_with_unique_values + rts__list_to_float_via_sum + rts__keep_as_set
 
 date = ['samplingday_sam', 'collection_year_sam', 'collection_month_sam', 'collectiondateym_sam',  'year_isolated_sam']
 organism = ['phenotype_sam', 'organism_sciname', 'organism_common']
@@ -47,12 +54,13 @@ equivalence = {
 		'BioSampleModel': ['BioSampleModel', 'biosamplemodel', 'biosamplemodel_sam'],
 		'bytes': ['bytes', 'Bytes'],
 		'center_name': ['center_name', 'Center Name', 'center_name_insdc', 'insdc_center_name_sam'],
-		'date_collected': ['date_collected', 'Collection_Date', 'collection_date_sam', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam'],
+		'collection': ['collection'],
+		'date_collected': ['date_collected', 'date_isolation', 'Collection_Date', 'collection_date_sam', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam'],
 		'geoloc_latlon': ['geoloc_latlon', 'lat_lon_sam_s_dpl34', 'lat_lon', 'lat_lon_run'],
 		'geoloc_name': ['geoloc_name', 'geo_loc_name_country', 'geo_loc_name_country_calc', 'geo_loc_name_country_continent', 'geo_loc_name_sam', 'geographic_location__country_and_or_sea__sam', 'region_sam', 'geo_loc_name_run', 'geographic_location__country_and_or_sea__run'],
 		'host': ['host', 'host_sciname', 'host_sam', 'specific_host_sam', 'host_common', 'host_run', 'host_scientific_name_sam', 'host_common_name_run', 'host_scientific_name_run'],
 		'instrument': ['instrument', 'Instrument'],
-		'isolation_source': ['isolation_source', 'sample_type_sam_ss_dpl131', 'isolation_source_sam', 'isolation_source_sam_ss_dpl261', 'isolation_source_host_associated_sam_s_dpl264', 'isolation_source_host_associated_sam_s_dpl263', 'isolate_sam_ss_dpl100', 'isolation_source_run', 'sample_type_run_s_dpl517', 'isolate_run'],
+		'isolation_source': ['isolation_source', 'sample_type_sam_ss_dpl131', 'sample_source', 'isolation_source_sam', 'isolation_source_sam_ss_dpl261', 'isolation_source_host_associated_sam_s_dpl264', 'isolation_source_host_associated_sam_s_dpl263', 'isolate_sam_ss_dpl100', 'isolation_source_run', 'sample_type_run_s_dpl517', 'isolate_run'],
 		'librarylayout': ['librarylayout', 'LibraryLayout'], # no uderscore to match BQ format
 		'libraryselection': ['libraryselection', 'LibrarySelection'],
 		'librarysource': ['librarysource', 'LibrarySource'],
