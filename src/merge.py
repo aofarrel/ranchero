@@ -66,56 +66,6 @@ def get_partial_self_matches(polars_df, column_key: str):
 
 	return restored_catagorical_data
 
-def merge_right_columns(polars_df, quick_cast=True):
-
-	right_columns = [col for col in polars_df.columns if col.endswith("_right")]
-	logging.debug(f"Will merge {right_columns}")
-	for right_col in right_columns:
-		base_col = right_col.replace("_right", "")
-
-		if base_col not in polars_df.columns:
-			print(f"WARNING: Found {right_col}, but {base_col} not in dataframe -- will continue, but this may break things later")
-			if logging.root.level == logging.DEBUG: NeighLib.super_print_pl(polars_df, "DEBUG: Current dataframe")
-			continue
-		try:
-			polars_df = polars_df.with_columns(pl.col(base_col).fill_null(pl.col(right_col)))
-			polars_df = polars_df.with_columns(pl.col(right_col).fill_null(pl.col(base_col)))
-		except pl.exceptions.InvalidOperationError:
-			logging.debug("Could not nullfill")
-		
-		try:
-			# if they are equal after filling in nulls, we don't need to turn anything into a list
-			assert_series_equal(polars_df[base_col], polars_df[right_col].alias(base_col))
-			polars_df = polars_df.drop(right_col)
-			logging.debug(f"All values in {base_col} and {right_col} are the same, so they won't become a list.")
-		except AssertionError:
-			logging.debug(f"Not all values in {base_col} and {right_col} are the same.")
-			if base_col in columns.rancheroize__warn_if_list_with_unique_values:
-				logging.error("Expected to only have {right_col} fill in {base_col}'s nulls, but merging created lists!")
-				print(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(["run_index", "sample_index", base_col, right_col]))
-				exit(1)
-
-			# TODO: quick_cast exists because this is how the agg table method works, but maybe we can get rid of it?
-			if quick_cast:
-				polars_df = polars_df.with_columns(pl.col(base_col).cast(pl.List(str)))
-				#polars_df = polars_df.with_columns(pl.col(right_col).cast(pl.List(str))) # might mess up the fill null???
-				polars_df = polars_df.with_columns(pl.col(right_col).fill_null(pl.col(base_col)).alias(base_col))
-				polars_df = polars_df.drop(right_col)
-			else:
-				# this is known to work with base_col and right_col are both pl.Ut8, or when both are list[str]
-				polars_df = polars_df.with_columns(
-					pl.when(pl.col(base_col) != pl.col(right_col))             # When a row has different values for base_col and right_col,
-					.then(pl.concat_list([base_col, right_col]).list.unique()) # make a list of base_col and right_col, but keep only uniq values
-					.otherwise(pl.concat_list([base_col]))                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
-					.alias(base_col)
-				).drop(right_col)
-				#if veryverbose: NeighLib.super_print_pl(polars_df.select(base_col), f"after merging to make {base_col} to a list")
-				assert polars_df.select(pl.col(base_col)).dtypes == [pl.List]
-			assert base_col in polars_df.columns
-
-	# non-unique rows might be dropped here, fyi
-	return polars_df
-
 def check_if_unexpected_rows(merged_df, 
 	merge_upon,
 	intersection_values, 
@@ -242,11 +192,11 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		if set(left.columns) == set(right.columns):
 			logging.debug("Set of left and right columns match")
 			initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-			really_merged = merge_right_columns(initial_merge, quick_cast=False)
+			really_merged = NeighLib.merge_right_columns(initial_merge, quick_cast=False)
 		else:
 			logging.debug("Set of left and right columns DO NOT match")
 			initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-			really_merged = merge_right_columns(initial_merge, quick_cast=False)
+			really_merged = NeighLib.merge_right_columns(initial_merge, quick_cast=False)
 		
 		# update left values and right values for later debugging
 		left_values, right_values = nullfilled_left[merge_upon], nullfilled_right[merge_upon]
@@ -315,7 +265,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 				else:
 					if right.select(left_column).dtypes == [pl.List(pl.String)]:
 						logging.debug(f"* {left_column}: SING | LIST")
-						logging.error("Merging a right list with a left singular is implemented")
+						logging.error("Merging a right list with a left singular is not implemented")
 						exit(1)
 					else:
 						logging.debug(f"* {left_column}: SING | SING")
@@ -374,7 +324,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 
 #		initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 		initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-		really_merged = merge_right_columns(initial_merge, quick_cast=False)
+		really_merged = NeighLib.merge_right_columns(initial_merge, quick_cast=False)
 
 		really_merged_no_dupes = really_merged.unique()
 		logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")

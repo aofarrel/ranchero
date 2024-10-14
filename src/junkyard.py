@@ -15,6 +15,72 @@
 # Since it runs below ten seconds even on the full size dataframe, I consider the pandas usage acceptable,
 # even though it annoys me on priniciple.
 
+	@classmethod
+	def iteratively_merge_these_columns(cls, polars_df, merge_these_columns: list, equivalence_key=None: str):
+		"""
+		Merges columns named in merged_these_columns.
+
+		If equivalence_key is not None, columns are assumed to all share the same kolumns.equivalence key, and ones with a lower
+		index number (in the value-list for their shared kolumns.equivalence key) will be given priority when there's a conflict.
+		Additionally, when all is said and done, the final merged column will be named equivalene_key's value.
+		"""
+		assert len(merge_these_columns) > 1
+		assert all(col in polars_df.columns for col in merge_these_columns)
+		assert all(not col.endswith("_right") for col in polars_df.columns)
+		debug_columns = ['collection_date_sam', 'sample_collection_date_sam_s_dpl127', 'collection_date_run', 'colection_date_sam']
+		
+		left_col, right_col = merge_these_columns[0], merge_these_columns[1]
+
+		logging.debug(f"Contains:\n\t{[col for col in polars_df.columns if col in debug_columns]}\nIntending to merge:\n\t{merge_these_columns}\n\t\tLeft:{left_col}\n\t\tRight:{right_col}")
+
+		if equivalence_key is not None:
+
+		logging.debug(f"Merging {left_col} and {right_col} by renaming {right_col} to {left_col}_right")
+		polars_df = polars_df.rename({right_col: f"{left_col}_right"})
+		
+
+		# TODO: only rename and call merge_right_columns if not in a special handling kolumns. else, use other merge thinking.
+
+
+		polars_df = cls.merge_right_columns(polars_df)
+		logging.debug(f"Date columns after right merge: {[col for col in polars_df.columns if col in debug_columns]}")
+
+		del merge_these_columns[1]
+
+		if len(merge_these_columns) > 1:
+			logging.debug(f"merge_these_columns is {merge_these_columns}, which we will pass in to recurse")
+			polars_df = cls.iteratively_merge_these_columns(polars_df, merge_these_columns)
+
+		#if and_rancheroize_the_name:
+		#	logging.debug(f"Date columns after and_rancheroize_the_name: {[col for col in polars_df.columns if col in debug_columns]}")
+		#	polars_df = cls.rancheroize_polars(polars_df) # recursion? sure why not
+		#	logging.debug(f"Date columns after and_rancheroize_the_name: {[col for col in polars_df.columns if col in debug_columns]}")
+		
+		return polars_df
+
+def nullfill_and_merge_these_columns(polars_df, particular_columns: list, final_name: str):
+	"""DO NOT USE. USE MERGE RIGHT INSTEAD"""
+	for i in range(len(particular_columns) - 1):
+		col_A, col_B = particular_columns[i], particular_columns[i + 1]
+		if polars_df.get_column(col_A).dtype == pl.List:
+			polars_df = cls.stringify_one_list_column(polars_df, col_A)
+		if polars_df.get_column(col_B).dtype == pl.List:
+			polars_df = cls.stringify_one_list_column(polars_df, col_B)
+		
+		polars_df = polars_df.with_columns(pl.col(f"{col_B}").fill_null(pl.col(f"{col_A}")).alias(col_B))
+		print(f"[{i}] filled {col_B} with {col_A}, dropping {col_A}")
+		
+		are_equal_now = polars_df.select(f"{col_A}").equals(polars_df.select(f"{col_A}"), null_equal=True)
+		if any(particular_columns) in kolumns.rancheroize__warn_if_list_with_unique_values and not are_equal_now:
+			print(f"ERROR: {col_A} and {col_B} had different values.")
+			exit(1)
+		polars_df = polars_df.drop(col_A)
+		if i == (len(particular_columns) - 2):
+			#print(f"Renaming {col_B} to {final_name}")
+			polars_df = polars_df.rename({col_B: final_name})
+		
+	return polars_df
+
 def store_known_multi_accession_metadata(pandas_df_indexed_by_runs):
 	"""
 	Stores some metadata from run accessions that share a BioSample so you can later verify things didn't get lost when

@@ -1,7 +1,7 @@
 import polars as pl
 import pandas as pd
 from src.neigh import NeighLib
-from src.dictionaries import tuberculosis_organisms
+from src.statics import tuberculosis_organisms
 
 def get_paired_illumina(polars_df, inverse=False):
 	NeighLib.check_columns_exist(polars_df, ['platform', 'librarylayout'], err=True, verbose=True)

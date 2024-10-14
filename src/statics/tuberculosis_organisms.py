@@ -17,6 +17,45 @@
 #
 
 
+
+import polars as pl
+
+rules = [
+	# spoligotype families (CAS, LAM, T, etc) do not perfectly 1:1 match with lineages, but they do strongly correlate
+	{"when": "Mycobacterium canetti",  "i_lineage": pl.Null,   "i_organism": "Mycobacterium canettii",                   "i_strain": pl.Null},
+	{"when": "Mycobacterium canettii", "i_lineage": pl.Null,   "i_organism": "Mycobacterium canettii",                   "i_strain": pl.Null},
+	{"when": "Beijing",                "i_lineage": "L2.2.1",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "Haarlem",                "i_lineage": "L4.1.2",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "Haarlem"},
+	{"when": "LAM",                    "i_lineage": "L4.3",    "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "LAM"},
+	{"when": "ETH",                    "i_lineage": "L4.2.2",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "LAM"},
+	{"when": "Indo-Oceanic",           "i_lineage": "L1",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "Euro-American",          "i_lineage": "L4",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "Ghana",                  "i_lineage": "L4.1.3",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "Ghana"},
+	{"when": "Delhi-CAS",              "i_lineage": "L3",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "CAS",                    "i_lineage": "L3",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "EAI",                    "i_lineage": "L1",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "T",                      "i_lineage": "L4.8",    "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "T"},
+	{"when": "Cameroon",               "i_lineage": "L4.6.2",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "Cameroon"},
+	{"when": "PGG3",                   "i_lineage": "L4.10",   "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "PGG3"},
+	{"when": "Ural",                   "i_lineage": "L4.2.1",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "Ural"},
+	{"when": "ETH",                    "i_lineage": "L4.2.2",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "ETH"},
+	{"when": "X-type",                 "i_lineage": "L4.1.1",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "X-type"},
+	{"when": "West-african 1",         "i_lineage": "L5",      "i_organism": "Mycobacterium africanum",                  "i_strain": pl.Null},
+	{"when": "West African 1",         "i_lineage": "L5",      "i_organism": "Mycobacterium africanum",                  "i_strain": pl.Null},
+	{"when": "West-african 2",         "i_lineage": "L6",      "i_organism": "Mycobacterium africanum",                  "i_strain": pl.Null},
+	{"when": "West African 2",         "i_lineage": "L6",      "i_organism": "Mycobacterium africanum",                  "i_strain": pl.Null},
+
+	# removing "variant" and stuff
+	{"when": "Mycobacterium tuberculosis variant africanum", "i_lineage": pl.Null, "i_organism": "Mycobacterium africanum", "i_strain": pl.Null},
+	{"when": "Mycobacterium tuberculosis variant bovis", "i_lineage": pl.Null, "i_organism": "Mycobacterium bovis", "i_strain": pl.Null},
+
+
+	
+]
+# additional regex nonsense via explict pl.where() will be needed to convert "lineage" into "L"
+
+
+
 def convert_to_regex(list_to_convert, case_insensitive=True):
 	"""
 	["Mycobacterium avium", "Mycobacterium canettii"] -->  "Mycobacterium avium|Mycobacterium canettii"
@@ -34,7 +73,7 @@ def convert_to_regex_no_substrings(list_to_convert):
 	return("^"+"$|^".join(list_to_convert)+"$")
 
 
-tuberculosis_sensu_stricto = ["Mycobacterium tuberculosis sensu stricto", "M. tuberculosis sensu stricto"]
+tuberculosis_sensu_stricto = ["Mycobacterium tuberculosis sensu stricto", "M. tuberculosis sensu stricto", "Mycobacterium tuberculosis subsp. tuberculosis"]
 
 tuberculosis_in_general = tuberculosis_sensu_stricto + [
 	"Mycobacterium tuberculosis",
@@ -48,19 +87,36 @@ tuberculosis_in_general = tuberculosis_sensu_stricto + [
 	"Mycobacterium caprae",
 	"Mycobacterium tuberculosis variant caprae",
 
+	# NCBI does *NOT* consider this TB, but TBProfiler classifies its lineage, so I'm keeping it here
+	# https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=1305738&lvl=3&lin=f&keep=1&srchmode=1&unlock
+	"Mycobacterium orygis",
+	"Mycobacterium tuberculosis variant orygis",
+
+	# NCBI considers this TB, not just part of the complex
+	# https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=1806&lvl=3&lin=f&keep=1&srchmode=1&unlock
 	"Mycobacterium microti",
 	"Mycobacterium tuberculosis variant microti",
+	"Mycobacterium tuberculosis variant muris",
+	"Mycobacterium tuberculosis var. muris",
+	"Mycobacterium muris",
+	"vole bacillus",
 
+	# NCBI considers this TB, not just part of the complex
+	# https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=194542&lvl=3&lin=f&keep=1&srchmode=1&unlock
 	"Mycobacterium pinnipedii",
 	"Mycobacterium tuberculosis variant pinnipedii"
 ]
 
 tuberculosis_complex_specific = tuberculosis_in_general + [
 	"Mycobacterium canettii",
+
 	"Mycobacterium tuberculosis complex",
 	"Mycobacterium tuberculosis complex sp.",
+	"Mycobacterium tuberculosis complex bacterium",
+	"unclassified Mycobacterium tuberculosis complex",
+
 	"Mycobacterium mungi",
-	"Mycobacterium orygis",
+
 	"Mycobacterium suricattae"
 ]
 recommended_tuberculosis_regex = convert_to_regex(tuberculosis_complex_specific)
@@ -132,6 +188,7 @@ avium_complex = [
 	"Mycobacterium avium subsp. paratuberculosis",
 	"Mycobacterium avium XTB13-223",
 	"Mycobacterium bouchedurhonense",
+	"Mycobacterium chimaera",
 	"Mycobacterium colombiense",
 	"Mycobacterium intracellulare",
 	"Mycobacterium intracellulare subsp. chimaera",
@@ -146,6 +203,7 @@ avium_regex = convert_to_regex(avium_complex)
 # there seems to be some disagreement as to whether mycolicibacterium
 # are technically NTM or not, so they're excluded here
 NTM = avium_complex + abscessus_complex + [
+	"Mycobacterium basiliense",
 	"Mycobacterium kansasii",
 	"Mycobacterium kansasi",  # if canettii is any indication, people will typo this
 	"Mycobacterium lentiflavum",
@@ -160,6 +218,7 @@ NTM = avium_complex + abscessus_complex + [
 	"Mycobacterium senegalense",
 	"Mycobacterium triplex",
 	"Mycobacterium ulcerans",
+	"Mycobacterium sp. DSM 104308",  # Mycobacterium basiliense
 	"NTM",
 	"Nontuberculosis mycobacteria",
 	"Nontuberculosis mycobacterium",
@@ -219,6 +278,13 @@ leprosy = [
 ]
 leprosy_regex = convert_to_regex(leprosy)
 
+sulfur_cave = [
+	"Candidatus Mycobacterium methanotrophicum",
+	"Mycobacterium methanotrophicum Sulfur Cave",
+	"Mycobacterium sp. MAG1",
+	"Mycobacterium methanotrophicum"
+]
+
 other_mycobacteria = [
 	# WARNING: Remove phages first or use convert_to_regex_no_substrings() if you intend on regexing 
 	"Mycobacterium",
@@ -240,7 +306,7 @@ unidentified_but_not_metagenomic = [
 	"unidentified"
 ]
 
-non_mtbc_mycobacteria = NTM + mycolicibacterium + mycolicibacterium + leprosy + other_mycobacteria
+non_mtbc_mycobacteria = NTM + mycolicibacterium + mycolicibacterium + leprosy + other_mycobacteria + sulfur_cave
 recommended_mycobacteria_regex = recommended_MTBC_regex + convert_to_regex(non_mtbc_mycobacteria)
 everything_mycobacterium_flavored = tuberculosis_complex_loose + non_mtbc_mycobacteria
 everything_mycobacterium_flavored_and_unknowns = everything_mycobacterium_flavored + unidentified_but_not_metagenomic

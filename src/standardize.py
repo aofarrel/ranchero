@@ -1,7 +1,7 @@
-import src.dictionaries.countries
-import src.dictionaries.host_species
-import src.dictionaries.sample_sources
-import src.dictionaries.tuberculosis_lineages
+import src.statics.countries
+import src.statics.host_species
+import src.statics.sample_sources
+import src.statics.tuberculosis_lineages
 
 def merge_addlID_columns():
 	pass

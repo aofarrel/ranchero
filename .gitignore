@@ -6,3 +6,5 @@ src/__pycache__/*
 src/dictionaries/__pycache__/*
 *.tsv
 tba5_per_sample.tsv
+*.pyc
+/2024-tba3-redo-compilations
