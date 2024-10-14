@@ -394,7 +394,7 @@ class NeighLib:
 		if len(run_matches) == 1:
 			return run_matches[0]
 	
-		raise ValueError("No valid index column found in polars_df!")
+		raise ValueError(f"No valid index column found in polars_df! Columns available: {polars_df.columns}")
 
 	@classmethod
 	def flatten_all_list_cols_as_much_as_possible(cls, polars_df, hard_stop=False, force_strings=False):
@@ -405,23 +405,30 @@ class NeighLib:
 		If force_strings, any remaining columns that are still lists are forced into strings.
 		"""
 		# unnest nested lists (recursive)
+		index_column = cls.get_index_column(polars_df)
 		polars_df = cls.flatten_nested_list_cols(polars_df)
-
+		number_of_columns = len(polars_df.schema)
+		
 		# flatten lists of only one value
 		for col, datatype in polars_df.schema.items():
-			#if cls.cfg.verbose: print(f"Flattening {col} with type {datatype}...")
+			logging.debug(f"Working on {col}")
+			assert number_of_columns == len(polars_df.schema)
 			if datatype == pl.List and datatype.inner != datetime.datetime:
+				if polars_df[col].drop_nulls().shape[0] == 0:
+					logging.warning(f"{col} has datatype {datatype} but seems empty or contains only nulls, skipping...")
+					continue
 				n_rows_prior = polars_df.shape[0]
 				exploded = polars_df.explode(col)
-				temp_df = exploded.unique()
+				if col not in exploded.columns:
+					raise ValueError(f"Column {col} not found after explosion")
+				temp_df = exploded.select([col, index_column]).drop_nulls().unique()
 				n_rows_now = temp_df.shape[0]
+				
 				if n_rows_now > n_rows_prior:
 					if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-						index_coumn = cls.get_index_column(polars_df)
-						non_unique_rows = exploded.filter(pl.col(index_coumn).is_duplicated()).select([index_coumn, col]).sort(index_coumn)
-						logging.debug(f"Non-unique values in column {col}:")
-						logging.debug(non_unique_rows)
-						logging.debug(f"Number of non-unique rows in {col}: {non_unique_rows.shape[0]}")
+						non_unique_rows = exploded.filter(pl.col(col).is_duplicated(keep=False)).sort(index_column)
+						logging.debug(f"Non-unique values in column {col}: {non_unique_rows}")
+						logging.debug(f"Number of non-unique rows in {col}: {non_unique_rows.shape[0]} wow!")
 					if col in kolumns.rts__list_to_float_via_sum:  # ignores temp_df
 						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
 						polars_df = polars_df.drop(col)
@@ -440,7 +447,7 @@ class NeighLib:
 						#####
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 				else:
-					polars_df = temp_df
+					polars_df = polars_df.with_columns(temp_df[col].alias(col))
 			elif datatype == pl.List and datatype.inner == datetime.date:
 				logging.warning(f"{col} is a list of datetimes. Datetimes break typical handling of lists, so this column will be left alone.")
 		if force_strings:
@@ -474,7 +481,7 @@ class NeighLib:
 		# this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
 		remaining_nests = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
 		if len(remaining_nests) != 0:
-			polars_df = flatten_nested_list(polars_df)
+			polars_df = flatten_nested_list_cols(polars_df)
 		return(polars_df)
 
 	@staticmethod

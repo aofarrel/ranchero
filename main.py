@@ -53,7 +53,7 @@ print(f"Removed yet more columns in {time.time() - start}s seconds")
 Ranchero.to_tsv(tba6, "tba6_no_nonsense.tsv")
 print(f"Wrote to disk in {time.time() - start}s seconds")
 
-Ranchero.NeighLib.print_col_where(tba6, 'sample_index', 'SAMN02360560')
+Ranchero.NeighLib.print_col_where(tba6, 'sample_index', 'SAMN02360560') # TODO: don't remember why this is here or why it is empty
 
 # merge with run-indexed data
 coscolla = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/coscolla_sans_weird.tsv"))

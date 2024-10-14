@@ -334,7 +334,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		if logging.root.level == logging.DEBUG:
 			logging.debug("End of merge")
 			NeighLib.print_col_where(merged_dataframe, "run_index", "SRR1013561")
-			NeighLib.print_col_where(merged_dataframe, "run_index", "SAMN02360560")
+			NeighLib.print_col_where(merged_dataframe, "sample_index", "SAMN02360560")
 
 	merged_dataframe.drop_nulls()
 
