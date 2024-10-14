@@ -16,32 +16,36 @@ print(f"Parsed tba6 file from bigquery in {time.time() - start} seconds")  # sho
 
 Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'patient_year_of_birth_sam')
 
+print("DEBUG: SRR21239817::timecode")
 Ranchero.NeighLib.print_col_where(tba6, 'acc', 'SRR21239817') # timecode
-Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768629') # vanishes
-Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768638') # vanishes
+#Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768629') # vanishes
+#Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768638') # vanishes
 
 start, tba6 = time.time(), Ranchero.drop_non_tb_columns(tba6)
 print(f"Dropped non-TB-related columns in {time.time() - start} seconds")
 start, tba6 = time.time(), Ranchero.NeighLib.drop_known_unwanted_columns(tba6)
 print(f"Dropped even more columns in {time.time() - start} seconds")
 
+print("DEBUG: SRR21239817::timecode")
 Ranchero.NeighLib.print_col_where(tba6, 'acc', 'SRR21239817') # timecode
-Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768629') # disappears
-Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768638') # disappears
+#Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768629') # vanishes
+#Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768638') # vanishes
 
 start, tba6 = time.time(), Ranchero.NeighLib.rancheroize_polars(tba6)
 
+print("DEBUG: SRR21239817::timecode")
 Ranchero.NeighLib.print_col_where(tba6, 'run_index', 'SRR21239817') # timecode
-Ranchero.NeighLib.print_col_where(tba6, 'run_index', 'ERR1768629') # vanishes
-Ranchero.NeighLib.print_col_where(tba6, 'run_index', 'ERR1768638') # vanishes
+#Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768629') # vanishes
+#Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768638') # vanishes
 
 start, tba6 = time.time(), Ranchero.classify_bacterial_family(Ranchero.rm_all_phages(tba6))
 #tba6 = Ranchero.rm_not_MTBC(tba6) # use rm_row_if_col_null if you want non-MTBC mycobacteria -- although the function doesn't seem to work anyway
 print(f"Removed phages and classified bacterial family in {time.time() - start} seconds")
 
+print("DEBUG: SRR21239817::timecode")
 Ranchero.NeighLib.print_col_where(tba6, 'run_index', 'SRR21239817') # timecode
-Ranchero.NeighLib.print_col_where(tba6, 'run_index', 'ERR1768629') # vanishes
-Ranchero.NeighLib.print_col_where(tba6, 'run_index', 'ERR1768638') # vanishes
+#Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768629') # vanishes
+#Ranchero.NeighLib.print_col_where(tba6, 'acc', 'ERR1768638') # vanishes
 
 start, tba6 = time.time(), Ranchero.drop_lowcount_columns(tba6)
 print(f"Removed yet more columns in {time.time() - start}s seconds")
@@ -85,7 +89,10 @@ Ranchero.to_tsv(merged, "./merged_by_run.tsv")
 
 # merged with sample-indexed data
 start, merged_by_sample = time.time(),Ranchero.run_index_to_sample_index(merged)
+print("DEBUG: SAMN02586062:: multiple sample accessions going into same data")
 Ranchero.NeighLib.print_col_where(merged, 'sample_index', 'SAMN02586062') # multiple run accessions going into same date
+
+print("DEBUG: SAMN33804027:: 1905")
 Ranchero.NeighLib.print_col_where(merged, 'sample_index', 'SAMN33804027') # 1905???
 
 print(f"Converted run indeces to sample indeces in {time.time() - start} seconds")
@@ -95,17 +102,16 @@ start, merged_by_sample = time.time(), Ranchero.hella_flat(merged_by_sample)
 print(f"Flattened samples in {time.time() - start} seconds")
 Ranchero.to_tsv(merged_by_sample, "./merged_per_sample.tsv")
 
-menardo = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/menardo_2018.csv", sep=","))
+menardo = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/menardo_stripped.tsv"))
 denylist = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/denylist_2024-07-23.tsv"))
-
+standford = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/max_standford_samples.tsv"))
+tba3 = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/tba3_redo.tsv"))
+july_2024_valid = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/2024-06-25-valid-samples-with-diff.tsv"))
 
 tree_metadata_v8_rc10 = Ranchero.from_tsv("./inputs/tree_metadata_v8_rc10.tsv")
 tree_metadata_v8_rc10 = Ranchero.NeighLib.rancheroize_polars(tree_metadata_v8_rc10)
 tree_metadata_v8_rc10.drop(['BioProject', 'isolation_source'])
 
-tba3 = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/tba3_redo.tsv"))
-standford = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/max_standford_samples.tsv"))
-july_2024_valid = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/2024-06-25-valid-samples-with-diff.tsv"))
 
 merged = Ranchero.merge_polars_dataframes(merged_by_sample, menardo, merge_upon="sample_index", right_name="menardo", put_right_name_in_this_column="source")
 merged = Ranchero.merge_polars_dataframes(merged, denylist, merge_upon="sample_index", right_name="denylist", put_right_name_in_this_column="source")
@@ -117,8 +123,8 @@ merged = Ranchero.merge_polars_dataframes(merged, tree_metadata_v8_rc10, merge_u
 
 
 
-merged = Ranchero.merge_polars_dataframes(merged, tba3, merge_upon="sample_index", right_name="tba3", put_right_name_in_this_column="source")
 merged = Ranchero.merge_polars_dataframes(merged, standford, merge_upon="sample_index", right_name="standford", put_right_name_in_this_column="source")
+merged = Ranchero.merge_polars_dataframes(merged, tba3, merge_upon="sample_index", right_name="tba3", put_right_name_in_this_column="source")
 merged = Ranchero.merge_polars_dataframes(merged, july_2024_valid, merge_upon="sample_index", right_name="july_2024_valid", put_right_name_in_this_column="source")
 
 print(merged.select(['date_collected', 'host', 'sample_index']))

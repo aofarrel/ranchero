@@ -60,10 +60,10 @@ class NeighLib:
 		)
 
 		#polars_df = polars_df.with_columns(
-		#	pl.when(filter_func(polars_df, **kwargs))
-		#	.then(pl.lit(true_value))
-		#	.otherwise(pl.lit(false_value))
-		#	.alias(new_column)
+		#   pl.when(filter_func(polars_df, **kwargs))
+		#   .then(pl.lit(true_value))
+		#   .otherwise(pl.lit(false_value))
+		#   .alias(new_column)
 		#)
 		print(polars_df.select(pl.col(new_column).value_counts()))
 
@@ -256,9 +256,13 @@ class NeighLib:
 				elif base_col in kolumns.merge__warn_then_pick_arbitrarily_to_keep_singular:
 					if fallback_on_left:
 						logging.debug(f"Not all values in {base_col} and {right_col} are the same, but we want to avoid creating lists. Falling back on {base_col}.")
+						if {base_col} == 'date_collected':
+							logging.debug(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col]))
 						polars_df = polars_df.drop(right_col)
 					else:
 						logging.debug(f"Not all values in {base_col} and {right_col} are the same, but we want to avoid creating lists. Falling back on {right_col}.")
+						if {base_col} == 'date_collected':
+							logging.debug(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col]))
 						polars_df = polars_df.drop(base_col).rename({right_col: base_col})
 				
 				elif base_col in kolumns.merge__sum:
@@ -306,7 +310,7 @@ class NeighLib:
 		return polars_df
 
 	@classmethod
-	def iteratively_merge_these_columns(cls, polars_df, merge_these_columns: list, equivalence_key=None):
+	def iteratively_merge_these_columns(cls, polars_df, merge_these_columns: list, equivalence_key=None, forbid_index_merge=False):
 		"""
 		Merges columns named in merged_these_columns.
 
@@ -345,7 +349,7 @@ class NeighLib:
 					logging.debug(f"Likely date column {column} has date type")
 
 		for key, value in kolumns.equivalence.items():
-			merge_these_columns = [v_col for v_col in value if v_col in polars_df.columns and not in sum(kolumns.merge__special_taxonomic_handling.values(), [])]
+			merge_these_columns = [v_col for v_col in value if v_col in polars_df.columns and v_col not in sum(kolumns.merge__special_taxonomic_handling.values(), [])]
 			if len(merge_these_columns) > 0:
 				logging.debug(f"Discovered {key} in column via {merge_these_columns}")
 
@@ -362,6 +366,35 @@ class NeighLib:
 					polars_df = polars_df.rename({merge_these_columns[0]: key})
 			
 		return polars_df
+
+	@classmethod
+	def get_index_column(cls, polars_df):
+		sample_indeces = kolumns.equivalence['sample_index']
+		sample_matches = [col for col in sample_indeces if col in polars_df.columns]
+		run_indeces = kolumns.equivalence['run_index']
+		run_matches = [col for col in run_indeces if col in polars_df.columns]
+
+		if len(sample_matches) > 1:
+			raise ValueError(f"Tried to find dataframe index, but there's multiple possible sample indeces: {sample_matches}")
+	
+		if len(sample_matches) == 1:
+			if len(run_matches) > 1:
+				raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces (indicates failed run->sample conversion):  {run_matches}")
+			
+			if len(run_matches) == 1:
+				if isinstance(run_indeces, list):
+					return sample_matches[0]
+				elif len(set(sample_indeces)) == len(sample_indeces):  # check samples are unique
+					return sample_matches[0]
+				else:
+					return run_matches[0]
+			
+			return sample_matches[0]  # no run accessions
+
+		if len(run_matches) == 1:
+			return run_matches[0]
+	
+		raise ValueError("No valid index column found in polars_df!")
 
 	@classmethod
 	def flatten_all_list_cols_as_much_as_possible(cls, polars_df, hard_stop=False, force_strings=False):
@@ -383,14 +416,12 @@ class NeighLib:
 				temp_df = exploded.unique()
 				n_rows_now = temp_df.shape[0]
 				if n_rows_now > n_rows_prior:
-
-					non_unique_rows = exploded.filter(pl.col("sample_index").is_duplicated()).select(["sample_index", col])
-					logging.debug(f"Non-unique values in column {col}:")
-					logging.debug(non_unique_rows)
-					logging.debug(f"Number of non-unique rows in {col}: {non_unique_rows.shape[0]}")
-
-
-
+					if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+						index_coumn = cls.get_index_column(polars_df)
+						non_unique_rows = exploded.filter(pl.col(index_coumn).is_duplicated()).select([index_coumn, col]).sort(index_coumn)
+						logging.debug(f"Non-unique values in column {col}:")
+						logging.debug(non_unique_rows)
+						logging.debug(f"Number of non-unique rows in {col}: {non_unique_rows.shape[0]}")
 					if col in kolumns.rts__list_to_float_via_sum:  # ignores temp_df
 						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
 						polars_df = polars_df.drop(col)
@@ -431,7 +462,7 @@ class NeighLib:
 
 		# This version seems to breaking the schema:
 		#polars_df = polars_df.with_columns(
-		#	[pl.col(x).list.eval(pl.lit("'") + pl.element() + pl.lit('"')).list.join(",").alias(x) for x, y in polars_df.schema.items() if isinstance(y, pl.List) and isinstance(y.inner, pl.List)]
+		#   [pl.col(x).list.eval(pl.lit("'") + pl.element() + pl.lit('"')).list.join(",").alias(x) for x, y in polars_df.schema.items() if isinstance(y, pl.List) and isinstance(y.inner, pl.List)]
 		#)
 
 		nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
@@ -542,7 +573,7 @@ class NeighLib:
 		try:
 			### DEBUG ###
 			debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})
-			logging.debug("Type information: {debug}")
+			logging.debug(f"Non-string types, and what they converted to: {debug}")
 			df_to_write.write_csv(path, separator='\t', include_header=True, null_value='')
 			logging.info(f"Wrote dataframe to {path}")
 		except pl.exceptions.ComputeError:

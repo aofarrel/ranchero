@@ -152,6 +152,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 			#left = left.drop(put_right_name_in_this_column)
 			#left = left.rename({"concat_list": put_right_name_in_this_column})
 			NeighLib.print_col_where(left, "run_index", "SRR1013561")
+			NeighLib.print_col_where(left, "sample_index", "SAMN02360560")
 			NeighLib.print_col_where(left, "run_index", "ERR1023252")
 			
 		right = right.with_columns(pl.lit(right_name).alias(put_right_name_in_this_column))
@@ -192,11 +193,11 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		if set(left.columns) == set(right.columns):
 			logging.debug("Set of left and right columns match")
 			initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-			really_merged = NeighLib.merge_right_columns(initial_merge, quick_cast=False)
+			really_merged = NeighLib.merge_right_columns(initial_merge)
 		else:
 			logging.debug("Set of left and right columns DO NOT match")
 			initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-			really_merged = NeighLib.merge_right_columns(initial_merge, quick_cast=False)
+			really_merged = NeighLib.merge_right_columns(initial_merge)
 		
 		# update left values and right values for later debugging
 		left_values, right_values = nullfilled_left[merge_upon], nullfilled_right[merge_upon]
@@ -324,7 +325,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 
 #		initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 		initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-		really_merged = NeighLib.merge_right_columns(initial_merge, quick_cast=False)
+		really_merged = NeighLib.merge_right_columns(initial_merge)
 
 		really_merged_no_dupes = really_merged.unique()
 		logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")
@@ -333,6 +334,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 		if logging.root.level == logging.DEBUG:
 			logging.debug("End of merge")
 			NeighLib.print_col_where(merged_dataframe, "run_index", "SRR1013561")
+			NeighLib.print_col_where(merged_dataframe, "run_index", "SAMN02360560")
 
 	merged_dataframe.drop_nulls()
 

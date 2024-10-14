@@ -5,9 +5,9 @@ from numpy import nan as nan
 species = {
 	'African Elephant': ['Loxodonta sp.', 3, "African elephant"],
 	'Antelope Cervicapra': ['Antilope cervicapra', 3, "blackbuck"],
-	'antelope': '"antelope"',
-	'antelope zoo': '"antelope"',
-	'antilope zoo': '"antelope"',
+	'antelope': [nan, 3, "antelope"],
+	'antelope zoo': [nan, 3, "antelope"],
+	'antilope zoo': [nan, 3, "antelope"],
 	'Antilope cervicapra blackbuck': ['Antilope cervicapra', 3, "blackbuck"],
 	'Axis axis': ['Axis axis', 3, "chital deer"],
 
@@ -18,7 +18,7 @@ species = {
 	'Bison bison athabascae wood bison': ['Bison bison athabascae', 3, "wood bison"],
 	'Bison bonasus': ['Bison bonasus', 3, "European bison"],
 	'Bison bonasus European bison': ['Bison bonasus', 3, "European bison"],
-	'Body organs': nan, # many of these seem to be PRJNA643892 which is 'multispecies'
+	'Body organs': [nan, 1, nan], # many of these seem to be PRJNA643892 which is 'multispecies'
 	'Bobcat': ['Lynx rufus', 2, "bobcat"],
 	'Bos gaurus': ['Bos gaurus', 3, "guar"],
 	'Bos taurus': ['Bos taurus', 3, "domestic cattle"],
@@ -51,7 +51,7 @@ species = {
 	'Cow': ['Bos taurus', 2, "domestic cattle"],
 	'COW': ['Bos taurus', 2, "domestic cattle"],
 	'Coyote': ['Canis latrans', 3, "coyote"],
-	'Culture': nan,
+	'Culture': [nan, 1, nan],
 	
 	'Dama dama': ['Dama dama', 3, "fallow deer"],
 	'Dassie': ['Procavia capensis', 3, "dassie"],
@@ -92,7 +92,7 @@ species = {
 	'Human host': ['Homo sapiens', 3, "human"],
 	'human': ['Homo sapiens', 3, "human"],
 	'human patient': ['Homo sapiens', 3, "human"],
-	'Human/Culture': nan,
+	'Human/Culture': [nan, 1, nan],
 	'Hydrochoerus hydrochaeris': ['Hydrochoerus hydrochaeris', 3, "capybara"],
 	'Hydrochoerus hydrochaeris capybara': ['Hydrochoerus hydrochaeris', 3, "capybara"],
 	
@@ -101,9 +101,9 @@ species = {
 	'Kobus ellipsiprymnus': ['Kobus ellipsiprymnus', 3, "waterbuck"],
 	'Kobus ellipsiprymnus waterbuck': ['Kobus ellipsiprymnus', 3, "waterbuck"],
 	
-	'Laboratory': nan,
-	'laboratory': nan,
-	'Lab strain': nan,
+	'Laboratory': [nan, 2, 'lab strain'],
+	'laboratory': [nan, 2, 'lab strain'],
+	'Lab strain': [nan, 2, 'lab strain'],
 	'Lama glama': ['Lama glama', 3, "llama"],
 	'Loxodonta': ['Loxodonta sp.', 2,"African elephant"],
 	'Lutra lutra': ['Lutra lutra', 3, "Eurasian otter"],
@@ -121,9 +121,9 @@ species = {
 	'Mustela sp.': ['Mustela sp.', 2, "ferret"],
 	'Mustela sp. ferret': ['Mustela sp.', 2, "ferret"],
 	'Mustela erminea': ['Mustela erminea', 3, "stoat"],
-	'Mycobacterium tuberculosis': nan,
+	'Mycobacterium tuberculosis': [nan, 1, nan],
 	
-	'NAN': nan,
+	'NAN': [nan, 1, nan],
 	'non human primate': [nan, 3, "non-human primate"],
 	'non-human primate': [nan, 3, "non-human primate"],
 	
@@ -166,10 +166,10 @@ species = {
 	'Sus scrofa domesticus': ['Sus scrofa domesticus', 3, "domestic pig"],
 	'Syncerus caffer': ['Syncerus caffer', 3, "African buffalo"],
 	
-	'Tissue: Lymph nodes': nan,
+	'Tissue: Lymph nodes': [nan, 1, nan],
 	'Tragelaphus strepsiceros': ['Tragelaphus strepsiceros', 3, "greater kudu"],
 	'Tragelaphus strepsiceros greater kudu': ['Tragelaphus strepsiceros', 3, "greater kudu"],
-	'Tuberculosis': nan,
+	'Tuberculosis': [nan, 1, nan],
 	
 	'Varecia variegata subcincta': ['Varecia variegata subcincta', 3, "white-belted black-and-white ruffed lemur"],
 	'Vulpes vulpes': ['Vulpes vulpes', 3, "red fox"],

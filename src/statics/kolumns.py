@@ -78,7 +78,7 @@ merge__warn_then_pick_arbitrarily_to_keep_singular = [
 	'organism_common', 
 	'release_date']
 merge__special_taxonomic_handling = {key: value for key, value in equivalence.items() if key in ['genotype', 'lineage', 'organism', 'strain']}
-all_taxoncore_columns = sum(kolumns.merge__special_taxonomic_handling.values(), [])
+all_taxoncore_columns = sum(merge__special_taxonomic_handling.values(), [])
 
 # not used, but I'm leaving this here for people who want it
 equivalence_extended = {
