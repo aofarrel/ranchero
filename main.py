@@ -90,13 +90,13 @@ Ranchero.to_tsv(merged, "./merged_by_run.tsv")
 # merged with sample-indexed data
 start, merged_by_sample = time.time(),Ranchero.run_index_to_sample_index(merged)
 print("DEBUG: SAMN02586062:: multiple sample accessions going into same data")
-Ranchero.NeighLib.print_col_where(merged, 'sample_index', 'SAMN02586062') # multiple run accessions going into same date
+Ranchero.NeighLib.print_col_where(merged_by_sample, 'sample_index', 'SAMN02586062') # multiple run accessions going into same date
 
 print("DEBUG: SAMN33804027:: 1905")
-Ranchero.NeighLib.print_col_where(merged, 'sample_index', 'SAMN33804027') # 1905???
+Ranchero.NeighLib.print_col_where(merged_by_sample, 'sample_index', 'SAMN33804027') # 1905???
 
 print(f"Converted run indeces to sample indeces in {time.time() - start} seconds")
-Ranchero.to_tsv(merged_by_sample, "./merged_per_sample_not_flat.tsv")
+#Ranchero.to_tsv(merged_by_sample, "./merged_per_sample_not_flat.tsv")
 
 start, merged_by_sample = time.time(), Ranchero.hella_flat(merged_by_sample)
 print(f"Flattened samples in {time.time() - start} seconds")

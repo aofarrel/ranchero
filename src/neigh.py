@@ -334,6 +334,12 @@ class NeighLib:
 			logging.debug(f"merge_these_columns is {merge_these_columns}, which we will pass in to recurse")
 			polars_df = cls.iteratively_merge_these_columns(polars_df, merge_these_columns)
 		return polars_df.rename({left_col: equivalence_key}) if equivalence_key is not None else polars_df
+
+	def get_rows_where_list_col_more_than_one_value(polars_df, list_col, force_uniq=False):
+		assert polars_df.schema(list_col) == pl.List
+		if force_uniq:
+			polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
+		return polars_df.filter(pl.col(list_col).list.len() > 1)
 	
 	@classmethod
 	def rancheroize_polars(cls, polars_df):
@@ -404,14 +410,14 @@ class NeighLib:
 
 		If force_strings, any remaining columns that are still lists are forced into strings.
 		"""
+
 		# unnest nested lists (recursive)
-		index_column = cls.get_index_column(polars_df)
 		polars_df = cls.flatten_nested_list_cols(polars_df)
 		number_of_columns = len(polars_df.schema)
-		
-		# flatten lists of only one value
+
+		index_column = cls.get_index_column(polars_df)
 		for col, datatype in polars_df.schema.items():
-			logging.debug(f"Working on {col}")
+			logging.debug(f"Evaulating on {col} of type {datatype}")
 			assert number_of_columns == len(polars_df.schema)
 			if datatype == pl.List and datatype.inner != datetime.datetime:
 				if polars_df[col].drop_nulls().shape[0] == 0:
@@ -421,30 +427,55 @@ class NeighLib:
 				exploded = polars_df.explode(col)
 				if col not in exploded.columns:
 					raise ValueError(f"Column {col} not found after explosion")
-				temp_df = exploded.select([col, index_column]).drop_nulls().unique()
+				if col != index_column:
+					temp_df = exploded.select([col, index_column]).drop_nulls().unique()
+				else:
+					temp_df = exploded.select([col]).drop_nulls().unique()
 				n_rows_now = temp_df.shape[0]
-				
+
+				filtered_df = polars_df.filter(
+							pl.col(col).list.eval(pl.element().n_unique()) > 1
+						)
+				print(filtered_df)
+
+
 				if n_rows_now > n_rows_prior:
 					if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
 						non_unique_rows = exploded.filter(pl.col(col).is_duplicated()).sort(index_column)
-						logging.debug(f"Non-unique values in column {col}: {non_unique_rows}")
-						logging.debug(f"Number of non-unique rows in {col}: {non_unique_rows.shape[0]} wow!")
+						logging.debug(f"-->Non-unique values in column {col}: {non_unique_rows}")
+						logging.debug(f"-->Number of non-unique rows in {col}: {non_unique_rows.shape[0]}")
+						
 					if col in kolumns.rts__list_to_float_via_sum:  # ignores temp_df
-						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
+						logging.debug(f"-->Summing {col}")
+						if datatype.inner == pl.String:
+							polars_df = polars_df.with_columns(
+								pl.col(col).list.eval(
+									pl.when(pl.element().is_not_null())
+									.then(pl.element().cast(pl.Int32))
+									.otherwise(None)
+								).alias(f"{col}_sum")
+							)
+						else:
+							polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
 						polars_df = polars_df.drop(col)
 					elif col in kolumns.rts__keep_as_set:  # because we exploded with unique(), we now have a set (sort of), but I think this is better than trying to do a column merge
+						logging.debug(f"-->Handling {col} as a set")
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 					elif col in kolumns.rts__warn_if_list_with_unique_values:
 						logging.warning(f"Expected {col} to only have one non-null per sample, but that's not the case. Will keep as a set.")
-						#####
+						
+						#filtered_df = polars_df.filter(
+						#	pl.col(col).list.eval(pl.element().n_unique()) > 1
+						#)
+						#NeighLib.super_print_pl(filtered_df.select([index_column, col]), "more than one non-null per sample")
+						
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 						if hard_stop:
 							exit(1)
 						else:
 							continue
 					else:
-						logging.warning(f"Not sure how to handle {col}. Will treat it as a set.")
-						#####
+						logging.warning(f"-->Not sure how to handle {col}, will treat it as a set")
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 				else:
 					# all list columns are either one element, or effectively one element after dropping nulls
@@ -458,6 +489,8 @@ class NeighLib:
 					polars_df = polars_df.with_columns()
 			elif datatype == pl.List and datatype.inner == datetime.date:
 				logging.warning(f"{col} is a list of datetimes. Datetimes break typical handling of lists, so this column will be left alone.")
+			else:
+				logging.debug(f"-->Leaving {col} as-is")
 		if force_strings:
 			polars_df = cls.stringify_all_list_columns(polars_df)
 		return polars_df

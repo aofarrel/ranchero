@@ -48,9 +48,9 @@ assert len(set(sum(equivalence.values(), []))) == len(sum(equivalence.values(), 
 
 
 # when going from run-level to sample-level, how should we treat these columns?
-rts__list_to_float_via_sum = ['mbytes', 'mybytes', 'bases', 'bytes']
-rts__drop = ['release_date', 'create_date', 'library_name', 'avgspotlen', 'datastore_region', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
-rts__keep_as_list = ['librarylayout', 'libraryselection', 'librarysource', 'instrument', 'platform', 'assay_type', 'run_file_version', 'isolate_info'] # non-unique values will be kept
+rts__list_to_float_via_sum = ['bases', 'bytes']
+rts__drop = ['release_date', 'create_date', 'library_name', 'avgspotlen', 'datastore_region', 'mbytes', 'mybytes', 'run_file_version', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset, and mbytes seems inconsistent with bytes
+rts__keep_as_list = ['librarylayout', 'libraryselection', 'librarysource', 'instrument', 'platform', 'assay_type', 'primary_search', 'isolate_info'] # non-unique values will be kept
 rts__keep_as_set = ['center_name', 'center_name_insdc', 'BioProject', 'datastore_filetype', 'datastore_provider', 'primary_search', 'run_index', 'SRX_id', 'sra_study'] # non-unique values will be dropped
 rts__warn_if_list_with_unique_values = [
 	'isolation_source',

@@ -175,12 +175,15 @@ class FileReader():
 			pass
 		return exploded
 
+	def get_rows_where_
 
 
-	def run_to_sample_index(self, polars_df, upon='sample_index'):
+
+	def run_to_sample_index(self, polars_df, upon='sample_index', try_to_be_clever=True):
 		"""
 		Flattens an input file using polar. This is designed to essentially turn run accession indexed dataframes
 		into BioSample-indexed dataframes. This will typically create columns of type list.
+		REQUIRES run index to be called "run_index" and sample index to be called "sample_index" exactly.
 
 		run_index | sample_index | foo
 		-------------------------------
@@ -196,18 +199,57 @@ class FileReader():
 		[SRR126]        | SAMN3        | [bar]
 		"""
 		assert 'run_index' in polars_df.columns
+		assert 'sample_index' in polars_df.columns
 		logging.debug(f"Flattening {upon}s...")
-		not_flat = NeighLib.rancheroize_polars(polars_df)
-		NeighLib.print_col_where(not_flat, upon, "SAMN41453963")
-		other_columns = [col for col in not_flat.columns if col != upon]
-		grouped_df = (
-			polars_df
-			.group_by(upon)
-			.agg([
-				pl.concat_list("run_index").alias("run_index"),
-				*[pl.concat_list(col).alias(col) for col in polars_df.columns if col not in ["run_index", "sample_index"]]
+
+		polars_df = NeighLib.rancheroize_polars(polars_df)
+		NeighLib.print_col_where(polars_df, upon, "SAMN41453963")
+		other_columns = [col for col in polars_df.columns if col not in ["run_index", "sample_index"]]
+
+		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
+		if try_to_be_clever:
+			listbusters, listmakers, listexisters = [], [], [col for col, dtype in polars_df.schema.items() if isinstance(dtype, pl.List)]
+			temp_no_stringlist_df = polars_df.select([
+				pl.col(col) for col, dtype in polars_df.schema.items() 
+				if not (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8) # for some reason n_unique works on lists of integers
 			])
-		)
+			#assert not set(temp_no_stringlist_df.columns) & set(listexisters)
+			
+			df_agg_nunique = temp_no_stringlist_df.group_by("sample_index").n_unique()
+			for other_column in other_columns:
+				if polars_df.schema[other_column] is not pl.List and other_column in df_agg_nunique.columns:
+					if ((df_agg_nunique.select(pl.col(other_column) == 1).to_series()).all()):
+						listbusters.append(other_column)
+					else:
+						listmakers.append(other_column)
+			logging.debug(f"listbusters: {listbusters}")
+			logging.debug(f"listmakers: {listmakers}")
+			logging.debug(f"listexisters: {listexisters}")
+
+			for already_list_col in listexisters:
+				logging.debug(f"These are already string-lists before grouping: {polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']).head(15)}")
+
+			grouped_df = (
+				polars_df
+				.group_by('sample_index')
+				.agg([
+					pl.concat_list("run_index").alias("run_index"),
+					*[
+						(pl.first(col).alias(col) if col in listbusters else pl.concat_list(col).alias(col))
+						for col in other_columns
+					]
+				])
+			)
+
+		else:
+			grouped_df = (
+				polars_df
+				.group_by('sample_index')
+				.agg([
+					pl.concat_list("run_index").alias("run_index"),
+					*[pl.concat_list(col).alias(col) for col in other_columns]
+				])
+			)
 		NeighLib.print_col_where(grouped_df, upon, "SAMN41453963")
 		flat = NeighLib.flatten_nested_list_cols(grouped_df)
 		NeighLib.print_col_where(flat, upon, "SAMN41453963")
