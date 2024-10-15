@@ -49,7 +49,7 @@ class FileReader():
 
 		dataframe = pl.read_csv(tsv, separator=sep, try_parse_dates=immediate_try_parse_dates, null_values=null_values, ignore_errors=ignore_polars_read_errors)
 		if self.cfg.immediate_biosample_merge:
-			dataframe = polars_flatten(dataframe, upon='BioSample', keep_all_columns=False)
+			dataframe = run_to_sample_index(dataframe, upon='BioSample', keep_all_columns=False)
 		return dataframe
 
 	def fix_bigquery_file(self, bq_file):
@@ -92,7 +92,7 @@ class FileReader():
 		if normalize_attributes and "attributes" in bq_raw.columns:  # if column doesn't exist, return false
 			current = self.polars_fix_attributes_and_json_normalize(bq_raw)
 		if self.cfg.immediate_biosample_merge:
-			current = self.polars_flatten(current, upon='BioSample', keep_all_columns=False)
+			current = self.run_to_sample_index(current, upon='BioSample', keep_all_columns=False)
 		return current
 
 
@@ -125,11 +125,11 @@ class FileReader():
 		return bq_jnorm
 
 	def polars_run_to_sample(self, polars_df):
-		"""Public wrapper for polars_flatten()"""
+		"""Public wrapper for run_to_sample_index()"""
 		if 'sample_index' not in polars_df.columns:
 			logging.error("Could not find a sample-based column to make as the index!")
 			exit(1)
-		return self.polars_flatten(polars_df, upon='sample_index')
+		return self.run_to_sample_index(polars_df, upon='sample_index')
 
 	def get_not_unique_in_col(self, polars_df, column):
 		return polars_df.filter(pl.col(column).is_duplicated())
@@ -177,23 +177,41 @@ class FileReader():
 
 
 
-	def polars_flatten(self, polars_df, upon='sample_index', keep_all_columns=False):
+	def run_to_sample_index(self, polars_df, upon='sample_index'):
 		"""
-		Flattens an input file using polars group_by().agg(). This is designed to essentially turn run accession indexed dataframes
-		into BioSample-indexed dataframes. Assumes columns are already rancheroized.
+		Flattens an input file using polar. This is designed to essentially turn run accession indexed dataframes
+		into BioSample-indexed dataframes. This will typically create columns of type list.
+
+		run_index | sample_index | foo
+		-------------------------------
+		SRR123    | SAMN1        | bar
+		SRR124    | SAMN1        | buzz
+		SRR125    | SAMN2        | bizz
+		SRR126    | SAMN3        | bar
+					 ⬇️
+		run_index       | sample_index | foo
+		---------------------------------------
+		[SRR123,SRR124] | SAMN1        | [bar, buzz]
+		[SRR125]        | SAMN2        | [bizz]
+		[SRR126]        | SAMN3        | [bar]
 		"""
+		assert 'run_index' in polars_df.columns
 		logging.debug(f"Flattening {upon}s...")
-
-		not_flat = polars_df
-		if self.cfg.verbose:
-			non_uniques = not_flat.group_by(upon).count().filter(pl.col("count") > 1)[upon]
-			number_non_unique = len(non_uniques)
-			logging.info(f"Found {number_non_unique} non-unique values for {upon}: {non_uniques}")
-
-		more_flat = NeighLib.rancheroize_polars(not_flat)
-		
-		NeighLib.print_col_where(more_flat, upon, "SAMN41453963")
-		return more_flat
+		not_flat = NeighLib.rancheroize_polars(polars_df)
+		NeighLib.print_col_where(not_flat, upon, "SAMN41453963")
+		other_columns = [col for col in not_flat.columns if col != upon]
+		grouped_df = (
+			polars_df
+			.group_by(upon)
+			.agg([
+				pl.concat_list("run_index").alias("run_index"),
+				*[pl.concat_list(col).alias(col) for col in polars_df.columns if col not in ["run_index", "sample_index"]]
+			])
+		)
+		NeighLib.print_col_where(grouped_df, upon, "SAMN41453963")
+		flat = NeighLib.flatten_nested_list_cols(grouped_df)
+		NeighLib.print_col_where(flat, upon, "SAMN41453963")
+		return flat
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search=True):
 		"""

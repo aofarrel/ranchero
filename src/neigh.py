@@ -426,7 +426,7 @@ class NeighLib:
 				
 				if n_rows_now > n_rows_prior:
 					if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-						non_unique_rows = exploded.filter(pl.col(col).is_duplicated(keep=False)).sort(index_column)
+						non_unique_rows = exploded.filter(pl.col(col).is_duplicated()).sort(index_column)
 						logging.debug(f"Non-unique values in column {col}: {non_unique_rows}")
 						logging.debug(f"Number of non-unique rows in {col}: {non_unique_rows.shape[0]} wow!")
 					if col in kolumns.rts__list_to_float_via_sum:  # ignores temp_df
@@ -447,7 +447,15 @@ class NeighLib:
 						#####
 						polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 				else:
-					polars_df = polars_df.with_columns(temp_df[col].alias(col))
+					# all list columns are either one element, or effectively one element after dropping nulls
+					polars_df = polars_df.with_columns(pl.col(col).list.first().alias(col))
+					# this creates a one column df
+					#polars_df = polars_df.with_columns(temp_df[col].alias(col))
+					# this doesn't error but it's hella slow and I don't trust it
+					#unique_values = temp_df[col].to_list()
+					#polars_df = polars_df.with_columns(
+					#	pl.when(pl.col(col).is_null()).then(None).otherwise(pl.lit(unique_values)).alias(col)
+					polars_df = polars_df.with_columns()
 			elif datatype == pl.List and datatype.inner == datetime.date:
 				logging.warning(f"{col} is a list of datetimes. Datetimes break typical handling of lists, so this column will be left alone.")
 		if force_strings:
