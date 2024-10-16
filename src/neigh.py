@@ -25,7 +25,7 @@ class NeighLib:
 	def nullify(cls, polars_df):
 		return polars_df.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
 
-	def print_col_where(polars_df, column="source", equals="Coscolla", cols_of_interest=['acc', 'run_index', 'source', 'literature_lineage', 'Biosample', 'sample_index', 'concat_list']+kolumns.equivalence['date_collected']):
+	def print_col_where(polars_df, column="source", equals="Coscolla", cols_of_interest=['acc', 'run_index', 'source', 'literature_lineage', 'Biosample', 'sample_index', 'concat_list', 'coscolla_lineage']+kolumns.equivalence['date_collected']):
 		if column not in polars_df.columns:
 			logging.warning(f"Tried to print where {column} equals {equals}, but that column isn't even in the dataframe!")
 		else:
@@ -251,7 +251,7 @@ class NeighLib:
 						polars_df = polars_df.drop(base_col).rename({right_col: base_col})
 				elif base_col in kolumns.merge__error:
 					logging.error("Found conflicting metadata in columns that should not have conflicting metadata!")
-					NeighLib.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col]), f"conflicts")
+					cls.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col]), f"conflicts")
 					exit(1)
 				elif base_col in kolumns.merge__warn_then_pick_arbitrarily_to_keep_singular:
 					if fallback_on_left:
@@ -335,16 +335,20 @@ class NeighLib:
 			polars_df = cls.iteratively_merge_these_columns(polars_df, merge_these_columns)
 		return polars_df.rename({left_col: equivalence_key}) if equivalence_key is not None else polars_df
 
-	def get_rows_where_list_col_more_than_one_value(polars_df, list_col, force_uniq=False):
-		assert polars_df.schema(list_col) == pl.List
+	@classmethod
+	def get_rows_where_list_col_more_than_one_value(cls, polars_df, list_col, force_uniq=False):
+		assert polars_df.schema[list_col] == pl.List
 		if force_uniq:
-			polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
-		return polars_df.filter(pl.col(list_col).list.len() > 1)
+			polars_df = polars_df.with_columns(pl.col(list_col).list.unique().alias(f"{list_col}_uniq"))
+			return polars_df.filter(pl.col(f"{list_col}_uniq").list.len() > 1)
+		else:
+			return polars_df.filter(pl.col(list_col).list.len() > 1)
 	
 	@classmethod
 	def rancheroize_polars(cls, polars_df):
 		polars_df = cls.drop_known_unwanted_columns(polars_df)
 		polars_df = cls.nullify(polars_df)
+		polars_df = cls.drop_null_columns(polars_df)
 
 		# check date columns, our arch-nemesis
 		for column in polars_df.columns:
@@ -418,34 +422,69 @@ class NeighLib:
 		index_column = cls.get_index_column(polars_df)
 		for col, datatype in polars_df.schema.items():
 			logging.debug(f"Evaulating on {col} of type {datatype}")
-			assert number_of_columns == len(polars_df.schema)
+			if col in kolumns.rts__drop:
+				polars_df.drop(col)
+				logging.debug(f"-->Dropped {col} per kolumns rules")
+			assert number_of_columns == len(polars_df.schema), f"There should be {number_of_columns} columns, but there's now {len(polars_df.schema)}"
 			if datatype == pl.List and datatype.inner != datetime.datetime:
+				
 				if polars_df[col].drop_nulls().shape[0] == 0:
 					logging.warning(f"{col} has datatype {datatype} but seems empty or contains only nulls, skipping...")
 					continue
+
+				if col in kolumns.rts__list_to_float_via_sum:
+					logging.debug(f"-->Summing {col}")
+					if datatype.inner == pl.String:
+						polars_df = polars_df.with_columns(
+							pl.col(col).list.eval(
+								pl.when(pl.element().is_not_null())
+								.then(pl.element().cast(pl.Int32))
+								.otherwise(pl.lit("null"))
+							).alias(f"{col}_sum")
+						)
+					else:
+						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
+					polars_df = polars_df.drop(col)
+					continue
+				elif col in kolumns.rts__keep_as_list:
+					logging.debug(f"-->Handling {col} as a list (ie doing nothing)")
+					continue
+				
 				n_rows_prior = polars_df.shape[0]
 				exploded = polars_df.explode(col)
-				if col not in exploded.columns:
-					raise ValueError(f"Column {col} not found after explosion")
+				assert col in exploded.columns
 				if col != index_column:
-					temp_df = exploded.select([col, index_column]).drop_nulls().unique()
+					exploded = exploded.select([col, index_column]).drop_nulls().unique()
 				else:
-					temp_df = exploded.select([col]).drop_nulls().unique()
-				n_rows_now = temp_df.shape[0]
+					exploded = exploded.select([col]).drop_nulls().unique()
+				n_rows_now = exploded.shape[0]
 
-				filtered_df = polars_df.filter(
-							pl.col(col).list.eval(pl.element().n_unique()) > 1
-						)
-				print(filtered_df)
 
+				if col in ['run_date_run', 'pacbio_rs_binding_kit_barcode_exp', 'pacbio_rs_binding_kit_barcode', 'coscolla_lineage', 'coscolla_sublineage']:
+					debug_print = cls.get_rows_where_list_col_more_than_one_value(polars_df, col, False)
+					cls.super_print_pl(debug_print.select([index_column, col]).head(15), f"polars_df, non-uniq (true len {len(debug_print)})")
+
+
+				if col not in kolumns.rts__keep_as_list and col not in kolumns.rts__drop and col not in kolumns.rts__list_to_float_via_sum:
+					logging.debug(f"-->Treating {col} as a set")
+					polars_df = polars_df.with_columns(pl.col(col).list.unique())
+					# check if this can now be turned into not-a-list
+					if len(cls.get_rows_where_list_col_more_than_one_value(polars_df, col, False)) == 0:
+						logging.debug(f"-->After removing non-uniques, we can turn {col} into single-value")
+						polars_df = polars_df.with_columns(pl.col(col).list.first().alias(col))
+					else:
+						logging.debug(f"-->After removing non-uniques, we still have {len(cls.get_rows_where_list_col_more_than_one_value(polars_df, col, False))} multi-element lists in {col}")
+						debug_print = cls.get_rows_where_list_col_more_than_one_value(polars_df, col, False)
+						cls.super_print_pl(debug_print.select([index_column, f"{col}"]).head(10), f"polars_df, after set treatment (true len {len(debug_print)})")
+					continue
 
 				if n_rows_now > n_rows_prior:
-					if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-						non_unique_rows = exploded.filter(pl.col(col).is_duplicated()).sort(index_column)
-						logging.debug(f"-->Non-unique values in column {col}: {non_unique_rows}")
-						logging.debug(f"-->Number of non-unique rows in {col}: {non_unique_rows.shape[0]}")
+					# not sure why, but this does not seem to work as expected
+					#non_unique_rows = exploded.filter(pl.col(col).is_duplicated()).sort(index_column)
+					#logging.debug(f"-->Non-unique values in column {col}: {non_unique_rows}")
+					#logging.debug(f"-->Number of non-unique rows in {col}: {non_unique_rows.shape[0]}")
 						
-					if col in kolumns.rts__list_to_float_via_sum:  # ignores temp_df
+					if col in kolumns.rts__list_to_float_via_sum:
 						logging.debug(f"-->Summing {col}")
 						if datatype.inner == pl.String:
 							polars_df = polars_df.with_columns(
@@ -486,7 +525,6 @@ class NeighLib:
 					#unique_values = temp_df[col].to_list()
 					#polars_df = polars_df.with_columns(
 					#	pl.when(pl.col(col).is_null()).then(None).otherwise(pl.lit(unique_values)).alias(col)
-					polars_df = polars_df.with_columns()
 			elif datatype == pl.List and datatype.inner == datetime.date:
 				logging.warning(f"{col} is a list of datetimes. Datetimes break typical handling of lists, so this column will be left alone.")
 			else:

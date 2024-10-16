@@ -175,10 +175,6 @@ class FileReader():
 			pass
 		return exploded
 
-	def get_rows_where_
-
-
-
 	def run_to_sample_index(self, polars_df, upon='sample_index', try_to_be_clever=True):
 		"""
 		Flattens an input file using polar. This is designed to essentially turn run accession indexed dataframes
@@ -208,7 +204,7 @@ class FileReader():
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		if try_to_be_clever:
-			listbusters, listmakers, listexisters = [], [], [col for col, dtype in polars_df.schema.items() if isinstance(dtype, pl.List)]
+			listbusters, listmakers, listexisters = [], [], [col for col, dtype in polars_df.schema.items() if (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8)]
 			temp_no_stringlist_df = polars_df.select([
 				pl.col(col) for col, dtype in polars_df.schema.items() 
 				if not (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8) # for some reason n_unique works on lists of integers
@@ -227,7 +223,8 @@ class FileReader():
 			logging.debug(f"listexisters: {listexisters}")
 
 			for already_list_col in listexisters:
-				logging.debug(f"These are already string-lists before grouping: {polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']).head(15)}")
+				logging.debug(f"Listexister {already_list_col}:")
+				logging.debug(polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']).head(15))
 
 			grouped_df = (
 				polars_df
