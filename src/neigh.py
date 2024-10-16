@@ -27,11 +27,21 @@ class NeighLib:
 
 	def print_col_where(polars_df, column="source", equals="Coscolla", cols_of_interest=['acc', 'run_index', 'source', 'literature_lineage', 'Biosample', 'sample_index', 'concat_list', 'coscolla_lineage']+kolumns.equivalence['date_collected']):
 		if column not in polars_df.columns:
-			logging.warning(f"Tried to print where {column} equals {equals}, but that column isn't even in the dataframe!")
+			logging.warning(f"Tried to print where {column} equals {equals}, but that column isn't in the dataframe")
+			return
+		
+		# I am not adding all the various integer types in polars here. go away. you'll get a try/except block at best.
+		elif type(equals) == list and polars_df.schema[column] != pl.List:
+			logging.warning(f"Tried to print where {column} equals list {equals}, but that column has type {polars_df.schema[column]}")
+			return
+		elif type(equals) == str and polars_df.schema[column] != pl.Utf8:
+			logging.info("This is a list column and you passed in a string -- I'm assuming you are looking for the string in the list")
+			filtah = polars_df.filter(pl.col(column).list.contains(equals))
 		else:
-			cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
-			with pl.Config(tbl_cols=-1):
-				logging.info(polars_df.filter(pl.col(column) == equals).select(cols_to_print))
+			filtah = polars_df.filter(pl.col(column) == equals)
+		cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
+		with pl.Config(tbl_cols=-1):
+			logging.info(filtah.select(cols_to_print))
 
 	def print_only_where_col_not_null(polars_df, column, possible_index_columns=['acc', 'run_index', 'BioSample', 'sample_index']):
 		if column not in polars_df.columns:
@@ -39,7 +49,7 @@ class NeighLib:
 		else:
 			cols_to_print = [thingy for thingy in possible_index_columns if thingy in polars_df.columns].append(column)
 			with pl.Config(tbl_cols=-1):
-				logging.info(polars_df.filter(pl.col(column).is_not_null()).select(cols_to_print))
+				print(polars_df.filter(pl.col(column).is_not_null()).select(cols_to_print))
 
 	def mark_rows_with_value(polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
 		#polars_df = polars_df.with_columns(pl.lit("").alias(new_column))
@@ -261,8 +271,10 @@ class NeighLib:
 						polars_df = polars_df.drop(right_col)
 					else:
 						logging.debug(f"Not all values in {base_col} and {right_col} are the same, but we want to avoid creating lists. Falling back on {right_col}.")
-						if {base_col} == 'date_collected':
+						if base_col == 'date_collected':
+							logging.warning("We found date conflicts!!!")
 							logging.debug(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col]))
+							exit(1)
 						polars_df = polars_df.drop(base_col).rename({right_col: base_col})
 				
 				elif base_col in kolumns.merge__sum:

@@ -50,7 +50,7 @@ assert len(set(sum(equivalence.values(), []))) == len(sum(equivalence.values(), 
 
 # when going from run-level to sample-level, or flattening existing lists as much as possible, how should we treat these columns?
 rts__list_to_float_via_sum = ['bytes', 'bases']
-rts__drop = ['eight_pac_barcode_run', 'run_id_run', 'release_date', 'library_name', 'avgspotlen', 'datastore_region', 'mybytes', 'run_file_version', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
+rts__drop = ['eight_pac_barcode_run', 'pacbio_rs_binding_kit_barcode_exp', 'pacbio_rs_sequencing_kit_barcode_run', 'run_id_run', 'release_date', 'library_name', 'avgspotlen', 'datastore_region', 'mybytes', 'run_file_version', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
 rts__keep_as_list = ['coscolla_mean_depth', 'coscolla_percent_not_covered', 'avgspotlen', 'run_file_create_date', 'mbytes', 'mbases', 'librarylayout', 'libraryselection', 'instrument', 'platform', 'isolate_info'] # non-unique values will be kept
 rts__keep_as_set = ['assay_type', 'center_name', 'center_name_insdc', 'BioProject', 'datastore_filetype', 'datastore_provider', 'primary_search', 'run_index', 'SRX_id', 'sra_study'] # non-unique values will be dropped
 rts__warn_if_list_with_unique_values = [
@@ -67,7 +67,7 @@ rts__warn_if_list_with_unique_values = [
 # if either are already lists, will use rts behavior
 merge__error = ['BioSample', 'sample_index', 'librarylayout', 'libraryselection', 'librarysource', 'instrument', 'platform', 'assay_type', 'run_file_version', 'isolate_info']
 merge__sum = []
-merge__drop = ['eight_pac_barcode_run', 'run_id_run', 'datastore_filetype', 'datastore_provider', 'release_date', 'library_name', 'avgspotlen', 'datastore_region', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
+merge__drop = ['eight_pac_barcode_run', 'pacbio_rs_binding_kit_barcode_exp', 'pacbio_rs_sequencing_kit_barcode_run', 'run_id_run', 'datastore_filetype', 'datastore_provider', 'release_date', 'library_name', 'avgspotlen', 'datastore_region', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
 merge__make_list = [] # non-unique values will be kept
 merge__make_set = ['run_index',  'primary_search'] # non-unique values will be dropped
 merge__warn_then_pick_arbitrarily_to_keep_singular = [

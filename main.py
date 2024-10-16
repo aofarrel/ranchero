@@ -115,7 +115,6 @@ print(f"Flattened samples in {time.time() - start} seconds")
 #Ranchero.to_tsv(merged_by_sample, "./merged_per_sample.tsv")
 
 Ranchero.NeighLib.print_col_where(merged_by_sample, 'sample_index', 'SAMEA1573039') # seems to disappear, has run index ERR18131
-exit(1)
 
 menardo = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/menardo_stripped.tsv"))
 denylist = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/denylist_2024-07-23.tsv"))
@@ -123,28 +122,35 @@ standford = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/max
 tba3 = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/tba3_redo.tsv"))
 july_2024_valid = Ranchero.NeighLib.rancheroize_polars(Ranchero.from_tsv("./inputs/2024-06-25-valid-samples-with-diff.tsv"))
 
+merged = Ranchero.merge_polars_dataframes(merged_by_sample, menardo, merge_upon="sample_index", right_name="menardo", put_right_name_in_this_column="collection")
+merged = Ranchero.merge_polars_dataframes(merged, denylist, merge_upon="sample_index", right_name="denylist", put_right_name_in_this_column="collection")
+merged = Ranchero.merge_polars_dataframes(merged, standford, merge_upon="sample_index", right_name="standford", put_right_name_in_this_column="collection")
+merged = Ranchero.merge_polars_dataframes(merged, tba3, merge_upon="sample_index", right_name="tba3", put_right_name_in_this_column="collection")
+merged = Ranchero.merge_polars_dataframes(merged, july_2024_valid, merge_upon="sample_index", right_name="july_2024_valid", put_right_name_in_this_column="collection")
+
+
+print(merged)
+Ranchero.NeighLib.print_col_where(merged, 'sample_index', 'SAMEA1573039') # seems to disappear, has run index ERR18131
+print(merged.select(['date_collected', 'host', 'sample_index']))
+#Ranchero.NeighLib.print_value_counts(merged)
+exit(2)
+
+
 tree_metadata_v8_rc10 = Ranchero.from_tsv("./inputs/tree_metadata_v8_rc10.tsv")
 tree_metadata_v8_rc10 = Ranchero.NeighLib.rancheroize_polars(tree_metadata_v8_rc10)
 tree_metadata_v8_rc10.drop(['BioProject', 'isolation_source'])
 
 
-merged = Ranchero.merge_polars_dataframes(merged_by_sample, menardo, merge_upon="sample_index", right_name="menardo", put_right_name_in_this_column="source")
-merged = Ranchero.merge_polars_dataframes(merged, denylist, merge_upon="sample_index", right_name="denylist", put_right_name_in_this_column="source")
 
-
-
-merged = Ranchero.merge_polars_dataframes(merged, tree_metadata_v8_rc10, merge_upon="sample_index", right_name="tree_metadata_v8_rc10", put_right_name_in_this_column="source")
+merged = Ranchero.merge_polars_dataframes(merged, tree_metadata_v8_rc10, merge_upon="sample_index", right_name="tree_metadata_v8_rc10", put_right_name_in_this_column="collection")
 
 
 
 
-merged = Ranchero.merge_polars_dataframes(merged, standford, merge_upon="sample_index", right_name="standford", put_right_name_in_this_column="source")
-merged = Ranchero.merge_polars_dataframes(merged, tba3, merge_upon="sample_index", right_name="tba3", put_right_name_in_this_column="source")
-merged = Ranchero.merge_polars_dataframes(merged, july_2024_valid, merge_upon="sample_index", right_name="july_2024_valid", put_right_name_in_this_column="source")
 
-print(merged.select(['date_collected', 'host', 'sample_index']))
 
-Ranchero.NeighLib.print_value_counts(merged)
+
+
 
 
 #Ranchero.print_unique_rows(tba5)

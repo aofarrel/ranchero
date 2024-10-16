@@ -83,17 +83,28 @@ def check_if_unexpected_rows(merged_df,
 		return
 	else:
 		print("-------")
-		print(f"Expected {n_row_expected} rows in merged dataframe but got {n_rows_merged}")
-		print(f"Duplicated values for {merge_upon}:")
-		print(merged_df.filter(pl.col(merge_upon).is_duplicated()).select(merge_upon).unique())
+		logging.warning(f"Expected {n_row_expected} rows in merged dataframe but got {n_rows_merged}")
 		if right_name_in_this_column is not None:
-			print("%s n_rows_right (%s exclusive)" % (n_rows_right, len(exclusive_right_values)))
-			print("%s n_rows_left (%s exclusive)" % (n_rows_left, len(exclusive_left_values)))
-			print("%s intersections" % len(intersection_values))
-			print("%s has right_name " % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name)))
-			print("%s has right_name and in intersection" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(intersection_values))))
-			print("%s has right_name and in exclusive left" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(exclusive_left_values))))
-			print("%s has right_name and in exclusive right" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(exclusive_right_values))))
+			logging.debug("%s n_rows_right (%s exclusive)" % (n_rows_right, len(exclusive_right_values)))
+			logging.debug("%s n_rows_left (%s exclusive)" % (n_rows_left, len(exclusive_left_values)))
+			logging.debug("%s intersections" % len(intersection_values))
+			if merged_df.schema[right_name_in_this_column] == pl.Utf8:
+				logging.debug("%s rows have right_name in indicator column" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name)))
+				logging.debug("%s has right_name and in intersection" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(intersection_values))))
+				logging.debug("%s has right_name and in exclusive left" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(exclusive_left_values))))
+				logging.debug("%s has right_name and in exclusive right" % len(merged_df.filter(pl.col(right_name_in_this_column) == right_name, pl.col(merge_upon).is_in(exclusive_right_values))))
+			elif merged_df.schema[right_name_in_this_column] == pl.List:
+				logging.debug("%s rows have right_name in indicator column" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name))))
+				logging.debug("%s has right_name and in intersection" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name), pl.col(merge_upon).is_in(intersection_values))))
+				logging.debug("%s has right_name and in exclusive left" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name), pl.col(merge_upon).is_in(exclusive_left_values))))
+				logging.debug("%s has right_name and in exclusive right" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name), pl.col(merge_upon).is_in(exclusive_right_values))))
+		duplicated_indices = merged_df.filter(pl.col(merge_upon).is_duplicated())
+		if len(duplicated_indices) > 0:
+			logging.error(f"Found {len(duplicated_indices).unique()} duplicated values in column {merge_upon} -- why didn't they merge?")
+			print(duplicated_indices.unique())
+			exit(1)
+		else:
+			logging.info("Did not find duplicated values in the merge column, indicating that the right may just be adding new values.")
 		print("-------")
 
 def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_name="right", put_right_name_in_this_column=None):
@@ -151,9 +162,9 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 			#left = left.with_columns(concat_list=pl.concat_list(put_right_name_in_this_column, pl.lit(left_name)))
 			#left = left.drop(put_right_name_in_this_column)
 			#left = left.rename({"concat_list": put_right_name_in_this_column})
-			NeighLib.print_col_where(left, "run_index", "SRR1013561")
-			NeighLib.print_col_where(left, "sample_index", "SAMN02360560")
-			NeighLib.print_col_where(left, "run_index", "ERR1023252")
+			#NeighLib.print_col_where(left, "run_index", "SRR1013561")
+			#NeighLib.print_col_where(left, "sample_index", "SAMN02360560")
+			#NeighLib.print_col_where(left, "run_index", "ERR1023252")
 			
 		right = right.with_columns(pl.lit(right_name).alias(put_right_name_in_this_column))
 		n_cols_right = right.shape[1]
@@ -176,7 +187,7 @@ def merge_polars_dataframes(left, right, merge_upon, left_name ="left", right_na
 
 		if logging.root.level == logging.DEBUG:
 			logging.debug("End of merge")
-			NeighLib.print_col_where(merged_dataframe, "run_index", "SRR1013561")
+			#NeighLib.print_col_where(merged_dataframe, "run_index", "SRR1013561")
 
 	elif len(left_list_cols) == 0 and len(right_list_cols) == 0:
 		logging.debug(f"Neither {left_name} nor {right_name} have columns of type pl.List")
