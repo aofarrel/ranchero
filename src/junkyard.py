@@ -15,6 +15,18 @@
 # Since it runs below ten seconds even on the full size dataframe, I consider the pandas usage acceptable,
 # even though it annoys me on priniciple.
 
+	def likely_is_run_indexed(polars_df):
+		# TODO: make more robust
+		singular_runs = (
+			("run_index" in polars_df.schema and polars_df.schema["run_index"] == pl.String) or
+			("run_accession" in polars_df.schema and polars_df.schema["run_accession"] == pl.String) or
+			("acc" in polars_df.schema and polars_df.schema["acc"] == pl.String)
+		)
+		if singular_runs:
+			return True
+		else:
+			return False
+
 	@classmethod
 	def iteratively_merge_these_columns(cls, polars_df, merge_these_columns: list, equivalence_key=None: str):
 		"""

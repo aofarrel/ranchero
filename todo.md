@@ -1,11 +1,9 @@
 RECENT CHANGES
-* after converting to set, resulting single element lists are turned into single element not-lists
-
+* configuration is actually used now
+* single-element lists are un-listed when possible
+* removed explosion and made a summary chart after flattening lists as much as possible
 
 HIGH PRIORITY
-* make single-element lists into single-element not-lists too (eg, not just sets)
-* remove the explosion, it's not actually helping us
-* implement host species splitting sci name and common name
 * check date information isn't garbage
 
 

@@ -6,10 +6,7 @@ from tqdm import tqdm
 from src.neigh import NeighLib
 from src.statics import kolumns, null_values
 from .config import RancheroConfig
-
-import logging
-logging.basicConfig(format='%(levelname)s:%(funcName)s:%(message)s', level=logging.DEBUG)
-
+from . import _NeighLib as NeighLib
 tqdm.pandas()
 
 class FileReader():
@@ -18,10 +15,8 @@ class FileReader():
 		if configuration is None:
 			raise ValueError("No configuration was passed to FileReader class. Ranchero is designed to be initialized with a configuration.")
 		else:
-			self._actually_set_config(configuration=configuration)
-
-	def _actually_set_config(self, configuration: RancheroConfig):
-		self.cfg = configuration
+			self.cfg = configuration
+			self.logging = self.cfg.logger
 
 	def _get_cfg_if_not_overwritten(self, arg, config_arg_name):
 		"""Handles "allow overriding config" variables in function calls"""
@@ -64,7 +59,7 @@ class FileReader():
 				else:
 					out_file.write(line.strip() + "\n")
 			out_file.write("]\n")
-		logging.info(f"Reformatted JSON saved to {out_file_path}")
+		self.logging.info(f"Reformatted JSON saved to {out_file_path}")
 		return out_file_path
 
 	def polars_from_bigquery(self, bq_file, normalize_attributes=True):
@@ -80,14 +75,14 @@ class FileReader():
 		"""
 		try:
 			bq_raw = pl.read_json(bq_file)
-			if self.cfg.verbose: logging.debug(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
+			if self.cfg.verbose: self.logging.debug(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
 		except pl.exceptions.ComputeError:
-			logging.warning("Caught exception reading JSON file. Attempting to reformat it...")
+			self.logging.warning("Caught exception reading JSON file. Attempting to reformat it...")
 			try:
 				bq_raw = pl.read_json(self.fix_bigquery_file(bq_file))
-				if self.cfg.verbose: logging.debug(f"Fixed input file has {bq_raw.width} columns and {len(bq_raw)} rows")
+				if self.cfg.verbose: self.logging.debug(f"Fixed input file has {bq_raw.width} columns and {len(bq_raw)} rows")
 			except pl.exceptions.ComputeError:
-				logging.error("Caught exception reading JSON file after attempting to fix it. Giving up!")
+				self.logging.error("Caught exception reading JSON file after attempting to fix it. Giving up!")
 				exit(1)
 		if normalize_attributes and "attributes" in bq_raw.columns:  # if column doesn't exist, return false
 			current = self.polars_fix_attributes_and_json_normalize(bq_raw)
@@ -106,11 +101,11 @@ class FileReader():
 		attributes_rows = pandas_attributes_series.shape[0]
 		assert polars_df.shape[0] == attributes_rows, f"Polars dataframe has {polars_df.shape[0]} rows, but the pandas_attributes has {attributes_rows} rows" 
 		
-		logging.info(f"Normalizing {attributes_rows} rows (this might take a while)...")
+		self.logging.info(f"Normalizing {attributes_rows} rows (this might take a while)...")
 		just_attributes = pl.json_normalize(pandas_attributes_series, strict=False, max_level=1, infer_schema_length=100000)  # just_attributes is a polars dataframe
 		assert polars_df.shape[0] == just_attributes.shape[0], f"Polars dataframe has {polars_df.shape[0]} rows, but normalized attributes we want to horizontally combine it with has {just_attributes.shape[0]} rows" 
 
-		if self.cfg.verbose: logging.info("Concatenating to the original dataframe...")
+		if self.cfg.verbose: self.logging.info("Concatenating to the original dataframe...")
 		if collection_date_sam_workaround:
 			# polars_df already has a collection_date_sam which it converted to YYYY-MM-DD format. to avoid a merge conflict and to
 			# fall back on the attributes version (which perserves dates that failed to YYYY-MM-DD convert), drop collection_date_sam
@@ -118,8 +113,8 @@ class FileReader():
 			bq_jnorm = pl.concat([polars_df.drop(['attributes', 'collection_date_sam']), just_attributes], how="horizontal")
 		else:
 			bq_jnorm = pl.concat([polars_df.drop('attributes'), just_attributes], how="horizontal")
-		logging.info(f"An additional {len(just_attributes.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
-		if self.cfg.verbose: logging.debug(f"Columns added: {just_attributes.columns}")
+		self.logging.info(f"An additional {len(just_attributes.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
+		if self.cfg.verbose: self.logging.debug(f"Columns added: {just_attributes.columns}")
 		if rancheroize: bq_jnorm = NeighLib.rancheroize_polars(bq_jnorm)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
@@ -127,7 +122,7 @@ class FileReader():
 	def polars_run_to_sample(self, polars_df):
 		"""Public wrapper for run_to_sample_index()"""
 		if 'sample_index' not in polars_df.columns:
-			logging.error("Could not find a sample-based column to make as the index!")
+			self.logging.error("Could not find a sample-based column to make as the index!")
 			exit(1)
 		return self.run_to_sample_index(polars_df, upon='sample_index')
 
@@ -196,7 +191,7 @@ class FileReader():
 		"""
 		assert 'run_index' in polars_df.columns
 		assert 'sample_index' in polars_df.columns
-		logging.debug(f"Flattening {upon}s...")
+		self.logging.debug(f"Flattening {upon}s...")
 
 		polars_df = NeighLib.rancheroize_polars(polars_df)
 		NeighLib.print_col_where(polars_df, upon, "SAMN41453963")
@@ -218,13 +213,13 @@ class FileReader():
 						listbusters.append(other_column)
 					else:
 						listmakers.append(other_column)
-			logging.debug(f"listbusters: {listbusters}")
-			logging.debug(f"listmakers: {listmakers}")
-			logging.debug(f"listexisters: {listexisters}")
+			self.logging.debug(f"listbusters: {listbusters}")
+			self.logging.debug(f"listmakers: {listmakers}")
+			self.logging.debug(f"listexisters: {listexisters}")
 
 			for already_list_col in listexisters:
-				logging.debug(f"Listexister {already_list_col}:")
-				logging.debug(polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']).head(15))
+				self.logging.debug(f"Listexister {already_list_col}:")
+				self.logging.debug(polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']).head(15))
 
 			grouped_df = (
 				polars_df
