@@ -22,37 +22,40 @@ import polars as pl
 
 rules = [
 	# spoligotype families (CAS, LAM, T, etc) do not perfectly 1:1 match with lineages, but they do strongly correlate
-	{"when": "Mycobacterium canetti",  "i_lineage": pl.Null,   "i_organism": "Mycobacterium canettii",                   "i_strain": pl.Null},
-	{"when": "Mycobacterium canettii", "i_lineage": pl.Null,   "i_organism": "Mycobacterium canettii",                   "i_strain": pl.Null},
-	{"when": "Beijing",                "i_lineage": "L2.2.1",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "Mycobacterium canetti",  "i_lineage": None,   "i_organism": "Mycobacterium canettii",                   "i_strain": None},
+	{"when": "Mycobacterium canettii", "i_lineage": None,   "i_organism": "Mycobacterium canettii",                   "i_strain": None},
+	{"when": "Beijing",                "i_lineage": "L2.2.1",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": None},
 	{"when": "Haarlem",                "i_lineage": "L4.1.2",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "Haarlem"},
 	{"when": "LAM",                    "i_lineage": "L4.3",    "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "LAM"},
 	{"when": "ETH",                    "i_lineage": "L4.2.2",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "LAM"},
-	{"when": "Indo-Oceanic",           "i_lineage": "L1",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
-	{"when": "Euro-American",          "i_lineage": "L4",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "Indo-Oceanic",           "i_lineage": "L1",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": None},
+	{"when": "Euro-American",          "i_lineage": "L4",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": None},
 	{"when": "Ghana",                  "i_lineage": "L4.1.3",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "Ghana"},
-	{"when": "Delhi-CAS",              "i_lineage": "L3",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
-	{"when": "CAS",                    "i_lineage": "L3",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
-	{"when": "EAI",                    "i_lineage": "L1",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": pl.Null},
+	{"when": "Delhi-CAS",              "i_lineage": "L3",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": None},
+	{"when": "CAS",                    "i_lineage": "L3",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": None},
+	{"when": "EAI",                    "i_lineage": "L1",      "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": None},
 	{"when": "T",                      "i_lineage": "L4.8",    "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "T"},
 	{"when": "Cameroon",               "i_lineage": "L4.6.2",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "Cameroon"},
 	{"when": "PGG3",                   "i_lineage": "L4.10",   "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "PGG3"},
 	{"when": "Ural",                   "i_lineage": "L4.2.1",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "Ural"},
 	{"when": "ETH",                    "i_lineage": "L4.2.2",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "ETH"},
 	{"when": "X-type",                 "i_lineage": "L4.1.1",  "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": "X-type"},
-	{"when": "West-african 1",         "i_lineage": "L5",      "i_organism": "Mycobacterium africanum",                  "i_strain": pl.Null},
-	{"when": "West African 1",         "i_lineage": "L5",      "i_organism": "Mycobacterium africanum",                  "i_strain": pl.Null},
-	{"when": "West-african 2",         "i_lineage": "L6",      "i_organism": "Mycobacterium africanum",                  "i_strain": pl.Null},
-	{"when": "West African 2",         "i_lineage": "L6",      "i_organism": "Mycobacterium africanum",                  "i_strain": pl.Null},
+	{"when": "West-african 1",         "i_lineage": "L5",      "i_organism": "Mycobacterium africanum",                  "i_strain": None},
+	{"when": "West African 1",         "i_lineage": "L5",      "i_organism": "Mycobacterium africanum",                  "i_strain": None},
+	{"when": "West-african 2",         "i_lineage": "L6",      "i_organism": "Mycobacterium africanum",                  "i_strain": None},
+	{"when": "West African 2",         "i_lineage": "L6",      "i_organism": "Mycobacterium africanum",                  "i_strain": None},
+
+
+	# notcompletely sure about these ones
+	{"when": "UGII",                   "i_lineage": "L4.6",    "i_organism": "Mycobacterium tuberculosis sensu stricto", "i_strain": None},
 
 	# removing "variant" and stuff
-	{"when": "Mycobacterium tuberculosis variant africanum", "i_lineage": pl.Null, "i_organism": "Mycobacterium africanum", "i_strain": pl.Null},
-	{"when": "Mycobacterium tuberculosis variant bovis", "i_lineage": pl.Null, "i_organism": "Mycobacterium bovis", "i_strain": pl.Null},
+	{"when": "Mycobacterium tuberculosis variant africanum", "i_lineage": None, "i_organism": "Mycobacterium africanum", "i_strain": None},
+	{"when": "Mycobacterium tuberculosis variant bovis", "i_lineage": None, "i_organism": "Mycobacterium bovis", "i_strain": None},
 
 
 	
 ]
-# additional regex nonsense via explict pl.where() will be needed to convert "lineage" into "L"
 
 
 
@@ -206,6 +209,7 @@ NTM = avium_complex + abscessus_complex + [
 	"Mycobacterium basiliense",
 	"Mycobacterium kansasii",
 	"Mycobacterium kansasi",  # if canettii is any indication, people will typo this
+	"Mycobacterium kiyosense",
 	"Mycobacterium lentiflavum",
 	"Mycobacterium malmoense",
 	"Mycobacterium mantenii",

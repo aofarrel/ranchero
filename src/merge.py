@@ -116,7 +116,8 @@ class Merger:
 	def merge_polars_dataframes(self, 
 		left: pl.dataframe.frame.DataFrame, 
 		right: pl.dataframe.frame.DataFrame, 
-		merge_upon: str, left_name ="left", right_name="right", put_right_name_in_this_column=None):
+		merge_upon: str, left_name ="left", right_name="right", put_right_name_in_this_column=None,
+		fallback_on_left=True):
 		"""
 		Merge two polars dataframe upon merge_upon. 
 
@@ -167,13 +168,6 @@ class Merger:
 				left = left.with_columns(pl.lit(left_name).alias(put_right_name_in_this_column))
 			else:
 				self.logging.debug("Already an indicator in left")
-				# TODO: maybe allow adding something here? but for now no need to touch it
-				#left = left.with_columns(concat_list=pl.concat_list(put_right_name_in_this_column, pl.lit(left_name)))
-				#left = left.drop(put_right_name_in_this_column)
-				#left = left.rename({"concat_list": put_right_name_in_this_column})
-				#NeighLib.print_col_where(left, "run_index", "SRR1013561")
-				#NeighLib.print_col_where(left, "sample_index", "SAMN02360560")
-				#NeighLib.print_col_where(left, "run_index", "ERR1023252")
 				
 			right = right.with_columns(pl.lit(right_name).alias(put_right_name_in_this_column))
 			n_cols_right = right.shape[1]
@@ -244,14 +238,13 @@ class Merger:
 
 						else:
 							self.logging.debug(f"* {left_column}: LIST | SING")
-							#renamed_right = right.with_columns(pl.col(left_column).alias(f"{left_column}_right"))
 							small_left = left.select([merge_upon, left_column])
 							small_right = right.select([merge_upon, left_column])
 							temp = small_left.join(small_right, merge_upon, how="outer_coalesce")
-							if merge_upon == "run_index":
-								NeighLib.print_col_where(small_left, "run_index", "ERR751929")
-								NeighLib.print_col_where(small_right, "run_index", "ERR751929")
-								NeighLib.print_col_where(temp, "run_index", "ERR751929")
+							#if merge_upon == "run_index":
+							#	NeighLib.print_col_where(small_left, "run_index", "ERR751929")
+							#	NeighLib.print_col_where(small_right, "run_index", "ERR751929")
+							#	NeighLib.print_col_where(temp, "run_index", "ERR751929")
 							#if logging.root.level == logging.DEBUG:
 							#	print("---temp--")
 							#	print("---temp--")
@@ -343,7 +336,7 @@ class Merger:
 
 	#		initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 			initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-			really_merged = NeighLib.merge_right_columns(initial_merge)
+			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left)
 
 			really_merged_no_dupes = really_merged.unique()
 			self.logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")

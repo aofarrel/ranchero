@@ -6,6 +6,12 @@ datastore = ['datastore_filetype', 'datastore_region']
 mildly_problematic = ['biosamplemodel', 'run_file_version', 'host_disease_sam', 'library_name']
 
 sample_ids_that_are_not_uuids = [
+	'run_id_run',
+	'uniqueidentifier_sam',
+	'seek_uid_sam',
+	'individual_sam',
+	'complete_sample_name_sam',
+	'raw_sample_name_sam',
 	'accession_number_sam',
 	'alias_sam',
 	'alt_id_sam',
@@ -195,7 +201,17 @@ metadata_dates = [ # NOT SAMPLE COLLECTION DATES!
 other = [
 	'napier_type', # causes issues with the Napier dataset
 	'actual_read_length_run',
+	'patient_inclusion_sam',
+	'transcription_factor_expression_level_sam',
+	'eight_pac_barcode_run',
+	'pacbio_rs_sequencing_kit_barcode_run',
+	'host_tot_mass_sam',
 	'additional_information_sam',
+	'pacbio_rs_binding_kit_exp',
+	'pacbio_rs_template_prep_kit_barcode_exp',
+	'pacbio_rs_template_prep_kit_exp',
+	'pacbio_rs_binding_kit_barcode_exp',
+	'template_preparation_kit_insert_size_exp',
 	'afb_score_sam',
 	'alignment_software_exp',
 	'aliquot_sam_s_dpl57',

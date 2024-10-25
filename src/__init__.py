@@ -8,13 +8,13 @@ logger = Configuration.logger
 from .analyze import *
 from .merge import *
 from .read_file import FileReader
-from .standardize import *
+from .standardize import ProfessionalsHaveStandards
 from .verify import *
 
 
 _FileReader = FileReader(Configuration)
 _Merger = Merger(Configuration)
-
+_Standardizer = ProfessionalsHaveStandards(Configuration)
 
 
 # exposed classes of global instances
@@ -34,3 +34,10 @@ run_index_to_sample_index = _FileReader.polars_run_to_sample
 explode_delimited_index = _FileReader.polars_explode_delimited_rows_recklessly
 
 merge_dataframes = _Merger.merge_polars_dataframes
+
+standardize_hosts = _Standardizer.standarize_hosts
+cleanup_dates = _Standardizer.cleanup_dates
+standardize_sample_source = _Standardizer.standardize_sample_source
+standardize_host_disease = _Standardizer.standardize_host_disease
+unmask_badgers = _Standardizer.unmask_badgers
+taxoncore = _Standardizer.sort_out_taxoncore_columns

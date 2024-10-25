@@ -31,7 +31,7 @@ class RancheroConfig:
 		self.immediate_rancheroize = True
 		self.immediate_try_parse_dates = True
 		self.intermediate_files = False
-		self.loglevel = logging.DEBUG # "10"
+		self.loglevel = logging.DEBUG # DEBUG = 10
 		self.indicator_column = "collection"
 		self.polars_normalize = True
 		self.unwanted = {

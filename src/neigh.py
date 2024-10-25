@@ -7,7 +7,6 @@ from polars.testing import assert_series_equal
 from .config import RancheroConfig
 
 class NeighLib:
-
 	def __init__(self, configuration: RancheroConfig = None):
 		if configuration is None:
 			raise ValueError("No configuration was passed to NeighLib class. Ranchero is designed to be initialized with a configuration.")
@@ -16,8 +15,11 @@ class NeighLib:
 			self.logging = self.cfg.logger
 
 	@classmethod
-	def nullify(self, polars_df):
-		return polars_df.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
+	def nullify(self, polars_df, only_this_column=None):
+		if only_this_column is None:
+			return polars_df.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
+		else:
+			return polars_df.with_columns(pl.col(only_this_column).replace(null_values.null_values_dictionary))
 
 	def print_col_where(self, polars_df, column="source", equals="Coscolla", cols_of_interest=['acc', 'run_index', 'source', 'literature_lineage', 'Biosample', 'sample_index', 'concat_list', 'coscolla_lineage']+kolumns.equivalence['date_collected']):
 		if column not in polars_df.columns:
@@ -37,15 +39,27 @@ class NeighLib:
 		with pl.Config(tbl_cols=-1):
 			self.logging.info(filtah.select(cols_to_print))
 
-	def print_only_where_col_not_null(polars_df, column, possible_index_columns=['acc', 'run_index', 'BioSample', 'sample_index']):
+	def print_only_where_col_list_is_big(self, polars_df, column_of_lists):
+		if column_of_lists not in polars_df.columns:
+			self.logging.warning(f"Tried to print {column_of_lists}, but that column isn't even in the dataframe!")
+		elif polars_df.schema[column_of_lists] != pl.List:
+			self.logging.warning(f"Tried to print where {column_of_lists} has multiple values, but that column isn't a list!")
+		else:
+			cols_of_interest = kolumns.equivalence['run_index'] + kolumns.equivalence['sample_index'] + [column_of_lists]
+			cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
+			with pl.Config(tbl_cols=-1, tbl_rows=20):
+				print(polars_df.filter(pl.col(column_of_lists).list.len() > 1).select(cols_to_print))
+
+	def print_only_where_col_not_null(self, polars_df, column):
 		if column not in polars_df.columns:
 			self.logging.warning(f"Tried to print where {column} is not null, but that column isn't even in the dataframe!")
 		else:
-			cols_to_print = [thingy for thingy in possible_index_columns if thingy in polars_df.columns].append(column)
-			with pl.Config(tbl_cols=-1):
+			cols_of_interest = kolumns.equivalence['run_index'] + kolumns.equivalence['sample_index'] + [column]
+			cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
+			with pl.Config(tbl_cols=-1, tbl_rows=20):
 				print(polars_df.filter(pl.col(column).is_not_null()).select(cols_to_print))
 
-	def mark_rows_with_value(polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
+	def mark_rows_with_value(self, polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
 		#polars_df = polars_df.with_columns(pl.lit("").alias(new_column))
 		polars_df = polars_df.with_columns(
 			pl.when(pl.col('organism').str.contains_any("Mycobacterium avium"))  # contains should return boolean
@@ -71,12 +85,20 @@ class NeighLib:
 		#)
 		print(polars_df.select(pl.col(new_column).value_counts()))
 
-	def print_value_counts(polars_df, skip_ids=True):
-		ids = ['sample_index', 'biosample', 'BioSample', 'acc', 'acc_1', 'run_index', 'run_accession'] + kolumns.addl_ids
+	def print_value_counts(self, polars_df, only_these_columns=None, skip_ids=True):
+		ids = kolumns.equivalence['run_index'] + kolumns.equivalence['sample_index']
 		for column in polars_df.columns:
 			if skip_ids and column not in ids:
-				counts = polars_df.select([pl.col(column).value_counts(sort=True)])
-				print(counts)
+				if only_these_columns is not None and column in only_these_columns:
+					with pl.Config(fmt_str_lengths=500, tbl_rows=300):
+						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
+						print(counts)
+				elif only_these_columns is None:
+					with pl.Config(fmt_str_lengths=500, tbl_rows=300):
+						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
+						print(counts)
+				else:
+					continue
 			else:
 				continue
 
@@ -93,7 +115,7 @@ class NeighLib:
 			if err: exit(1)
 			return False
 
-	def concat_dicts_with_shared_keys(dict_list: list):
+	def concat_dicts_with_shared_keys(self, dict_list: list):
 		"""
 		Takes in a list of dictionaries with literal 'k' and 'v' values and
 		flattens them. For instance, this:
@@ -147,39 +169,26 @@ class NeighLib:
 		return combined_dict
 	
 	@staticmethod
+	def big_print_polars(polars_df, header, these_columns):
+		assert len(these_columns) >= 3
+		print(f"┏{'━' * len(header)}┓")
+		print(f"┃{header}┃")
+		print(f"┗{'━' * len(header)}┛")
+		filtered = polars_df.select(these_columns)
+		filtered = filtered.filter(
+			(pl.col(these_columns[1]).is_not_null()) | 
+			(pl.col(these_columns[2]).is_not_null())
+		)
+		with pl.Config(tbl_cols=10, tbl_rows=200, fmt_str_lengths=200, fmt_table_cell_list_len=10):
+			print(filtered)
+
+	@staticmethod
 	def super_print_pl(polars_df, header):
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
 		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=500, fmt_table_cell_list_len=10):
 			print(polars_df)
-
-	@classmethod
-	def sort_out_taxoncore_columns(self, polars_df):
-		"""
-		Some columns in polars_df will be in list all_taxoncore_columns. We want to use these taxoncore columns to create three new columns:
-		* imputed_organism should be of form "Mycobacterium" plus one more word, with no trailing "subsp." or "variant", if a specific organism can be imputed from a taxoncore column, else null
-		* imputed_lineage should be of form "L" followed by a float if a specific lineage can be imputed from a taxoncore column, else null
-		* imputed_strain are strings if a specific strain can be imputed from a taxoncore column, else null
-
-		Rules:
-		* Any column with value "Mycobacterium tuberculosis H37Rv" sets imputed_organism to "Mycobacterium tuberculosis", imputed_lineage to "L4.8", and imputed_strain to "H37Rv"
-		* Any column with value "Mycobacterium variant bovis" sets imputed_organism to "Mycobacterium bovis"
-		* Any column with "lineage" followed by numbers sets imputed_lineage to "L" plus the numbers, minus any whitespace (there may be periods between the numbers, keep them)
-
-
-
-		"""
-		polars_df = polars_df.with_columns(
-			pl.when(pl.col(base_col) != pl.col(right_col))
-			.then(
-				pl.when(pl.col(base_col).str.contains_any)
-			)
-			.otherwise(pl.col(base_col))
-			.alias('temp')
-		)
-		print(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col, 'temp']))
-		exit(2)
 
 	#.str.contains_any("Mycobacterium avium")
 	def merge_right_columns(self, polars_df, fallback_on_left=True, err_on_matching_failure=True):
@@ -230,26 +239,23 @@ class NeighLib:
 			
 			except AssertionError:
 				# not equal after filling in nulls (or nullfill errored)
-
-				
 				if base_col in kolumns.merge__special_taxonomic_handling:
-					
 					if fallback_on_left:
 						self.logging.info(f"Found conflicting metadata in columns that appear to have organism or lineage metadata, but special handling should have happened earlier. Falling back on {base_col}.")
 						polars_df = polars_df.drop(right_col)
 					else:
 						self.logging.info(f"Found conflicting metadata in columns that appear to have organism or lineage metadata, but special handling should have happened earlier. Falling back on {right_col}.")
 						polars_df = polars_df.drop(base_col).rename({right_col: base_col})
+				
 				elif base_col in kolumns.merge__error:
 					self.logging.error("Found conflicting metadata in columns that should not have conflicting metadata!")
 					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col]), f"conflicts")
 					exit(1)
+				
 				elif base_col in kolumns.merge__warn_then_pick_arbitrarily_to_keep_singular:
 					self.logging.debug(f"Not all values in {base_col} and {right_col} are the same, but we want to avoid creating lists. Falling back on {base_col if fallback_on_left else right_col}")
-					if base_col == 'date_collected':
-						self.logging.debug(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col]))
-						exit(1)
-						
+					if base_col == 'date_collected' and self.logging.getEffectiveLevel() == 10:
+						self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(['sample_index', base_col, right_col]), "date collected conflicts")
 					if fallback_on_left:
 						polars_df = polars_df.drop(right_col)
 					else:
@@ -264,20 +270,29 @@ class NeighLib:
 				
 				else:
 					if nullfilled:
-						# previous nullfilled succceeded, and therefore (hopefully) both columns are list[str] or pl.Ut8
+						# previous nullfilled succceeded, but columns aren't exactly the same aftwards. hopefully both
+						# columns are list[str] or pl.Ut8 at this point (probably, since nullfill worked).
 						# this is known to work with base_col and right_col are both pl.Ut8, or when both are list[str]
 
-						# TODO: differenciate between merge__make_list and merge__make_set
-						
-						self.logging.debug("Columns seem compatiable with concat_list, will try to merge with that")
-						polars_df = polars_df.with_columns(
-							pl.when(pl.col(base_col) != pl.col(right_col))             # When a row has different values for base_col and right_col,
-							.then(pl.concat_list([base_col, right_col]).list.unique()) # make a list of base_col and right_col, but keep only uniq values
-							.otherwise(pl.concat_list([base_col]))                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
-							.alias(base_col)
-						).drop(right_col)
-						#if veryverbose: NeighLib.super_print_pl(polars_df.select(base_col), f"after merging to make {base_col} to a list")
-						assert polars_df.select(pl.col(base_col)).dtypes == [pl.List]
+						if base_col in kolumns.merge__warn_then_pick_arbitrarily_to_keep_singular:
+							self.logging.debug(f"Not all values in {base_col} and {right_col} are the same (after successful nullfill), but we want to avoid creating lists. Falling back on {base_col if fallback_on_left else right_col}")
+							if base_col == 'date_collected' and self.logging.getEffectiveLevel() == 10:
+								self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(['sample_index', base_col, right_col]), "date collected conflicts")
+							if fallback_on_left:
+								polars_df = polars_df.drop(right_col)
+							else:
+								polars_df = polars_df.drop(base_col).rename({right_col: base_col})
+						else:
+							# TODO: differenciate between merge__make_list and merge__make_set						
+							self.logging.debug("Columns seem compatiable with concat_list, will try to merge with that")
+							polars_df = polars_df.with_columns(
+								pl.when(pl.col(base_col) != pl.col(right_col))             # When a row has different values for base_col and right_col,
+								.then(pl.concat_list([base_col, right_col]).list.unique()) # make a list of base_col and right_col, but keep only uniq values
+								.otherwise(pl.concat_list([base_col]))                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
+								.alias(base_col)
+							).drop(right_col)
+							#if veryverbose: NeighLib.super_print_pl(polars_df.select(base_col), f"after merging to make {base_col} to a list")
+							assert polars_df.select(pl.col(base_col)).dtypes == [pl.List]
 					else:
 						if polars_df[base_col].dtype != pl.List(pl.Utf8):
 							self.logging.debug(f"{base_col} is not a list, but we will make it one")
@@ -299,7 +314,7 @@ class NeighLib:
 		# non-unique rows might be dropped here, fyi
 		return polars_df
 
-	def iteratively_merge_these_columns(self, polars_df, merge_these_columns: list, equivalence_key=None, forbid_index_merge=False):
+	def iteratively_merge_these_columns(self, polars_df, merge_these_columns: list, equivalence_key=None, recursion_depth=0):
 		"""
 		Merges columns named in merged_these_columns.
 
@@ -308,19 +323,19 @@ class NeighLib:
 		assert len(merge_these_columns) > 1
 		assert all(col in polars_df.columns for col in merge_these_columns)
 		assert all(not col.endswith("_right") for col in polars_df.columns)
+		if recursion_depth != 0:
+			self.logging.debug(f"Intending to merge:\n\t{merge_these_columns}")
 		
 		left_col, right_col = merge_these_columns[0], merge_these_columns[1]
 
-		self.logging.debug(f"Intending to merge:\n\t{merge_these_columns}\n\t\tLeft:{left_col}\n\t\tRight:{right_col}")
-
-		self.logging.debug(f"Merging {left_col} and {right_col} by renaming {right_col} to {left_col}_right")
+		self.logging.debug(f"\n\t\tIteration {recursion_depth}\n\t\tLeft: {left_col}\n\t\tRight: {right_col} (renamed to {left_col}_right)")
 		polars_df = polars_df.rename({right_col: f"{left_col}_right"})
 		polars_df = self.merge_right_columns(polars_df)
 
 		del merge_these_columns[1] # NOT ZERO!!!
 
 		if len(merge_these_columns) > 1:
-			self.logging.debug(f"merge_these_columns is {merge_these_columns}, which we will pass in to recurse")
+			#self.logging.debug(f"merge_these_columns is {merge_these_columns}, which we will pass in to recurse")
 			polars_df = self.iteratively_merge_these_columns(polars_df, merge_these_columns)
 		return polars_df.rename({left_col: equivalence_key}) if equivalence_key is not None else polars_df
 
@@ -336,6 +351,7 @@ class NeighLib:
 		polars_df = self.drop_known_unwanted_columns(polars_df)
 		polars_df = self.nullify(polars_df)
 		polars_df = self.drop_null_columns(polars_df)
+		polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False) # this makes merging better for "geo_loc_name_sam" but is slow
 
 		# check date columns, our arch-nemesis
 		for column in polars_df.columns:
@@ -343,12 +359,14 @@ class NeighLib:
 				if polars_df[column].dtype is not pl.Date:
 					self.logging.warning(f"Found likely date column {column}, but it has type {polars_df[column].dtype}")
 				else:
-					self.logging.debug(f"Likely date column {column} has date type")
+					self.logging.debug(f"Likely date column {column} has pl.Date type")
 
 		for key, value in kolumns.equivalence.items():
 			merge_these_columns = [v_col for v_col in value if v_col in polars_df.columns and v_col not in sum(kolumns.merge__special_taxonomic_handling.values(), [])]
 			if len(merge_these_columns) > 0:
-				self.logging.debug(f"Discovered {key} in column via {merge_these_columns}")
+				self.logging.debug(f"Discovered {key} in column via:")
+				for some_column in merge_these_columns:
+					self.logging.debug(f"  * {some_column}: {polars_df.schema[some_column]}")
 
 				if len(merge_these_columns) > 1:
 					#polars_df = polars_df.with_columns(pl.implode(merge_these_columns)) # this gets sigkilled; don't bother!
@@ -356,12 +374,13 @@ class NeighLib:
 						polars_df = polars_df.drop(col)
 					#don't add kolumns.rts__list_to_float_via_sum here, that's not what it's made for and it'll cause errors
 					else:
-						self.logging.info(f"Merging these columns: {merge_these_columns}")
+						self.logging.info(f"  Merging these columns: {merge_these_columns}")
 						polars_df = self.iteratively_merge_these_columns(polars_df, merge_these_columns, equivalence_key=key)
 				else:
-					self.logging.debug(f"Renamed {merge_these_columns[0]} to {key}")
+					self.logging.debug(f"  Renamed {merge_these_columns[0]} to {key}")
 					polars_df = polars_df.rename({merge_these_columns[0]: key})
-			
+				assert key in polars_df.columns
+		# do not flatten list cols again, at least not yet. use the equivalence columns for standardization.
 		return polars_df
 
 	def is_sample_indexed(self, polars_df):
@@ -408,7 +427,7 @@ class NeighLib:
 			if self.logging.getEffectiveLevel() == 10:
 				self.logging.debug(f"-->After removing non-uniques, we still have {len(self.get_rows_where_list_col_more_than_one_value(polars_df, column, False))} multi-element lists in {column}")
 				debug_print = self.get_rows_where_list_col_more_than_one_value(polars_df, column, False)
-				self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(10), f"polars_df, after set treatment (true len {len(debug_print)})")
+				self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(30), f"polars_df, after set treatment (true len {len(debug_print)})")
 			return polars_df
 
 	def flatten_all_list_cols_as_much_as_possible(self, polars_df, hard_stop=False, force_strings=False):
@@ -590,7 +609,7 @@ class NeighLib:
 				)
 
 			# pl.Int doesn't exist and pl.List(int) doesn't seem to work, so we'll take the silly route
-			elif (datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64)):
+			elif (datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64) or datatype == pl.List(pl.Float64)):
 				polars_df = polars_df.with_columns((
 					pl.lit("[")
 					+ pl.col(col).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
@@ -600,6 +619,11 @@ class NeighLib:
 			elif datatype == pl.Object:
 				polars_df = polars_df.with_columns((
 					pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)
+				).alias(col))
+
+			elif datatype == pl.List(pl.Datetime(time_unit='us', time_zone='UTC')):
+				polars_df = polars_df.with_columns((
+					pl.col(col).map_elements(lambda s: "[" + ", ".join(f"{item}" for item in sorted(s)) + "]" if isinstance(s, set) else str(s), return_dtype=str)
 				).alias(col))
 
 		return polars_df

@@ -3,7 +3,6 @@ import polars as pl
 from contextlib import suppress
 import os
 from tqdm import tqdm
-from src.neigh import NeighLib
 from src.statics import kolumns, null_values
 from .config import RancheroConfig
 from . import _NeighLib as NeighLib
@@ -59,7 +58,7 @@ class FileReader():
 				else:
 					out_file.write(line.strip() + "\n")
 			out_file.write("]\n")
-		self.logging.info(f"Reformatted JSON saved to {out_file_path}")
+		self.logging.warning(f"Reformatted JSON saved to {out_file_path}")
 		return out_file_path
 
 	def polars_from_bigquery(self, bq_file, normalize_attributes=True):
@@ -75,12 +74,12 @@ class FileReader():
 		"""
 		try:
 			bq_raw = pl.read_json(bq_file)
-			if self.cfg.verbose: self.logging.debug(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
+			if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
 		except pl.exceptions.ComputeError:
 			self.logging.warning("Caught exception reading JSON file. Attempting to reformat it...")
 			try:
 				bq_raw = pl.read_json(self.fix_bigquery_file(bq_file))
-				if self.cfg.verbose: self.logging.debug(f"Fixed input file has {bq_raw.width} columns and {len(bq_raw)} rows")
+				if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Fixed input file has {bq_raw.width} columns and {len(bq_raw)} rows")
 			except pl.exceptions.ComputeError:
 				self.logging.error("Caught exception reading JSON file after attempting to fix it. Giving up!")
 				exit(1)
@@ -105,7 +104,7 @@ class FileReader():
 		just_attributes = pl.json_normalize(pandas_attributes_series, strict=False, max_level=1, infer_schema_length=100000)  # just_attributes is a polars dataframe
 		assert polars_df.shape[0] == just_attributes.shape[0], f"Polars dataframe has {polars_df.shape[0]} rows, but normalized attributes we want to horizontally combine it with has {just_attributes.shape[0]} rows" 
 
-		if self.cfg.verbose: self.logging.info("Concatenating to the original dataframe...")
+		if self.logging.getEffectiveLevel() == 10: self.logging.info("Concatenating to the original dataframe...")
 		if collection_date_sam_workaround:
 			# polars_df already has a collection_date_sam which it converted to YYYY-MM-DD format. to avoid a merge conflict and to
 			# fall back on the attributes version (which perserves dates that failed to YYYY-MM-DD convert), drop collection_date_sam
@@ -114,7 +113,7 @@ class FileReader():
 		else:
 			bq_jnorm = pl.concat([polars_df.drop('attributes'), just_attributes], how="horizontal")
 		self.logging.info(f"An additional {len(just_attributes.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
-		if self.cfg.verbose: self.logging.debug(f"Columns added: {just_attributes.columns}")
+		if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Columns added: {just_attributes.columns}")
 		if rancheroize: bq_jnorm = NeighLib.rancheroize_polars(bq_jnorm)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
@@ -271,13 +270,13 @@ class FileReader():
 		"""
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
 		if keep_all_primary_search:  # TODO: benchmark these two options
-			if self.cfg.verbose:
+			if self.logging.getEffectiveLevel() == 10:
 				print("Concatenating dictionaries with Pandas...")
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts_with_shared_keys)
 			else:
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts_with_shared_keys)
 		else:
-			if self.cfg.verbose:
+			if self.logging.getEffectiveLevel() == 10:
 				print("Concatenating dictionaries with Pandas...")
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts)
 			else:
