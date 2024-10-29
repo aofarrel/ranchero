@@ -7,7 +7,6 @@ do_run_index_merges = True
 
 module_start = time.time()
 
-
 def inital_file_parse():
 	#we don't immediately rancheroize as this is faster
 	start, tba6 = time.time(),Ranchero.from_bigquery("./inputs/tba6_no_tax_table_bq_2024-09-19.json")
@@ -21,17 +20,35 @@ def inital_file_parse():
 	start, tba6 = time.time(), Ranchero.rancheroize(tba6)
 	print(f"Rancheroized in {time.time() - start} seconds")
 
+	tba6 = Ranchero._Standardizer.standardize_countries(tba6)
+
+
+
+	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'new_country')
+	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'new_region')
+	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'NERDS!')
+
+	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'date_collected')
+	tba6 = Ranchero.cleanup_dates(tba6)
+	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'date_collected')
+
+	#print(Ranchero.NeighLib.print_only_where_col_list_is_big(tba6, 'new_country'))
+
+	exit(1)
+
+
 	start, tba6 = time.time(), Ranchero.standardize_sample_source(tba6)
 	print(f"Standardized sample sources in {time.time() - start}s seconds")
 
-	start, tba6 = time.time(), Ranchero.taxoncore(tba6)
-	print(f"Standardized taxonomic, strain, and lineage information in {time.time() - start}s seconds")
 
 	
-	
-	start, tba6 = time.time(), Ranchero.classify_bacterial_family(Ranchero.rm_all_phages(tba6))
+
+	# READD THE RM ALL PHAGES
+
+
+	#start, tba6 = time.time(), Ranchero.classify_bacterial_family(tba6)
 	#tba6 = Ranchero.rm_not_MTBC(tba6) # use rm_row_if_col_null if you want non-MTBC mycobacteria -- although the function doesn't seem to work anyway
-	print(f"Removed phages and classified bacterial family in {time.time() - start} seconds")
+	#print(f"Removed phages and classified bacterial family in {time.time() - start} seconds")
 
 	start, tba6 = time.time(), Ranchero.drop_lowcount_columns(tba6)
 	print(f"Removed yet more columns in {time.time() - start}s seconds")
@@ -101,20 +118,10 @@ else:
 print("Columns so far:")
 print(merged.columns)
 
-Ranchero.NeighLib.print_only_where_col_not_null(merged, 'isolation_source')
+Ranchero.NeighLib.print_only_where_col_not_null(merged, 'sex_calc')
 
 print("By type:")
 Ranchero.NeighLib.print_value_counts(merged, ['mycobact_type'])
-
-
-
-start = time.time()
-merged = Ranchero.standardize_hosts(merged)
-print(f"Standardized hosts in {time.time() - start}s seconds")
-
-start = time.time()
-merged = Ranchero.unmask_badgers(merged)
-print(f"Unmasked badgers in {time.time() - start}s seconds")
 
 start = time.time()
 merged = Ranchero.standardize_host_disease(merged)
@@ -175,6 +182,10 @@ start = time.time()
 merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="sample_index", right_name="denylist", put_right_name_in_this_column="collection")
 print(f"Merged with denylist in {time.time() - start} seconds")
 
+start = time.time()
+merged = Ranchero.merge_dataframes(merged, tba3, merge_upon="sample_index", right_name="input_tba3", put_right_name_in_this_column="collection")
+merged = Ranchero.merge_dataframes(merged, july_2024_valid, merge_upon="sample_index", right_name="input_others", put_right_name_in_this_column="collection")
+print(f"Merged with tba3 and july_2024_valid in {time.time() - start} seconds")
 
 start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_1, merge_upon="sample_index", right_name="standford", put_right_name_in_this_column="collection", fallback_on_left=False)
 print(f"Merged with standford1 in {time.time() - start} seconds")
@@ -187,44 +198,10 @@ print(f"Merged with standford4 in {time.time() - start} seconds")
 
 merged = Ranchero.NeighLib.nullify(Ranchero.cleanup_dates(merged))
 
-print("This should be null, not a dash")
-Ranchero.print_col_where(merged, 'sample_index', 'SAMN04522082', cols_of_interest=['sample_index', 'date_collected', 'collection'])
-
-print("was 2012-01-01 now should be 2012")
-Ranchero.print_col_where(merged, 'sample_index', 'SAMN06094120', cols_of_interest=['sample_index', 'date_collected', 'collection'])
-
-print("was a datetime now should lack time")
-Ranchero.print_col_where(merged, 'sample_index', 'SAMN30380812', cols_of_interest=['sample_index', 'date_collected', 'collection'])
-
-print("was 2011-05-28 and should remain that way (don't overwrite with 5/28/2011)")
-Ranchero.print_col_where(merged, 'sample_index', 'SAMN15098222', cols_of_interest=['sample_index', 'date_collected', 'collection'])
-
-print("should remain YYYY-MM-DD or just YYYY")
-Ranchero.print_col_where(merged, 'sample_index', 'SAMEA3281360', cols_of_interest=['sample_index', 'date_collected', 'collection'])
-
-print("ideally should be YYYY-MM-DD but won't be")
-Ranchero.print_col_where(merged, 'sample_index', 'SAMN04522083', cols_of_interest=['sample_index', 'date_collected', 'collection'])
-
-print("sra says 2013, standford says 7/5/05, fallback on 2013")
-Ranchero.print_col_where(merged, 'sample_index', 'SAMN02487169', cols_of_interest=['sample_index', 'date_collected', 'collection'])
-
-print("sra says 2008, standford says 6/30/05, fallback on 2008")
-Ranchero.print_col_where(merged, 'sample_index', 'SAMN20351579', cols_of_interest=['sample_index', 'date_collected', 'collection'])
-
-Ranchero.NeighLib.big_print_polars(merged.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{2}")), "merged has date slashes in 2 2 2 format", ['sample_index', 'date_collected'])
-Ranchero.NeighLib.big_print_polars(merged.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{4}")), "merged has date slashes in 2 2 4 format", ['sample_index', 'date_collected'])
-
-Ranchero.NeighLib.big_print_polars(merged, "merged hosts and dates", ['sample_index', 'date_collected', 'host', 'host_scienname', 'host_commonname'])
-Ranchero.NeighLib.big_print_polars(tree_metadata_v8_rc10, "v8rc10 hosts and dates", ['sample_index', 'date_collected', 'host'])
-
-
-
-
-
-
+#Ranchero.NeighLib.big_print_polars(merged.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{2}")), "merged has date slashes in 2 2 2 format", ['sample_index', 'date_collected'])
+#Ranchero.NeighLib.big_print_polars(merged.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{4}")), "merged has date slashes in 2 2 4 format", ['sample_index', 'date_collected'])
 
 Ranchero.to_tsv(merged, "./ranchero_partial.tsv")
-
 
 
 start = time.time()
@@ -233,37 +210,31 @@ print(f"Merged with old tree metadata file in {time.time() - start} seconds")
 
 
 
-merged = Ranchero.merge_dataframes(merged, tba3, merge_upon="sample_index", right_name="tba3", put_right_name_in_this_column="collection")
-merged = Ranchero.merge_dataframes(merged, july_2024_valid, merge_upon="sample_index", right_name="july_2024_valid", put_right_name_in_this_column="collection")
+start = time.time()
+merged = Ranchero.standardize_hosts(merged)
+print(f"Standardized hosts in {time.time() - start}s seconds")
+
+start = time.time()
+merged = Ranchero.unmask_badgers(merged)
+print(f"Unmasked badgers in {time.time() - start}s seconds")
+
+start = time.time()
+merged = Ranchero._Standardizer.unmask_mice(merged)
+print(f"Unmasked mice in {time.time() - start}s seconds")
 
 
+Ranchero.NeighLib.big_print_polars(merged, "merged hosts and dates", ['sample_index', 'date_collected', 'host', 'host_scienname', 'host_commonname'])
+Ranchero.NeighLib.big_print_polars(tree_metadata_v8_rc10, "v8rc10 hosts and dates", ['sample_index', 'date_collected', 'host'])
+
+start, tba6 = time.time(), Ranchero.taxoncore(tba6)
+print(f"Standardized taxonomic, strain, and lineage information in {time.time() - start}s seconds")
 
 
+Ranchero.to_tsv(merged, "./ranchero_complete_rc2.tsv")
 
-
-
-
-
-
-
-
-
-print(merged)
 Ranchero.print_col_where(merged, 'sample_index', 'SAMEA1573039') # seems to disappear, has run index ERR18131
 print(merged.select(['date_collected', 'host', 'sample_index']))
 #Ranchero.NeighLib.print_value_counts(merged)
-
-
-
-
-
-
-
-merged = Ranchero.merge_dataframes(merged, tree_metadata_v8_rc10, merge_upon="sample_index", right_name="tree_metadata_v8_rc10", put_right_name_in_this_column="collection")
-
-
-
-print(merged)
 
 
 

@@ -188,9 +188,6 @@ class Merger:
 			else:
 				merged_dataframe = left.join(right, merge_upon, how="outer_coalesce").unique()
 
-			self.logging.debug("End of merge")
-			#NeighLib.print_col_where(merged_dataframe, "run_index", "SRR1013561")
-
 		elif len(left_list_cols) == 0 and len(right_list_cols) == 0:
 			self.logging.debug(f"Neither {left_name} nor {right_name} have columns of type pl.List")
 
@@ -219,7 +216,6 @@ class Merger:
 			really_merged_no_dupes = really_merged.unique()
 			self.logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")
 			merged_dataframe = really_merged_no_dupes
-			self.logging.debug("End of merge")
 
 		else:
 			# shared list columns will be concatenated (such as the put_right_name_in_this_column column)
@@ -343,7 +339,6 @@ class Merger:
 			merged_dataframe = really_merged_no_dupes
 
 			if self.logging.getEffectiveLevel() == 10:
-				self.logging.debug("End of merge")
 				NeighLib.print_col_where(merged_dataframe, "run_index", "SRR1013561")
 				NeighLib.print_col_where(merged_dataframe, "sample_index", "SAMN02360560")
 

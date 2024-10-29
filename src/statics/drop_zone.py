@@ -7,7 +7,9 @@ mildly_problematic = ['biosamplemodel', 'run_file_version', 'host_disease_sam', 
 
 sample_ids_that_are_not_uuids = [
 	'run_id_run',
+	'filename2_sam',
 	'uniqueidentifier_sam',
+	'gold_stamp_id_sam',
 	'seek_uid_sam',
 	'individual_sam',
 	'complete_sample_name_sam',
@@ -30,6 +32,7 @@ sample_ids_that_are_not_uuids = [
 	'cultures_sam',
 	'dna_seek_uid_sam',
 	'ena_checklist_sam_s_dpl67',
+	'isolate_name_alias_sam',
 	'extra_sam',
 	'fasta_file_run',
 	'filename_sam',
@@ -166,9 +169,11 @@ cell_growth_stuff = [
 	'growth_media_sam',
 	'growth_phase_sam_s_dpl215',
 	'growth_protocol_sam_s_dpl216',
+	'batch_sam_s_dpl12',
 	'host_subject_id_sam',
 	'individual_sam',
 	'isol_growth_condt_sam',
+	'culture_collection_sam_ss_dpl150',
 	'library_id_sam',
 	'num_replicons_sam',
 	'culture_media_sam',
@@ -203,6 +208,7 @@ other = [
 	'actual_read_length_run',
 	'patient_inclusion_sam',
 	'transcription_factor_expression_level_sam',
+	'sex_calc',
 	'eight_pac_barcode_run',
 	'pacbio_rs_sequencing_kit_barcode_run',
 	'host_tot_mass_sam',
@@ -274,6 +280,7 @@ other = [
 	'description_sam',
 	'dna_concentrations_sam',
 	'estimated_size_sam',
+	'host_spec_range_sam',
 	'flowcell_barcode_run',
 	'forward_read_length_run',
 	'identification_method_sam',
@@ -338,7 +345,7 @@ other = [
 	'zmw_set_run',
 ]
 
-silly_columns = other + redundant + mildly_problematic + tb_but_not_used + datastore + metadata_dates + sample_ids_that_are_not_uuids + submitter
+silly_columns = other + redundant + mildly_problematic + tb_but_not_used + datastore + metadata_dates + sample_ids_that_are_not_uuids + submitter + cell_growth_stuff
 
 clearly_not_tuberculosis = [
 	'abiotrophia_defectiva_species_sam',

@@ -47,7 +47,7 @@ class NeighLib:
 		else:
 			cols_of_interest = kolumns.equivalence['run_index'] + kolumns.equivalence['sample_index'] + [column_of_lists]
 			cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
-			with pl.Config(tbl_cols=-1, tbl_rows=20):
+			with pl.Config(tbl_cols=-1, tbl_rows=50, fmt_str_lengths=200, fmt_table_cell_list_len=10):
 				print(polars_df.filter(pl.col(column_of_lists).list.len() > 1).select(cols_to_print))
 
 	def print_only_where_col_not_null(self, polars_df, column):
@@ -62,12 +62,11 @@ class NeighLib:
 	def mark_rows_with_value(self, polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
 		#polars_df = polars_df.with_columns(pl.lit("").alias(new_column))
 		polars_df = polars_df.with_columns(
-			pl.when(pl.col('organism').str.contains_any("Mycobacterium avium"))  # contains should return boolean
-			.then(pl.lit(true_value))  # Set true_value where condition is True
-			.otherwise(pl.lit(false_value))  # Set false_value otherwise
-			.alias(new_column)  # Alias as the new column
+			pl.when(pl.col('organism').str.contains_any("Mycobacterium avium"))
+			.then(pl.lit(true_value))
+			.otherwise(pl.lit(false_value))
+			.alias(new_column)
 		)
-		#polars_df.with_columns(pl.when(pl.col("organism").str.contains_any(["Mycobacterium avium", "lalala"])).then(pl.lit(true_value)).alias(new_column))
 		print(polars_df.select(pl.col(new_column).value_counts()))
 
 		polars_df = polars_df.with_columns(
@@ -76,13 +75,6 @@ class NeighLib:
 			.otherwise(pl.lit(false_value))
 			.alias(new_column)
 		)
-
-		#polars_df = polars_df.with_columns(
-		#   pl.when(filter_func(polars_df, **kwargs))
-		#   .then(pl.lit(true_value))
-		#   .otherwise(pl.lit(false_value))
-		#   .alias(new_column)
-		#)
 		print(polars_df.select(pl.col(new_column).value_counts()))
 
 	def print_value_counts(self, polars_df, only_these_columns=None, skip_ids=True):
@@ -104,16 +96,6 @@ class NeighLib:
 
 	def get_valid_columns_list_from_arbitrary_list(polars_df, desired_columns: list):
 		return [col for col in desired_columns if col in polars_df.columns]
-
-	def check_columns_exist(polars_df, column_list: list, err=False, verbose=False):
-		missing_columns = [col for col in column_list if col not in polars_df.columns]
-		if len(missing_columns) == 0:
-			#if self.cfg.verbose: print("All requested columns exist in dataframe")
-			return True
-		else:
-			#if self.cfg.verbose: print(f"Missing these columns: {missing_columns}")
-			if err: exit(1)
-			return False
 
 	def concat_dicts_with_shared_keys(self, dict_list: list):
 		"""
@@ -241,10 +223,10 @@ class NeighLib:
 				# not equal after filling in nulls (or nullfill errored)
 				if base_col in kolumns.merge__special_taxonomic_handling:
 					if fallback_on_left:
-						self.logging.info(f"Found conflicting metadata in columns that appear to have organism or lineage metadata, but special handling should have happened earlier. Falling back on {base_col}.")
+						self.logging.warning(f"Found conflicting metadata in columns that appear to have organism or lineage metadata. Falling back on {base_col}.")
 						polars_df = polars_df.drop(right_col)
 					else:
-						self.logging.info(f"Found conflicting metadata in columns that appear to have organism or lineage metadata, but special handling should have happened earlier. Falling back on {right_col}.")
+						self.logging.warning(f"Found conflicting metadata in columns that appear to have organism or lineage metadata. Falling back on {right_col}.")
 						polars_df = polars_df.drop(base_col).rename({right_col: base_col})
 				
 				elif base_col in kolumns.merge__error:
@@ -340,18 +322,40 @@ class NeighLib:
 		return polars_df.rename({left_col: equivalence_key}) if equivalence_key is not None else polars_df
 
 	def get_rows_where_list_col_more_than_one_value(self, polars_df, list_col, force_uniq=False):
+		""" See also print_only_where_col_list_is_big()"""
 		assert polars_df.schema[list_col] == pl.List
 		if force_uniq:
 			polars_df = polars_df.with_columns(pl.col(list_col).list.unique().alias(f"{list_col}_uniq"))
 			return polars_df.filter(pl.col(f"{list_col}_uniq").list.len() > 1)
 		else:
 			return polars_df.filter(pl.col(list_col).list.len() > 1)
+
+	def get_paired_illumina(self, polars_df, inverse=False):
+		assert 'librarysource', 'platform' in polars.columns
+		if polars_df.schema['platform'] == pl.Utf8 and polars_df.schema['librarylayout'] == pl.Utf8:
+			if not inverse:
+				self.logging.info("Filtering data to include only PE Illumina reads")
+				return polars_df.filter(
+					(pl.col('platform') == 'ILLUMINA') & 
+					(pl.col('librarylayout') == 'PAIRED')
+				)
+			else:
+				self.logging.info("Filtering data to exclude PE Illumina reads")
+				return polars_df.filter(
+					(pl.col('platform') != 'ILLUMINA') & 
+					(pl.col('librarylayout') != 'PAIRED')
+				)
+		else:
+			self.logging.warning("Failed to filter out non-PE Illumina as platform and/or librarylayout columns aren't type string")
+			return polars_df
 	
 	def rancheroize_polars(self, polars_df):
 		polars_df = self.drop_known_unwanted_columns(polars_df)
 		polars_df = self.nullify(polars_df)
 		polars_df = self.drop_null_columns(polars_df)
 		polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False) # this makes merging better for "geo_loc_name_sam" but is slow
+		if self.cfg.paired_illumina_only:
+			polars_df = self.get_paired_illumina(polars_df)
 
 		# check date columns, our arch-nemesis
 		for column in polars_df.columns:

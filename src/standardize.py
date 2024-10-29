@@ -1,4 +1,4 @@
-from src.statics import host_species, sample_sources, kolumns
+from src.statics import host_species, sample_sources, kolumns, generated_taxoncore_dictionary
 from .config import RancheroConfig
 import polars as pl
 from . import _NeighLib as NeighLib
@@ -9,7 +9,7 @@ class ProfessionalsHaveStandards():
 			raise ValueError("No configuration was passed to NeighLib class. Ranchero is designed to be initialized with a configuration.")
 		else:
 			self.cfg = configuration
-			self.logging = self.cfg.logger\
+			self.logging = self.cfg.logger
 
 	def standardize_sample_source(self, polars_df):
 		if polars_df.schema['isolation_source'] == pl.List:
@@ -357,7 +357,25 @@ class ProfessionalsHaveStandards():
 				.otherwise(pl.col('host_commonname'))
 				.alias('host_commonname')
 			])
-		return polars_df
+		return polars_df.drop('anonymised_badger_id_sam')
+
+	def unmask_mice(self, polars_df):
+		"""
+		TODO: this doesn't add a confidence score
+		"""
+		if 'mouse_strain_sam' in polars_df.columns:
+			polars_df = polars_df.with_columns([
+				pl.when((pl.col('mouse_strain_sam').is_not_null()) & (pl.col('host_commonname').is_null()))
+				.then(pl.lit('mouse'))
+				.otherwise(pl.col('host_commonname'))
+				.alias('host_commonname'),
+
+				pl.when((pl.col('mouse_strain_sam').is_not_null()) & (pl.col('host_scienname').is_null()))
+				.then(pl.lit('Mus musculus'))
+				.otherwise(pl.col('host_scienname'))
+				.alias('host_scienname')
+			])
+		return polars_df.drop('mouse_strain_sam')
 
 	# because polars runs with_columns() matches in parallel, this is probably the most effecient way to do this. but having four functions for it is ugly.
 	def taxoncore_O(self, polars_df, match_string, i_organism, exact=False):
@@ -397,6 +415,20 @@ class ProfessionalsHaveStandards():
 	def only_stuff_probably_on_tree(self, polars_df, identifers=['tba4', 'tba3']):
 		pass
 
+	def taxoncore_iterate_rules(self, polars_df):
+		if self.cfg.taxoncore_ruleset is None:
+			raise ValueError("A taxoncore ruleset failed to initialize, so we cannot use function taxoncore_iterate_rules!")
+		for when, strain, lineage, organism, bacterial_group, comment in (entry.values() for entry in self.cfg.taxoncore_ruleset):
+			if strain is None and lineage is None:
+				polars_df = self.taxoncore_O(polars_df, when, i_organism=organism)
+			elif strain is None:
+				polars_df = self.taxoncore_OL(polars_df, when, i_organism=organism, i_lineage=lineage)
+			elif lineage is None:
+				polars_df = self.taxoncore_OS(polars_df, when, i_organism=organism, i_strain=strains)
+			else:
+				polars_df = self.taxoncore_OLS(polars_df, when, i_organism=organism, i_lineage=lineage, i_strain=strain)
+		return polars_df
+
 	def sort_out_taxoncore_columns(self, polars_df):
 		"""
 		Some columns in polars_df will be in list all_taxoncore_columns. We want to use these taxoncore columns to create three new columns:
@@ -414,12 +446,14 @@ class ProfessionalsHaveStandards():
 		assert 'i_lineage' not in polars_df.columns
 		assert 'i_strain' not in polars_df.columns
 		assert 'taxoncore_list' not in polars_df.columns
+		polars_df = self.rm_all_phages(polars_df)
 		merge_these_columns = [col for col in polars_df.columns if col in sum(kolumns.merge__special_taxonomic_handling.values(), [])]
 
 		for col in merge_these_columns:
 			if polars_df.schema[col] == pl.List:
 				polars_df = polars_df.with_columns(pl.col(col).list.join(", ").alias(col))
 			assert polars_df.schema[col] == pl.Utf8
+		
 		# taxoncore_list used for most matches,
 		# but to extract lineages with regex we also need a column without lists
 		polars_df = polars_df.with_columns(pl.concat_list([pl.col(col) for col in merge_these_columns]).alias("taxoncore_list"))
@@ -427,154 +461,72 @@ class ProfessionalsHaveStandards():
 		for col in merge_these_columns:
 			polars_df = polars_df.drop(col)
 		polars_df = polars_df.with_columns(i_lineage=None, i_organism=None, i_strain=None)
-		# we start off with ones that are less precise first, to allow overwriting later
 
-		# attempt to copy over specific lineages using string column
-		# TODO: adjust for africanuum
-
-		polars_df = polars_df.with_columns([pl.when(
-			pl.col('taxoncore_str').str.contains(r'\b[Ll][0-9]{1}(\.[0-9]{1})*')
-			.and_(~pl.col('taxoncore_str').str.contains(r'\b[Ll][0-9]{2,}'))
-			) 
-			.then(pl.lit('Mycobacterium tuberculosis')).otherwise(pl.col('i_organism')).alias('i_organism'),
+		# try extracting lineages using regex
+		polars_df = polars_df.with_columns([
 			pl.when(pl.col('taxoncore_str').str.contains(r'\bL[0-9]{1}(\.[0-9]{1})*')
 				.and_(~pl.col('taxoncore_str').str.contains(r'\b[Ll][0-9]{2,}'))
 			)
-			#.then(pl.col('taxoncore_str')).otherwise(pl.col('i_lineage')).alias('i_lineage')])	
 			.then(pl.col('taxoncore_str').str.extract(r'\bL[0-9](\.[0-9]{1})*', 0)).otherwise(pl.col('i_lineage')).alias('i_lineage')])
 
 		NeighLib.print_value_counts(polars_df, ['i_lineage'])
 
-		for 
-
-		polars_df = self.taxoncore_O(polars_df, '(?i)Mycobacterium tuberuclosis',
-			i_organism='Mycobacterium tubercuclosis!!!',
-			exact=True)
-		polars_df = self.taxoncore_O(polars_df, '(?i)Mycobacterium tubercuclosis',
-			i_organism='Mycobacterium tubercuclosis!!',
-			exact=True)
-		polars_df = self.taxoncore_O(polars_df, '(?i)Mycobacterium tuberculosis',
-			i_organism='Mycobacterium tubercuclosis!',
-			exact=True)
-
-		polars_df = self.taxoncore_OL(polars_df, '(?i)Harlem', # typo of Haarlem
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L4.1.2')
-
-		polars_df = self.taxoncore_OS(polars_df, 'MtZ',
-			i_organism='Mycobacterium tuberculosis',
-			i_strain='Zaragoza')
-
-		# Euro-American (L4)
-		polars_df = self.taxoncore_OL(polars_df, '(?i)EuroAmerican',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L4')
-		polars_df = self.taxoncore_OL(polars_df, '(?i)Euro-American',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L4')
-
-		polars_df = self.taxoncore_O(polars_df, '(?i)canetti', # common typo that also matches the correct form
-			i_organism='Mycobacterium canettii')
-		polars_df = self.taxoncore_O(polars_df, '(?i)pinnipedi', # pinnipedi/pinnipedii
-			i_organism='Mycobacterium pinnipedii')
-		polars_df = self.taxoncore_O(polars_df, '(?i)mungi',
-			i_organism='Mycobacterium mungi')
-		polars_df = self.taxoncore_O(polars_df, '(?i)microti',
-			i_organism='Mycobacterium microti')
-		polars_df = self.taxoncore_OL(polars_df, '(?i)bovis',
-			i_organism='Mycobacterium bovis',
-			i_lineage='La1')
-		polars_df = self.taxoncore_OL(polars_df, '(?i)caprae',
-			i_organism='Mycobacterium caprae',
-			i_lineage='La2')
-		polars_df = self.taxoncore_OL(polars_df, '(?i)orygis',
-			i_organism='Mycobacterium orygis',
-			i_lineage='La3')
-		polars_df = self.taxoncore_O(polars_df, '(?i)subsp. tuberculosis',
-			i_organism='Mycobacterium tuberuclosis')
-
-		# LAM (4.3)
-		polars_df = self.taxoncore_OL(polars_df, 'LAM', # case-sensitive
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L4.3')
-
-		# Beijing (L2.2.1)
-		polars_df = self.taxoncore_OL(polars_df, r'\b2\.2\.1(\s|$)',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L2.2.1')
-		polars_df = self.taxoncore_OL(polars_df, '(?i)Beijing',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L2.2.1')
-
-		# mentions Bejing but isn't (processed *after* Beijing)
-		polars_df = self.taxoncore_OL(polars_df, '(?i)Proto-Beijing',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L2')
-		polars_df = self.taxoncore_OL(polars_df, '(?i)non-Beijing',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L2')
-
-		# Manila
-		polars_df = self.taxoncore_OLS(polars_df, '(?i)Manila',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L1',
-			i_strain='Manila')
-		polars_df = self.taxoncore_OLS(polars_df, '(?i)ST-19', # TODO: this might be lead to dodgy false matches for ST-199, etc
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L1',
-			i_strain='Manila')
-		polars_df = self.taxoncore_OLS(polars_df, '(?i)ST279',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L1',
-			i_strain='Manila')
-
-		polars_df = self.taxoncore_OLS(polars_df, '(?i)Ravenel',
-			i_organism='Mycobacterium bovis',
-			i_lineage='La1',
-			i_strain='Ravenel')
-
-		polars_df = self.taxoncore_OS(polars_df, 'Zaragoza',
-			i_organism='Mycobacterium tuberculosis',
-			i_strain='Zaragoza')
-
-
-		polars_df = self.taxoncore_OS(polars_df, '(?i)CDC1551', # https://biocyc.org/organism-summary?object=MTBCDC1551
-			i_organism='Mycobacterium tuberculosis',
-			i_strain="Oshkosh")
-		polars_df = self.taxoncore_OS(polars_df, '(?i)Oshkosh', # https://biocyc.org/organism-summary?object=MTBCDC1551
-			i_organism='Mycobacterium tuberculosis',
-			i_strain="Oshkosh")
-
-		polars_df = self.taxoncore_OS(polars_df, '(?i)STB-K',
-			i_organism='Mycobacterium canettii',
-			i_strain='STB-K')
-		polars_df = self.taxoncore_OS(polars_df, '(?i)Percy302',
-			i_organism='Mycobacterium canettii',
-			i_strain='STB-K')
-
-		polars_df = self.taxoncore_OL(polars_df, '(?i)Haarlem',
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L4.1.2')
-
-		#polars_df = self.taxoncore_OLS(polars_df, r'(?i)\bH37Rv\b(?!-like)', # H37Rv, but not "H37Rv-like"
-		#	i_organism='Mycobacterium tuberculosis',
-		#	i_lineage='L4',
-		#	i_strain='H37Rv')
-
-		polars_df = self.taxoncore_OL(polars_df, '(?i)africanum',
-			i_organism='Mycobacterium africanum',
-			i_lineage='L5/L6')
-
-		polars_df = self.taxoncore_OLS(polars_df, 'BCG',
-			i_organism='Mycobacterium bovis',
-			i_lineage='La1.2',
-			i_strain='BCG')
-
-		polars_df = self.taxoncore_OL(polars_df, '(?i)Aethiop', # Nebenzahl-Guimaraes et al. proposed name for L7 is "Aethiop vetus" (PMC5320646)
-			i_organism='Mycobacterium tuberculosis',
-			i_lineage='L7')
+		# now try taxoncore ruleset
+		if self.cfg.taxoncore_ruleset is None:
+			logging.warning("Taxoncore ruleset was not initialized, so only basic matching will be performed.")
+		else:
+			polars_df = self.taxoncore_iterate_rules(polars_df)
 
 		return polars_df
+
+	def rm_all_phages(self, polars_df, inverse=False, column='taxoncore_str'):
+		NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=True)
+		if not inverse:
+			return polars_df.filter(~pl.col(column).str.contains_any(["phage"]))
+		else:
+			return polars_df.filter(pl.col(column).str.contains_any(["phage"]))
+	
+	def standardize_countries(self, polars_df):
+		assert 'geoloc_name' in polars_df.columns
+		assert ['country_colon_region', 'new_region', 'new_country'] not in polars_df.columns
+
+		# TODO: if polars_df.schema['geoloc_name'] == pl.Utf8, do a simpler version
+
+		# ideal case: one colon across the entire "geoloc_name" list column
+		polars_df = polars_df.with_columns([
+			pl.when(pl.col("geoloc_name").list.eval(pl.element().str.count_matches(":")).list.sum() == 1)
+			.then(
+				pl.col("geoloc_name").list.eval(pl.element().filter(pl.element().str.contains(":")))
+				.list.first().str.split(":")
+			)
+			.alias("country_colon_region")
+		])
+		polars_df = polars_df.with_columns([
+			pl.when(pl.col("country_colon_region").list.len() > 1)
+			.then(
+				pl.col("country_colon_region").list.first()
+			)
+			.alias("new_country"),
+			pl.when(pl.col("country_colon_region").list.len() > 1)
+			.then(
+				pl.col("country_colon_region").list.last().str.strip_chars_start() # strips leading whitespace
+			)
+			.alias("new_region")
+		])
+
+		# handle the less-than-ideal situations
+		polars_df = polars_df.with_columns([
+			pl.when(pl.col("geoloc_name").list.eval(pl.element().str.count_matches(":")).list.sum() != 1)
+			.then(
+				pl.col("geoloc_name").list.join("; ")
+			)
+			.alias("NERDS!")
+		])
+
+		return polars_df
+
+
+		
 
 	def merge_organism_columns():
 		pass
@@ -589,8 +541,7 @@ class ProfessionalsHaveStandards():
 		# excludes the organism column
 		pass
 
-	def standardize_countries():
-		pass
+	
 
 	def standardize_TB_lineages(self,
 		drop_non_standarized=True,
