@@ -21,20 +21,12 @@ def inital_file_parse():
 	print(f"Rancheroized in {time.time() - start} seconds")
 
 	tba6 = Ranchero._Standardizer.standardize_countries(tba6)
-
-
-
-	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'new_country')
-	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'new_region')
-	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'NERDS!')
-
-	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'date_collected')
 	tba6 = Ranchero.cleanup_dates(tba6)
 	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'date_collected')
+	Ranchero.NeighLib.print_only_where_col_not_null(tba6, 'all_geoloc_names')
+	exit(2)
 
 	#print(Ranchero.NeighLib.print_only_where_col_list_is_big(tba6, 'new_country'))
-
-	exit(1)
 
 
 	start, tba6 = time.time(), Ranchero.standardize_sample_source(tba6)

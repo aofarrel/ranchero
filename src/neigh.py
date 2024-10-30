@@ -14,14 +14,51 @@ class NeighLib:
 			self.cfg = configuration
 			self.logging = self.cfg.logger
 
-	@classmethod
-	def nullify(self, polars_df, only_this_column=None):
-		if only_this_column is None:
-			return polars_df.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_dictionary))
-		else:
-			return polars_df.with_columns(pl.col(only_this_column).replace(null_values.null_values_dictionary))
+	#@classmethod
+	def nullify(self, polars_df, only_this_column=None, drop_na_exempt=kolumns.equivalence['geoloc_name']):
+		"""
+		Turns stuff like "not collected" and "n/a" into pl.Null values, per null_values.py
+		Be aware that when matching on pl.List(pl.Utf8) columns, you CAN match on empty strings to properly remove them from
+		the list, but when matching on pl.Utf8 columns, you CANNOT match on empty strings or else the entire column gets wiped.
 
-	def print_col_where(self, polars_df, column="source", equals="Coscolla", cols_of_interest=['acc', 'run_index', 'source', 'literature_lineage', 'Biosample', 'sample_index', 'concat_list', 'coscolla_lineage']+kolumns.equivalence['date_collected']):
+
+		Previously, this avoided for loops, but only worked on columns of type string and had case sensitivity.
+		There is probably a more effecient way to achieve these goals, but this is what I'm sticking to for now.
+		"""
+		for null_value in null_values.null_values_regex:
+
+			if only_this_column is None:
+				string_cols = [col for col, dtype in polars_df.schema.items() if dtype == pl.Utf8]
+				polars_df = polars_df.with_columns([
+					#pl.when(pl.col(col).str.contains_any(null_values.null_values, ascii_case_insensitive=True))
+					pl.when(pl.col(col).str.contains(null_value))
+					.then(None)
+					.otherwise(pl.col(col))
+					.alias(col) for col in string_cols])
+
+				polars_df = polars_df.with_columns(pl.col(pl.List(pl.Utf8)).list.eval(
+					pl.element().filter(~pl.element().is_in(null_values.null_values))
+					#pl.element().filter(~pl.element().str.contains_any(null_values.null_values, ascii_case_insensitive=True)))
+				))
+			else:
+				if polars_df.schema[only_this_column] == pl.Utf8:
+					polars_df = polars_df.with_columns(
+						[pl.when(pl.col(only_this_column).str.contains(null_value))
+						.then(None)
+						.otherwise(pl.col(only_this_column))
+						.alias(only_this_column)])
+				elif polars_df.schema[only_this_column] == pl.List:
+					 polars_df = polars_df.with_columns(
+					 	pl.col(only_this_column).list.eval(pl.element().filter(~pl.element().is_in(null_values.null_values)))
+					 )
+				#polars_df = polars_df.with_columns(
+				#	 	pl.col(only_this_column).list.eval(pl.element().filter(~pl.element().str.contains_any(null_values.null_values, ascii_case_insensitive=True)))
+				#	 )
+				else:
+					logging.error(f"Tried to nullify {only_this_column} but has incompatiable type {polars_df[only_this_column].schema}")
+		return polars_df
+
+	def print_col_where(self, polars_df, column="source", equals="Coscolla", cols_of_interest=['acc', 'run_index', 'source', 'literature_lineage', 'Biosample', 'sample_index', 'concat_list', 'coscolla_lineage']+kolumns.equivalence['date_collected']+kolumns.equivalence['geoloc_name']):
 		if column not in polars_df.columns:
 			self.logging.warning(f"Tried to print where {column} equals {equals}, but that column isn't in the dataframe")
 			return
@@ -50,13 +87,13 @@ class NeighLib:
 			with pl.Config(tbl_cols=-1, tbl_rows=50, fmt_str_lengths=200, fmt_table_cell_list_len=10):
 				print(polars_df.filter(pl.col(column_of_lists).list.len() > 1).select(cols_to_print))
 
-	def print_only_where_col_not_null(self, polars_df, column):
+	def print_only_where_col_not_null(self, polars_df, column, cols_of_interest=kolumns.equivalence['run_index']+kolumns.equivalence['sample_index']):
 		if column not in polars_df.columns:
 			self.logging.warning(f"Tried to print where {column} is not null, but that column isn't even in the dataframe!")
 		else:
-			cols_of_interest = kolumns.equivalence['run_index'] + kolumns.equivalence['sample_index'] + [column]
+			cols_of_interest.append(column)
 			cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
-			with pl.Config(tbl_cols=-1, tbl_rows=20):
+			with pl.Config(tbl_cols=-1, tbl_rows=500):
 				print(polars_df.filter(pl.col(column).is_not_null()).select(cols_to_print))
 
 	def mark_rows_with_value(self, polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
@@ -434,6 +471,13 @@ class NeighLib:
 				self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(30), f"polars_df, after set treatment (true len {len(debug_print)})")
 			return polars_df
 
+	def flatten_list_col_as_set(self, polars_df, column):
+		polars_df = self.flatten_one_nested_list_col(polars_df, column) # recursive
+		index_column = self.get_index_column(polars_df)
+		polars_df = polars_df.with_columns(pl.col(column).list.unique().alias(f"{column}"))
+		polars_df = self.coerce_to_not_list_if_possible(polars_df, column, index_column)
+		return polars_df
+
 	def flatten_all_list_cols_as_much_as_possible(self, polars_df, hard_stop=False, force_strings=False):
 		"""
 		Flatten list columns as much as possible. If a column is just a bunch of one-element lists, for
@@ -532,6 +576,14 @@ class NeighLib:
 
 	def drop_known_unwanted_columns(self, polars_df):
 		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.silly_columns])
+
+	def flatten_one_nested_list_col(self, polars_df, column):
+		if polars_df[column].schema == pl.List(pl.List):
+			polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten().drop_nulls()))
+		if polars_df[column].schema == pl.List(pl.List):
+			polars_df = self.flatten_one_nested_list_col(polars_df, column)
+		return polars_df
+
 
 	def flatten_nested_list_cols(self, polars_df):
 		"""Flatten nested list columns"""

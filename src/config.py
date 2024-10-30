@@ -19,7 +19,11 @@ class RancheroConfig:
 		# does not save the dataframe, as we don't want to have to update this df constantly
 		# TODO: this doesn't handle self.unwanted properly
 		stuff = self.__dict__.copy()
-		print(stuff)
+		for keys in stuff:
+			if keys == 'taxoncore_ruleset' and stuff['taxoncore_ruleset'] is not None:
+				print(f"⋆ {keys}: Initialized with {len(stuff['taxoncore_ruleset'])} values")
+			else:
+				print(f"⋆ {keys}: {stuff[keys]}")
 		#import polars as pl
 		#del stuff['unwanted']
 		#print(pl.from_dict(stuff, strict=False))
@@ -28,7 +32,6 @@ class RancheroConfig:
 		raise ValueErrror("Reading configuration files currently isn't implemented!")
 
 	def prepare_taxoncore_dictionary(self, tsv='./src/statics/taxoncore_v3.tsv'):
-		print(os.getcwd())
 		if os.path.isfile(tsv):
 			with open(tsv, 'r') as tsvfile:
 				taxoncore_rules = []
@@ -53,7 +56,7 @@ class RancheroConfig:
 				self.logger.warning("Found a generated taxoncore dictionary, but not its source TSV. We can still use all standardize functions, but be aware the dictionary may be 'stale'.")
 				return taxoncore_rules
 			else:
-				self.logger.warning("Found neither taxoncore TSV nor generated dictionary. Certain functions will not work.")
+				self.logger.warning(f"Found neither taxoncore TSV nor generated dictionary at {tsv} (workdir: {os.getcwd()}). Certain functions will not work.")
 				return None
 		
 
@@ -78,18 +81,14 @@ class RancheroConfig:
 	def _setup_logger(self):
 		"""Sets up a logger instance"""
 		if not logging.getLogger().hasHandlers(): # necessary to avoid different modules logging all over each other
-			print("Setting up logger")
 			logger = logging.getLogger(__name__)
 			logging.basicConfig(format='%(levelname)s:%(funcName)s:%(message)s', level=self.loglevel)
-		else:
-			print("Logger already exists")
 		return logger
 
 
 	def __init__(self):
 		""" Creates a fallback configuration if read_config() isn't run"""
-		print("Starting config")
 		self._make_default_config()
-		self.print_config_dataframe()
 		self.logger = self._setup_logger()
 		self.taxoncore_ruleset = self.prepare_taxoncore_dictionary()
+		self.print_config_dataframe()

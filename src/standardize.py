@@ -322,26 +322,92 @@ class ProfessionalsHaveStandards():
 		"""
 		Notes:
 		* len_bytes() is way faster than len_chars()
-		* yeah you can have mutliple expressions in one with_columns() but that'd require tons of alias columns so I'm not doing that
+		* yeah you can have mutliple expressions in one with_columns() but that'd require tons of alias columns plus nullify so I'm not doing that
 		"""
 
+		# YYYY/YYYY
+		polars_df = polars_df.with_columns(
+			pl.when((pl.col('date_collected').str.len_bytes() == 9)
+			.and_(pl.col('date_collected').str.count_matches("/") == 1))
+			.then(None).otherwise(pl.col('date_collected')).alias("date_collected")
+		)
+
+		# YYYY/YYYY/YYYY
+		polars_df = polars_df.with_columns(
+			pl.when((pl.col('date_collected').str.len_bytes() == 14)
+			.and_(pl.col('date_collected').str.count_matches("/") == 2))
+			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
+		)
+
+		polars_df = polars_df.with_columns(
+			pl.when((pl.col('date_collected').str.len_bytes() == 14))
+			.then(pl.lit('foo')).otherwise(pl.col('date_collected')).alias("date_collected"),
+		)
+
+		# YYYY/YYYY/YYYY/YYYY
+		polars_df = polars_df.with_columns(
+			pl.when((pl.col('date_collected').str.len_bytes() == 19)
+			.and_(pl.col('date_collected').str.count_matches("/") == 3))
+			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
+		)
+		
+
+		# YYYY/MM or MM/YYYY
+		polars_df = polars_df.with_columns(
+			pl.when((pl.col('date_collected').str.len_bytes() == 7)
+			.and_(pl.col('date_collected').str.count_matches("/") == 1))
+			.then(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]', 0)).otherwise(pl.col('date_collected')).alias("date_collected")
+		)
+
+		# YYYY-MM/YYYY-MM
 		polars_df = polars_df.with_columns([
-			pl.when((pl.col('date_collected').str.len_bytes() == 9).and_(pl.col('date_collected').str.contains("/"))) # YYYY/YYYY
-			.then(None)
-			.otherwise(
-					pl.when(pl.col('date_collected').is_not_null())
-					.then(pl.col('date_collected'))
-					.otherwise(None))
-				.alias("date_collected"),
+			pl.when((pl.col('date_collected').str.len_bytes() == 15)
+			.and_(pl.col('date_collected').str.count_matches("/") == 2)
+			.and_(pl.col('date_collected').str.count_matches("-") == 2))
+			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
 		])
+
+		# YYYY-MM-DDT00:00:00Z
 		polars_df = polars_df.with_columns([
-			pl.when((pl.col('date_collected').str.len_bytes() == 21).and_(pl.col('date_collected').str.contains("/"))) # 2016-07-01/2018-06-30
-			.then(None)
-			.otherwise(
-					pl.when(pl.col('date_collected').is_not_null())
-					.then(pl.col('date_collected'))
-					.otherwise(None))
-				.alias("date_collected"),
+			pl.when((pl.col('date_collected').str.len_bytes() == 20)
+			.and_(pl.col('date_collected').str.count_matches("Z") == 1)
+			.and_(pl.col('date_collected').str.count_matches(":") == 2))
+			.then(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]', 0)).otherwise(pl.col('date_collected')).alias("date_collected"),
+		])
+
+		# if the date range is within a year, such as "2016-01-30/2016-05-30", then return that year
+		# TODO: I can't get this to work properly. it's probably not worth trying to fix until after figuring out
+		# why polars-regex hates lookaround, given that the crate it's based on should support that?
+		polars_df = polars_df.with_columns(
+			pl.when((pl.col('date_collected').str.len_bytes() == 21)
+			.and_(pl.col('date_collected').str.count_matches("/") == 1))
+			.then(
+				None
+				#pl.when(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]', 1) == pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]', 2))
+				#.then(r'[0-9][0-9][0-9][0-9]', 0))
+				#.otherwise(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]', 0))
+				#.alias("date_collected")
+			)
+			.otherwise(pl.col('date_collected'))
+			.alias("date_collected_e"),
+		)
+
+
+
+		# DEBUG
+		polars_df = polars_df.with_columns([
+			pl.when(pl.col('date_collected').str.len_bytes() == 4)
+			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
+		])
+		# DEBUG
+		polars_df = polars_df.with_columns([
+			pl.when(pl.col('date_collected').str.len_bytes() == 10)
+			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
+		])
+		# DEBUG
+		polars_df = polars_df.with_columns([
+			pl.when(pl.col('date_collected').str.len_bytes() == 7)
+			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
 		])
 
 		return NeighLib.nullify(polars_df, 'date_collected')
@@ -488,40 +554,50 @@ class ProfessionalsHaveStandards():
 	
 	def standardize_countries(self, polars_df):
 		assert 'geoloc_name' in polars_df.columns
-		assert ['country_colon_region', 'new_region', 'new_country'] not in polars_df.columns
+		assert ['country_colon_region', 'new_region', 'new_country', 'all_geoloc_names'] not in polars_df.columns
 
 		# TODO: if polars_df.schema['geoloc_name'] == pl.Utf8, do a simpler version
 
-		# ideal case: one colon across the entire "geoloc_name" list column
-		polars_df = polars_df.with_columns([
-			pl.when(pl.col("geoloc_name").list.eval(pl.element().str.count_matches(":")).list.sum() == 1)
-			.then(
-				pl.col("geoloc_name").list.eval(pl.element().filter(pl.element().str.contains(":")))
-				.list.first().str.split(":")
-			)
-			.alias("country_colon_region")
-		])
-		polars_df = polars_df.with_columns([
-			pl.when(pl.col("country_colon_region").list.len() > 1)
-			.then(
-				pl.col("country_colon_region").list.first()
-			)
-			.alias("new_country"),
-			pl.when(pl.col("country_colon_region").list.len() > 1)
-			.then(
-				pl.col("country_colon_region").list.last().str.strip_chars_start() # strips leading whitespace
-			)
-			.alias("new_region")
-		])
+		if polars_df.schema['geoloc_name'] == pl.List(pl.Utf8):
 
-		# handle the less-than-ideal situations
-		polars_df = polars_df.with_columns([
-			pl.when(pl.col("geoloc_name").list.eval(pl.element().str.count_matches(":")).list.sum() != 1)
-			.then(
-				pl.col("geoloc_name").list.join("; ")
-			)
-			.alias("NERDS!")
-		])
+			# ideal case: one colon across the entire "geoloc_name" list column
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col("geoloc_name").list.eval(pl.element().str.count_matches(":")).list.sum() == 1)
+				.then(
+					pl.col("geoloc_name").list.eval(pl.element().filter(pl.element().str.contains(":")))
+					.list.first().str.split(":")
+				)
+				.alias("country_colon_region")
+			])
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col("country_colon_region").list.len() > 1)
+				.then(
+					pl.col("country_colon_region").list.first()
+				)
+				.alias("new_country"),
+				pl.when(pl.col("country_colon_region").list.len() > 1)
+				.then(
+					pl.col("country_colon_region").list.last().str.strip_chars_start() # strips leading whitespace
+				)
+				.alias("new_region")
+			])
+			
+			# handle the less-than-ideal situations
+			polars_df = polars_df.with_columns([
+				# for some reason, adding `.and_(pl.col("geoloc_name").list.len() > 0))` will still accept list[null]
+				# no reason to add and_() if we end up with nulls join()ing themselves anyway
+				pl.when((pl.col("geoloc_name").list.eval(pl.element().str.count_matches(":")).list.sum() != 1))
+				.then(
+					pl.col("geoloc_name").list.join("; ")
+				)
+				.otherwise(None)
+				.alias("all_geoloc_names")
+			])
+		else:
+			raise ValueError
+
+
+		polars_df = NeighLib.nullify(polars_df, only_this_column='all_geoloc_names') # deal with those join()ed nulls that became empty strings
 
 		return polars_df
 

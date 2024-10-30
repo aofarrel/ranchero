@@ -80,7 +80,7 @@ typical_names = {
 	'Japan': 'JPN',
 	'Kazakhstan': 'KAZ',
 	'Kenya': 'KEN',
-	'Korea': 'KOR', # SAMN03787965 is the only one and points to 37.33 N 126.58 E
+	'Korea': 'KOR',
 	'Kyrgyzstan': 'KGZ',
 	'Laos': 'LAO',
 	'Latvia': 'LVA',
@@ -160,9 +160,9 @@ typical_names = {
 }
 
 existing_shorthands = {
-	'GB': 'GBR',
-	'US': 'USA',
-	'UK': 'GBR'
+	'\bGB\b': 'GBR',
+	'\bUS\b': 'USA',
+	'\bUK\b': 'GBR'
 }
 
 typos = {
@@ -170,3 +170,5 @@ typos = {
 	'Ethopia': 'ETH',
 	'Marocco': 'MAR'
 }
+
+everything = {**long_names, **typical_names, **existing_shorthands, **typos}

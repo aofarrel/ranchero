@@ -1,7 +1,5 @@
 RECENT CHANGES
-* taxoncore dictionary is now a tsv that becomes a list of dictionaries at config runtime
-* taxoncore now works pretty well
-* more columns get dropped now
+* nullify now acts on strings within lists!
 
 HIGH PRIORITY
 * there is a column called "literal" sneaking in, probably from a pl.lit()
