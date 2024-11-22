@@ -4,7 +4,8 @@ from numpy import nan as nan
 # value: [scientific name, scientific name certainty (1-3, 3 is highest), common name]
 
 exact_match_only = {
-	'9606': ['Homo sapiens', 1, "human"], # NCBI taxid 9606 is human
+	'9606': ['Homo sapiens', 3, "human"], # NCBI taxid 9606 is human
+	'9606, Homo sapiens': ['Homo sapiens', 3, "human"], # NCBI taxid 9606 is human
 	'antelope': ['null', 3, "antelope"],
 	'Buffalo': ['null', 3, "buffalo"],
 	'Canis': ['Canis sp.', 3, "canine"],
@@ -18,7 +19,6 @@ exact_match_only = {
 }
 
 species = {
-
 	'African Elephant': ['Loxodonta sp.', 3, "African elephant"],
 	'Amphibian : African clawed toad': ['Xenopus laevis', 3, 'African clawed frog'],
 	'Antelope Cervicapra': ['Antilope cervicapra', 3, "blackbuck"],

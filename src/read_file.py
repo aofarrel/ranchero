@@ -2,11 +2,29 @@ import pandas as pd
 import polars as pl
 from contextlib import suppress
 import os
-from tqdm import tqdm
+import csv
+from collections import OrderedDict # dictionaries are ordered in Python 3.7+, but OrderedDict has a better popitem() function we need
 from src.statics import kolumns, null_values
 from .config import RancheroConfig
 from . import _NeighLib as NeighLib
-tqdm.pandas()
+
+# my crummy implementation of https://peps.python.org/pep-0661/
+globals().update({f"_cfg_{name}": object() for name in [
+    "auto_cast_types", "auto_parse_dates", "auto_rancheroize", 
+    "check_index", "ignore_polars_read_errors", "indicator_column",
+    "intermediate_files", "rm_dupes", "rm_not_pared_illumina"
+]})
+_SENTINEL_TO_CONFIG = {
+    _cfg_rm_dupes: "rm_dupes",
+    _cfg_auto_cast_types: "auto_cast_types",
+    _cfg_auto_parse_dates: "auto_parse_dates",
+    _cfg_auto_rancheroize: "auto_rancheroize",
+    _cfg_check_index: "check_index",
+    _cfg_ignore_polars_read_errors: "ignore_polars_read_errors",
+    _cfg_intermediate_files: "intermediate_files",
+    _cfg_indicator_column: "indicator_column",
+    _cfg_rm_not_pared_illumina: "rm_not_pared_illumina",
+}
 
 class FileReader():
 
@@ -16,35 +34,80 @@ class FileReader():
 		else:
 			self.cfg = configuration
 			self.logging = self.cfg.logger
+			if self.logging.getEffectiveLevel() == 10:
+				try:
+					from tqdm import tqdm
+					tqdm.pandas()
+				except ImportError:
+					self.logging.warning("Failed to import tqdm -- pandas operations will not show a progress bar")
 
-	def _get_cfg_if_not_overwritten(self, arg, config_arg_name):
+	def _sentinal_handler(self, arg):
 		"""Handles "allow overriding config" variables in function calls"""
-		if arg is not None:
-			return arg
+		if arg in _SENTINEL_TO_CONFIG:
+			config_attr = _SENTINEL_TO_CONFIG[arg]
+			check_me = getattr(self.cfg, config_attr)
+			assert check_me != arg, f"Configuration for '{config_attr}' is invalid or uninitialized"
+			return check_me
 		else:
-			return getattr(self.cfg, config_arg_name)
+			return arg
 
-	def polars_from_ncbi_run_selector(self, csv):
-		run_raw = pl.read_csv(csv)
-		run_renamed = NeighLib.rancheroize_polars(run_raw)  # for compatibility with other formats
-		return run_renamed
-
-	def polars_from_tsv(self, tsv, sep='\t', immediate_try_parse_dates=None, ignore_polars_read_errors=None, null_values=null_values.null_values):
+	def read_metadata_injection(self, injection_file, delimiter='\t', drop_columns=[]):
 		"""
-		Read a TSV (or similar) and convert to Polars dataframe
+		Creates a list of dictionaries for metadata injection. Metadata injection is designed to mutate an existing pl.Dataframe's data
+		rather than just adding more rows onto the end. This function just reads the file; actual metadata injection is done in
+		standardize.py()
 
-		Configurations used:
-		* ignore_polars_read_errors (can be overwritten)
-		* immediate_try_parse_dates (can be overwritten)
-		* immediate_biosample_merge (set)
+		The first value acts as the "key" that will be matched upon. It's recommend to use BioProject, sample_id, or run_id for this.
+		Metadata injection works best when you are running it on a dataframe that has already been cleaned up and standardized with
+		Ranchero. You can use - (hyphen) to mark null values in your metadata injection TSV/CSV.
 		"""
-		immediate_try_parse_dates = self._get_cfg_if_not_overwritten(immediate_try_parse_dates, "immediate_try_parse_dates")
-		ignore_polars_read_errors = self._get_cfg_if_not_overwritten(ignore_polars_read_errors, "ignore_polars_read_errors")
+		dict_list = []
+		with open(injection_file, mode='r') as file:
+			reader = csv.DictReader(file, delimiter=delimiter)
+			for row in reader:
+				clean_row = OrderedDict((key, value) for key, value in row.items() if value != '-' and key not in drop_columns)
+				dict_list.append(clean_row)
+		return dict_list
 
-		dataframe = pl.read_csv(tsv, separator=sep, try_parse_dates=immediate_try_parse_dates, null_values=null_values, ignore_errors=ignore_polars_read_errors)
-		if self.cfg.immediate_biosample_merge:
-			dataframe = run_to_sample_index(dataframe, upon='BioSample', keep_all_columns=False)
-		return dataframe
+
+	def polars_from_ncbi_run_selector(self, csv, drop_columns=list(), check_index=_cfg_check_index, auto_rancheroize=_cfg_auto_rancheroize):
+		"""
+		1. Read CSV
+		2. Drop columns in drop_columns, if any
+		3. Check index (optional)
+		4. Rancheroize (optional)
+		"""
+		check_index = self._sentinal_handler(_cfg_check_index)
+		auto_rancheroize = self._sentinal_handler(_cfg_auto_rancheroize)
+		
+		polars_df = pl.read_csv(csv)
+		polars_df = polars_df.drop(drop_columns)
+		if check_index: NeighLib.check_index(polars_df)
+		if auto_rancheroize: polars_df = NeighLib.rancheroize_polars(polars_df)		
+		return polars_df
+
+	def polars_from_tsv(self, tsv, delimiter='\t', drop_columns=list(), 
+		auto_parse_dates=_cfg_auto_parse_dates,
+		auto_rancheroize=_cfg_auto_rancheroize,
+		check_index=_cfg_check_index, 
+		ignore_polars_read_errors=_cfg_ignore_polars_read_errors, 
+		null_values=null_values.nulls_CSV):
+		"""
+		1. Read a TSV (or similar) and convert to Polars dataframe
+		2. Drop columns in drop_columns, if any
+		3. Check index (optional)
+		4. Rancheroize (optional)
+		"""
+		auto_rancheroize = self._sentinal_handler(_cfg_auto_rancheroize)
+		auto_parse_dates = self._sentinal_handler(_cfg_auto_parse_dates)
+		check_index = self._sentinal_handler(_cfg_check_index)
+		ignore_polars_read_errors = self._sentinal_handler(_cfg_ignore_polars_read_errors)
+
+		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, ignore_errors=ignore_polars_read_errors)
+		polars_df = polars_df.drop(drop_columns)
+		if check_index: NeighLib.check_index(polars_df)
+		if auto_rancheroize: polars_df = NeighLib.rancheroize_polars(polars_df)
+		return polars_df
 
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{bq_file}_modified.json"
@@ -61,39 +124,34 @@ class FileReader():
 		self.logging.warning(f"Reformatted JSON saved to {out_file_path}")
 		return out_file_path
 
-	def polars_from_bigquery(self, bq_file, normalize_attributes=True):
+	def polars_from_bigquery(self, bq_file, drop_columns=list(), normalize_attributes=True):
 		""" 
 		1. Reads a bigquery JSON into a polars dataframe
 		2. (optional) Splits the attributes columns into new columns (combines fixing the attributes column and JSON normalizing)
 		3. Rancheroize columns
-		4. (optional) Merge by BioSample
-		Returns a polars dataframe.
-
-		Configurations used:
-		* immediate_biosample_merge (set)
 		"""
 		try:
-			bq_raw = pl.read_json(bq_file)
-			if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"{bq_file} has {bq_raw.width} columns and {len(bq_raw)} rows")
+			polars_df = pl.read_json(bq_file)
+			if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"{bq_file} has {polars_df.width} columns and {len(polars_df)} rows")
 		except pl.exceptions.ComputeError:
 			self.logging.warning("Caught exception reading JSON file. Attempting to reformat it...")
 			try:
-				bq_raw = pl.read_json(self.fix_bigquery_file(bq_file))
-				if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Fixed input file has {bq_raw.width} columns and {len(bq_raw)} rows")
+				polars_df = pl.read_json(self.fix_bigquery_file(bq_file))
+				if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Fixed input file has {polars_df.width} columns and {len(polars_df)} rows")
 			except pl.exceptions.ComputeError:
 				self.logging.error("Caught exception reading JSON file after attempting to fix it. Giving up!")
 				exit(1)
-		if normalize_attributes and "attributes" in bq_raw.columns:  # if column doesn't exist, return false
-			current = self.polars_fix_attributes_and_json_normalize(bq_raw)
-		if self.cfg.immediate_biosample_merge:
-			current = self.run_to_sample_index(current, upon='BioSample', keep_all_columns=False)
-		return current
+		polars_df = polars_df.drop(drop_columns)
+
+		if normalize_attributes and "attributes" in polars_df.columns:  # if column doesn't exist, return false
+			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df)
+		return polars_df
 
 
 	def polars_json_normalize(self, polars_df, pandas_attributes_series, rancheroize=False, collection_date_sam_workaround=True):
 		"""
 		polars_df: polars df to concat to at the end
-		pandas_attributes_series: pandas series of dictionaries that will json normalized
+		pandas_attributes_series: !!!pandas!!! series of dictionaries that will json normalized
 
 		We do this seperately so we can avoid converting the entire dataframe in and out of pandas.
 		"""
@@ -118,12 +176,9 @@ class FileReader():
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
 
-	def polars_run_to_sample(self, polars_df):
+	def polars_run_to_sample(self, polars_df, sample_index='sample_index', run_index='run_index'):
 		"""Public wrapper for run_to_sample_index()"""
-		if 'sample_index' not in polars_df.columns:
-			self.logging.error("Could not find a sample-based column to make as the index!")
-			exit(1)
-		return self.run_to_sample_index(polars_df, upon='sample_index')
+		return self.run_to_sample_index(polars_df, sample_index=sample_index, run_index='run_index')
 
 	def get_not_unique_in_col(self, polars_df, column):
 		return polars_df.filter(pl.col(column).is_duplicated())
@@ -137,7 +192,7 @@ class FileReader():
 		)
 		return polars_df
 
-	def polars_explode_delimited_rows_recklessly(self, polars_df, column="run_index", delimter=";", drop_new_non_unique=True):
+	def polars_explode_delimited_rows_recklessly(self, polars_df, column="run_index", delimiter=";", drop_new_non_unique=True):
 		"""
 		column 			some_other_column		
 		"SRR123;SRR124"	SchemaFieldNotFoundError
@@ -150,26 +205,76 @@ class FileReader():
 		"SRR124"		SchemaFieldNotFoundError
 		"SRR125" 		TapeError
 		"""
-		exploded = (polars_df.with_columns(pl.col(column).str.split(delimter)).explode(column)).unique()
+		exploded = (polars_df.with_columns(pl.col(column).str.split(delimiter)).explode(column)).unique()
 		if len(polars_df) == len(polars_df.select(column).unique()):
 			if len(exploded) != len(exploded.select(column).unique()):
-				print(f"Exploding created non-unique values for the previously unique-only column {column}, so we'll be merging...")
+				self.logging.info(f"Exploding created non-unique values for the previously unique-only column {column}, so we'll be merging...")
 				exploded = self.merge_row_duplicates(exploded, column)
 				if len(exploded) != len(exploded.select(column).unique()): # probably should never happen
-					print("Attempted to merge duplicates caused by exploding, but it didn't work.")
-					print(exploded)
-					print(len(exploded.select(column).unique()))
-					print(len(exploded))
-					print(self.get_not_unique_in_col(exploded, column))
-					print(len(exploded.select(column).unique()))
-					print(len(exploded))
-					exit(1)
+					self.logging.warning("Attempted to merge duplicates caused by exploding, but it didn't work.")
+					self.logging.warning(f"Debug information: Exploded df has len {len(exploded)}, unique in {column} len {len(exploded.select(column).unique())}")
+					raise ValueError
 		else:
 			# there aren't unique values to begin with so who cares lol
 			pass
 		return exploded
 
-	def run_to_sample_index(self, polars_df, upon='sample_index', try_to_be_clever=True):
+	def run_to_sample_grouping_simple(self, polars_df, run_index, sample_index):
+		grouped_df = (
+			polars_df
+			.group_by(sample_index)
+			.agg([
+				pl.concat_list(run_index).alias(run_index),
+				*[pl.concat_list(col).alias(col) for col in non_index_columns]
+			])
+		)
+		return grouped_df
+
+	def run_to_sample_grouping_clever_method(self, polars_df, run_index, sample_index):
+		"""
+		At the cost of a slower initial process, this ultimately saves 10-20 seconds upon being flattened.
+		"""
+		self.logging.debug("Using some tricks...")
+		non_index_columns = [col for col in polars_df.columns if col not in [run_index, sample_index]]
+		listbusters, listmakers, listexisters = [], [], [col for col, dtype in polars_df.schema.items() if (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8)]
+		
+		df_without_lists_of_string_columns = polars_df.select([
+			pl.col(col) for col, dtype in polars_df.schema.items() 
+			if not (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8) # for some reason n_unique works on lists of integers
+		])
+		
+		# get a dataframe that tells us the number of unique values with doing a group_by()
+		df_agg_nunique = df_without_lists_of_string_columns.group_by(sample_index).n_unique()
+		for other_column in non_index_columns:
+			# if non-index column isn't already a list (of any type), but is in df_without_lists_of_string_columns:
+			if polars_df.schema[other_column] is not pl.List and other_column in df_agg_nunique.columns:
+				if ((df_agg_nunique.select(pl.col(other_column) == 1).to_series()).all()):
+					listbusters.append(other_column)
+				else:
+					listmakers.append(other_column)
+		self.logging.debug(f"Does not need to become a list: {listbusters}")
+		self.logging.debug(f"Will become a list (but might be flattened later): {listmakers}")
+		self.logging.debug(f"Already a list: {listexisters}")
+
+		#for already_list_col in listexisters:
+		#	self.logging.debug(f"Examples of already-a-list columns: {already_list_col}:")
+		#	self.logging.debug(polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']))
+
+		grouped_df_ = (
+			polars_df
+			.group_by(sample_index)
+			.agg([
+				pl.concat_list(run_index).alias(run_index),
+				*[
+					(pl.first(col).alias(col) if col in listbusters else pl.concat_list(col).alias(col))
+					for col in non_index_columns
+				]
+			])
+		)
+		return grouped_df_
+
+
+	def run_to_sample_index(self, polars_df, run_index='run_index', sample_index='sample_index', skip_rancheroize=False):
 		"""
 		Flattens an input file using polar. This is designed to essentially turn run accession indexed dataframes
 		into BioSample-indexed dataframes. This will typically create columns of type list.
@@ -188,63 +293,17 @@ class FileReader():
 		[SRR125]        | SAMN2        | [bizz]
 		[SRR126]        | SAMN3        | [bar]
 		"""
-		assert 'run_index' in polars_df.columns
-		assert 'sample_index' in polars_df.columns
-		self.logging.debug(f"Flattening {upon}s...")
+		assert run_index in polars_df.columns
+		assert sample_index in polars_df.columns
 
-		polars_df = NeighLib.rancheroize_polars(polars_df)
-		NeighLib.print_col_where(polars_df, upon, "SAMN41453963")
-		other_columns = [col for col in polars_df.columns if col not in ["run_index", "sample_index"]]
+		if not skip_rancheroize:
+			polars_df = NeighLib.rancheroize_polars(polars_df) # runs check_index()
+		else:
+			NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
-		if try_to_be_clever:
-			listbusters, listmakers, listexisters = [], [], [col for col, dtype in polars_df.schema.items() if (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8)]
-			temp_no_stringlist_df = polars_df.select([
-				pl.col(col) for col, dtype in polars_df.schema.items() 
-				if not (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8) # for some reason n_unique works on lists of integers
-			])
-			#assert not set(temp_no_stringlist_df.columns) & set(listexisters)
-			
-			df_agg_nunique = temp_no_stringlist_df.group_by("sample_index").n_unique()
-			for other_column in other_columns:
-				if polars_df.schema[other_column] is not pl.List and other_column in df_agg_nunique.columns:
-					if ((df_agg_nunique.select(pl.col(other_column) == 1).to_series()).all()):
-						listbusters.append(other_column)
-					else:
-						listmakers.append(other_column)
-			self.logging.debug(f"listbusters: {listbusters}")
-			self.logging.debug(f"listmakers: {listmakers}")
-			self.logging.debug(f"listexisters: {listexisters}")
-
-			for already_list_col in listexisters:
-				self.logging.debug(f"Listexister {already_list_col}:")
-				self.logging.debug(polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']).head(15))
-
-			grouped_df = (
-				polars_df
-				.group_by('sample_index')
-				.agg([
-					pl.concat_list("run_index").alias("run_index"),
-					*[
-						(pl.first(col).alias(col) if col in listbusters else pl.concat_list(col).alias(col))
-						for col in other_columns
-					]
-				])
-			)
-
-		else:
-			grouped_df = (
-				polars_df
-				.group_by('sample_index')
-				.agg([
-					pl.concat_list("run_index").alias("run_index"),
-					*[pl.concat_list(col).alias(col) for col in other_columns]
-				])
-			)
-		NeighLib.print_col_where(grouped_df, upon, "SAMN41453963")
-		flat = NeighLib.flatten_nested_list_cols(grouped_df)
-		NeighLib.print_col_where(flat, upon, "SAMN41453963")
-		return flat
+		polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index))
+		return polars_df
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search=True):
 		"""
@@ -271,18 +330,18 @@ class FileReader():
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
 		if keep_all_primary_search:  # TODO: benchmark these two options
 			if self.logging.getEffectiveLevel() == 10:
-				print("Concatenating dictionaries with Pandas...")
+				self.logging.info("Concatenating dictionaries with Pandas...")
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts_with_shared_keys)
 			else:
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts_with_shared_keys)
 		else:
 			if self.logging.getEffectiveLevel() == 10:
-				print("Concatenating dictionaries with Pandas...")
+				self.logging.info("Concatenating dictionaries with Pandas...")
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts)
 			else:
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts)
 		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'])
 		if rancheroize: normalized = NeighLib.rancheroize_polars(normalized)
-		if self.cfg.cast_types: normalized = NeighLib.cast_politely(normalized)
+		if self.cfg.auto_cast_types: normalized = NeighLib.cast_politely(normalized)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
 		return normalized

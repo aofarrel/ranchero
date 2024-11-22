@@ -5,77 +5,100 @@ host_disease_exact_match = {
 	'TB': 'Unspecified TB',
 	'Tuberculosis': 'Unspecified TB',
 	'tuberculosis': 'Unspecified TB',
+	'DOID:552': 'Pneumonia',
+	'DOID:399': 'Unspecified TB',
+	'DOID:2957': 'Pulmonary TB',
+	'DOID:9861': 'Miliary TB',
+	'DOID:4962': 'Pericardial TB',
+	'DOID:106': 'Pleural TB',
+	'DOID:1639': 'Skeletal TB',
+	'leprosy': 'Leprosy',
 
 	# extrapulmonary is sometimes written as two words, so these need to be exact matches
-	'Pulmonary TB': 'Pulmonary TB',
-	'pulmonary tuberculosis': 'Pulmonary TB',
-	'Pulmonary tuberculosis': 'Pulmonary TB',
-	'Pulmonary Tuberculosis': 'Pulmonary TB',
+	'Pulmonary': 'Pulmonary TB',
+	'PTB': 'Pulomonary TB'
 }
 
 host_disease = {
+	'tuberculosis DOID:552': 'TB-associated pneumonia',
 	'Mycobacterium tuberculosis': 'Unspecified TB',
 	'Mycobacterium tuberculosis infection': 'Unspecified TB',
 	'Tuberculosis TB': 'Unspecified TB',
 	'TB infection': 'Unspecified TB',
 	'TUBERCULOSIS': 'Unspecified TB',
 	'Tuberculosis (TB)': 'Unspecified TB',
-	'tuberculosis DOID:552': 'Unspecified TB',
 
 	'bovine tuberculosis': 'Bovine TB',
 	'Bovine Tuberculosis': 'Bovine TB',
 	'Bovine tuberculosis': 'Bovine TB',
 	'bovine': 'Bovine TB',
 
-	'Chronic pulmonary tuberculosis': 'Chronic pulmonary TB',
+	'skeletal': 'Skeletal TB',
+	'Pericardial': 'Pericardial TB',
+	'miliary': 'Miliary TB',
+	'Spinal': 'Spinal TB',
+
+	'Chronic pulmonary tuberculosis': 'Pulmonary TB (chronic)',
 
 	'Tuberculosis lung infection': 'Pulmonary TB',
 	'Tuberculosis, Pulmonary': 'Pulmonary TB',
 	'Tuberculosis (pulmonary)': 'Pulmonary TB',
-	'Lung tuberculosis': 'Pulmonary TB',
 	'pulmonary infection': 'Pulmonary TB',
 
-	'infiltrative tuberculosis': 'Infiltrative TB',
+	'infiltrative': 'Infiltrative TB',
 
-	'refractory tuberculosis': 'Refractory TB',
+	'refractory': 'Refractory TB',
 
-	'Extrapulmonary tuberculosis': 'Extrapulmonary TB',
-	'Extra Pulmonary Tuberculosis': 'Extrapulmonary TB',
-	'extrapulmonary tuberculosis': 'Extrapulmonary TB',
-
-	'Spinal tuberculosis': 'Spinal TB',
+	'Extrapulmonary': 'Extrapulmonary TB',
+	'Extra Pulmonary': 'Extrapulmonary TB',
 
 	'Tuberculous meningitis': 'Meningeal TB',
-	'TB Meningitis': 'Meningeal TB',
 	'TB meningitis': 'Meningeal TB',
 
-	'Disseminated tuberculosis': 'Disseminated TB',
-	'Disseminated Pulmonary tuberculosis': 'Disseminated TB',
+	'Disseminated': 'Disseminated TB',
 
-	'leprosy': 'Leprosy',
-	'Leprosy': 'Leprosy',
 	'Lepromatous leprosy': 'Leprosy (Lepromatous)',
 	'Diffuse lepromatous leprosy': 'Leprosy (Lucio)',
 
-	'Health': "nan",
-	'host_disease_sam': "nan",
-	'human': "nan",
-	'homo sapiens': "nan",
-	'infection': "nan",
-	'Infections Sample039': "nan",
+	'Health': None,
+	'host_disease_sam': None,
+	'human': None,
+	'homo sapiens': None,
+	'infection': None,
+	'Infections Sample039': None,
 }
+
+sample_sources_nonspecific  = [
+	'DNA',
+	'Mycobacterium tuberculosis',
+	'tuberculosis',
+	'H37Rv', # standardize_sample_source_as_list() will put this in taxoncore first, standardize_sample_source_as_string() will not
+	'Homo sapiens',
+	'human',
+	'Mtb',
+	'MTBC',
+	'1',
+	'bovine',
+	'nan',
+	'Genomic DNA',
+	'dairy cow',
+	'Viet Nam',
+	'to wear a mask',
+	'Yes',
+	'other',
+	'Specimen',
+	'Biological Sample',
+	'DNA from M. tuberculosis'
+]
 
 sample_source_exact_match = {
 	'bronchial': 'bronchial (unspecified)',
 	'Clinical': 'clinical (unspecified)',
 	'laboratory': 'laboratory-obtained strain',
 	'tissue': 'tissue (unspecified)',
-	'Mycobacterium tuberculosi': "nan",
 	'Culture': 'culture',
-	'Mtb': "nan",
-	'1': "nan",
-	'to wear a mask': "nan",
-	'Yes': "nan",
+	'Sputum': 'sputum',
+	'Hospitol': 'hospital',
 }
 
 sample_source = {
@@ -114,16 +137,24 @@ sample_source = {
 	'Human clinical isolate': 'clinical (unspecified)',
 	'Clinical isolates of M. tuberculosis from human patients': 'clinical (unspecified)',
 
+	'clinical strain': 'clinical strain',
+
 	'Mycobacterial Culture': 'culture',
 	'Bacterial culture': 'culture',
 	'bacterial culture': 'culture',
 	'standard culture': 'culture',
 	'Mycobacterial Culture': 'culture',
+	'MTBC Culture Isolate': 'culture',
 	'single culture': 'culture',
 
 	'Sputum culture': 'culture from sputum',
 	'sputum culture': 'culture from sputum',
 	'culture from sputum': 'culture from sputum',
+
+	'homogenized mouse spleen': 'homogenized mouse spleens', # standardize singular/plural
+
+	'Laboratory experiment': 'laboratory, experimental evolution',
+	'laboratory evolution': 'laboratory, experimental evolution',
 
 	'Laboratory obtained strain': 'laboratory-obtained strain',
 	'laboratory reference strain': 'laboratory reference strain',
@@ -172,7 +203,6 @@ sample_source = {
 	'Sputum collection': 'sputum',
 	'Sputum coughed': 'sputum',
 	'Sputum induced': 'sputum',
-	'Sputum or cerebrospinal fluid': 'sputum',
 	'sputum patient': 'sputum',
 	'Sputum Sample': 'sputum',
 	'Sputum sample': 'sputum',
@@ -203,6 +233,7 @@ sample_source = {
 	'Sputum7': 'sputum',
 	'Sputum8': 'sputum',
 	'Sputum9': 'sputum',
+	'AFB sputum smear': 'sputum (AFB smear)',
 
 
 	'pleural fluid': 'pleural fluid',
@@ -210,11 +241,4 @@ sample_source = {
 
 	'Pulmonary Sample': 'pulmonary',
 	'PULMONARY': 'pulmonary',
-
-	'other': "nan",
-	'Specimen': "nan",
-	'Biological Sample': "nan",
-	'Biological sample': "nan",
-	'DNA from M. tuberculosis': "nan",
-	
 }

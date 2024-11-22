@@ -236,12 +236,12 @@ def drop_metagenomic(pandas_df):
 def pandas_to_tsv(pandas_df, path: str):
 	pandas_df.to_csv(path, sep='\t', index=False)
 
-def merge_pandas_dataframes(left, right, merge_upon, right_name="merged", put_right_name_in_this_column=None):
+def merge_pandas_dataframes(left, right, merge_upon, right_name="merged", indicator=None):
 	"""
 	Merge two pandas dataframe upon merge_upon. 
 
 	If right_name is None, an right_name column will be created temporarily but dropped before returning.
-	put_right_name_in_this_column: If not None, adds a row of right_name to the dataframe. Designed for marking the source of data when
+	indicator: If not None, adds a row of right_name to the dataframe. Designed for marking the source of data when
 	merging dataframes multiple times.
 
 	Handling _x and _y conflicts is not fully implemented.
@@ -252,9 +252,9 @@ def merge_pandas_dataframes(left, right, merge_upon, right_name="merged", put_ri
 	print(f"Merging {right_name} on {merge_upon}")
 
 	# TODO: this doesn't work!!
-	if put_right_name_in_this_column is not None:
+	if indicator is not None:
 		# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
-		right[put_right_name_in_this_column] = right_name
+		right[indicator] = right_name
 
 	merge = pd.merge(left, right, on=merge_upon, how='outer', indicator='merge_status_unprocessed')
 	rows_left, rows_right, len_current = len(left.index), len(right.index), len(merge.index)

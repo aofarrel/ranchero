@@ -1,33 +1,74 @@
-from numpy import nan as nan
+# Used to standardize the names of countries into their three-letter ISO 3166 codes
+# Notes:
+# * Some older country names are used for compatiability with older data (eg: East Timor vs Timor-Leste)
+# * This should only be used for complete string matching, not substring matching, thanks to situations
+#   such as "Korea" or "Congo" representing more than one country
+# * Exact match doesn't need regex flags at it uses pl.when(pl.col(match_column) == f"(?i){key}")
+# * Fuzzy match uses pl.when(pl.col(match_column).str.contains(f"(?i){key}")) 
 
-# convert countries to country codes
-long_names = {
-	'Great Britain': 'GBR',
-	'The Netherlands': 'NLD',
-	'Russian Federation': 'RUS',
-	'United States of America': 'USA',
-	'The Philippines': 'PHL',
-	'Democratic Republic of the Congo': 'COD',
-	"Republic of Côte d'Ivoire": 'CIV'
+exact_match_problematic_substrings = {
+	'hospital': None,                  # unhelpful
+	'Mali': 'MLI',                     # prevent match with SoMALIa
+	'Niger': 'NER',                    # prevent match with Nigeria
+	'patient': None,                   # unhelpful
+	'Republic of the Congo': 'COD',    # prevent match with COG
+	'The Congo': 'COG',                # prevent match with COD
+	'United States': 'USA',            # prevent match with VIR/UMI
+	'South Africa': 'ZAF'              # prevent match with the general region
 }
 
-typical_names = {
+exact_match_shorthands = {
+	'DPRK': 'PRK',
+	'GB': 'GBR',
+	'IRE': 'IRL',
+	'PRC': 'CHN',
+	'UK': 'GBR',
+	'US': 'USA'
+}
+
+exact_match_common_typos = {
+	'Argentia': 'ARG',
+	'Ethopia': 'ETH',
+	'Marocco': 'MAR'
+}
+
+exact_match_ofarrells_wrath = {
+	# Look, CIV, I have an apostrophe in my name too. I get it.
+	# Fuzzy match *should* be okay here, but let's not risk it.
+	"Cote D Ivoire": 'CIV',
+	"Cote d''Ivoire": 'CIV',
+	"Cote d'Ivoire": 'CIV',
+	"Côte d'Ivoire": 'CIV',
+	"Cote d\'Ivoire": 'CIV',
+	"Republic of Côte d'Ivoire": 'CIV',
+	"Cote d_Ivoire": 'CIV',
+	"Ivory Coast": 'CIV',
+	"IVORY_COAST": 'CIV'
+}
+
+exact_match = {**exact_match_problematic_substrings, **exact_match_shorthands, **exact_match_common_typos, **exact_match_ofarrells_wrath}
+
+substring_match = {
 	'Afghanistan': 'AFG',
 	'Albania': 'ALB',
 	'Algeria': 'DZA',
+	'Angola': 'AGO',
 	'Argentina': 'ARG',
 	'Aruba': 'ABW',
-	'Austria': 'AUT',
 	'Australia': 'AUS',
+	'Austria': 'AUT',
 	'Azerbaijan': 'AZE',
 	'Bangladesh': 'BGD',
 	'Belarus': 'BLR',
 	'Belgium': 'BEL',
+	'Benin': 'BEN',
 	'Bhutan': 'BTN',
 	'Bosnia and Herzegovina': 'BIH',
 	'Botswana': 'BWA',
 	'Brazil': 'BRA',
 	'Britain': 'GBR',
+	'Britain': 'GBR', # substring matches Great Britain, Kingdom of Great Britain, etc
+	'British Virgin Islands': 'VGB',
 	'Bulgaria': 'BGR',
 	'Burkina Faso': 'BFA',
 	'Burundi': 'BDI',
@@ -36,23 +77,25 @@ typical_names = {
 	'Canada': 'CAN',
 	'Cape Verde': 'CPV',
 	'Central African Republic': 'CAF',
+	'Chile': 'CHL',
 	'China': 'CHN',
 	'Colombia': 'COL',
 	'Comoros': 'COM',
-	"Côte d'Ivoire": 'CIV',
-	"Cote d'Ivoire": 'CIV',
-	'Cote d_Ivoire': 'CIV',
 	'Croatia': 'HRV',
 	'Czech Republic': 'CZE',
+	'Czechia': 'CZE',
+	'Democratic Republic of the Congo': 'COD',
 	'Denmark': 'DNK',
 	'Djibouti': 'DJI',
 	'Dominican Republic': 'DOM',
 	'East Timor': 'TLS',
 	'Ecuador': 'ECU',
+	'Egypt': 'EGY',
+	'El Salvador': 'SLV',
 	'Eritrea': 'ERI',
-	'Ethiopia': 'ETH',
 	'Estonia': 'EST',
 	'Eswatini': 'SWZ',
+	'Ethiopia': 'ETH',
 	'Finland': 'FIN',
 	'France': 'FRA',
 	'Gabon': 'GAB',
@@ -60,12 +103,16 @@ typical_names = {
 	'Georgia': 'GEO',
 	'Germany': 'DEU',
 	'Ghana': 'GHA',
+	'Gibraltar': 'GIB',
 	'Greece': 'GRC',
 	'Greenland': 'GRL',
+	'Guadeloupe': 'GLP',
+	'Guam': 'GUM',
 	'Guatemala': 'GTM',
 	'Guinea': 'PNG',
+	'Haiti': 'HTI',
 	'Honduras': 'HND',
-	'hospital': nan,
+	'Hong Kong': 'HKG',
 	'Hungary': 'HUN',
 	'India': 'IND',
 	'Indonesia': 'IDN',
@@ -74,13 +121,12 @@ typical_names = {
 	'Ireland': 'IRL',
 	'Israel': 'ISR',
 	'Italy': 'ITA',
-	'IVORY COAST': 'CIV',
-	'Ivory Coast': 'CIV',
-	'IVORY_COAST': 'CIV',
+	'Jamaica': 'JAM',
 	'Japan': 'JPN',
 	'Kazakhstan': 'KAZ',
 	'Kenya': 'KEN',
 	'Korea': 'KOR',
+	'Kuwait': 'KWT',
 	'Kyrgyzstan': 'KGZ',
 	'Laos': 'LAO',
 	'Latvia': 'LVA',
@@ -88,39 +134,44 @@ typical_names = {
 	'Liberia': 'LBR',
 	'Libya': 'LBY',
 	'Lithuania': 'LTY',
+	'Macedonia': 'MKD', # substring matches North Macedonia, former Yugoslav Republic of Macedonia, etc
 	'Madagascar': 'MDG',
 	'Malawi': 'MWI',
 	'Malaysia': 'MYS',
-	'Mali': 'MLI',
 	'Malta': 'MLT',
+	'Martinique': 'MTQ',
+	'Mayotte': 'MYT',
 	'Mexico': 'MEX',
 	'Moldova': 'MDA',
+	'Mongolia': 'MNG',
 	'Montenegro': 'MNE',
 	'Morocco': 'MAR',
 	'Mozambique': 'MOZ',
 	'Myanmar': 'MMR',
 	'Namibia': 'NAM',
 	'Nepal': 'NPL',
-	'Netherlands': 'NLD',
+	'Netherlands': 'NLD', # substring matches The Netherlands
+	'New Caledonia': 'NCL',
 	'New Zealand': 'NZL',
-	'Niger': 'NER',
 	'Nigeria': 'NGA',
 	'North Korea': 'PRK',
 	'North Macedonia': 'MKD',
+	'Northern Mariana Islands': 'MNP',
 	'Norway': 'NOR',
 	'Oman': 'OMN',
 	'Pakistan': 'PAK',
+	'Palau': 'PLW',
+	'Palestine': 'PAL',
 	'Panama': 'PAN',
 	'Papua New Guinea': 'PNG',
 	'Paraguay': 'PRY',
 	'Peru': 'PER',
-	'Philippines': 'PHL',
+	'Philippines': 'PHL', # substring matches The Philipines
 	'Poland': 'POL',
 	'Portugal': 'PRT',
-	'Republic of the Congo': 'COD',
 	'Romania': 'ROU',
+	'Russia': 'RUS', # substring matches Russian Federation
 	'Rwanda': 'RWA',
-	'Russia': 'RUS',
 	'Saudi Arabia': 'SAU',
 	'Senegal': 'SEN',
 	'Serbia': 'SRB',
@@ -128,47 +179,41 @@ typical_names = {
 	'Singapore': 'SGP',
 	'Slovakia': 'SLK',
 	'Slovenia': 'SVN',
-	'Spain': 'ESP',
 	'Somalia': 'SOM',
-	'South Africa': 'ZAF',
 	'South Korea': 'KOR',
+	'Spain': 'ESP',
 	'Sri Lanka': 'LKA',
 	'Suden': 'SDN',
-	'Sweden': 'SWE',
+	'Suriname': 'SUR',
 	'Swaziland': 'SWZ',
+	'Sweden': 'SWE',
 	'Switzerland': 'CHE',
+	'Syria': 'SYR', # substring matches Syrian Arab Republic
 	'Taiwan': 'TWN',
 	'Tajikistan': 'TJK',
 	'Tanzania': 'TZA',
-	'Tanzania': 'TZA',
 	'Thailand': 'THA',
 	'Timor Leste': 'TLS',
+	'Timor-Leste': 'TLS',
+	'Togo': 'TGO',
 	'Tunisia': 'TUN',
 	'Turkey': 'TUR',
+	'Turkiye': 'TUR',
 	'Turkmenistan': 'TKM',
+	'Türkiye': 'TUR',
 	'Uganda': 'UGA',
-	'Uzbekistan': 'UZB',
 	'Ukraine': 'UKR',
-	'uncalculated': nan,
 	'United Kingdom': 'GBR',
-	'United States': 'USA',
+	'United States Minor Outlying Islands': 'UMI',
+	'United States Virgin Islands': 'VIR',
+	'United States of America': 'USA',
 	'Uruguay': 'URY',
+	'Uzbekistan': 'UZB',
+	'Venezuela': 'VEN',
 	'Viet Nam': 'VNM',
 	'Vietnam': 'VNM',
+	'Yemen': 'YEM',
 	'Zambia': 'ZMB',
-	'Zimbabwe': 'ZWE'
+	'Zimbabwe': 'ZWE',
+	'uncalculated': None,
 }
-
-existing_shorthands = {
-	'\bGB\b': 'GBR',
-	'\bUS\b': 'USA',
-	'\bUK\b': 'GBR'
-}
-
-typos = {
-	'Argentia': 'ARG',
-	'Ethopia': 'ETH',
-	'Marocco': 'MAR'
-}
-
-everything = {**long_names, **typical_names, **existing_shorthands, **typos}

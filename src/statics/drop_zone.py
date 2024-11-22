@@ -1,9 +1,7 @@
 ########## drop zone ##############
-# columns in here will be dropped
 tb_but_not_used = ['mycobacteriaceae_family_sam', 'mycobacterium_genus_sam']
 datastore = ['datastore_filetype', 'datastore_region']
-
-mildly_problematic = ['biosamplemodel', 'run_file_version', 'host_disease_sam', 'library_name']
+mildly_problematic = ['BioSampleModel', 'run_file_version', 'host_disease_sam', 'library_name', 'sequencing_protocol_exp', 'author', 'continent']
 
 sample_ids_that_are_not_uuids = [
 	'run_id_run',
@@ -11,12 +9,19 @@ sample_ids_that_are_not_uuids = [
 	'uniqueidentifier_sam',
 	'gold_stamp_id_sam',
 	'seek_uid_sam',
+	'doi_location_sam',
+	'sequencing_id_sam',
+	'tmp_sam',
+	'external_id_sam', # SAME ID, which we already have
 	'individual_sam',
+	'petition_id_sam',
 	'complete_sample_name_sam',
 	'raw_sample_name_sam',
 	'accession_number_sam',
 	'alias_sam',
 	'alt_id_sam',
+	'collected_by_run',
+	'geo_accession_exp', # not geographic! trust me!
 	'alternate_id_sam',
 	'anonymised_bovine_id_sam',
 	'anonymized_name_sam',
@@ -160,6 +165,8 @@ cell_growth_stuff = [
 	'drug_treatment_sam_s_dpl85',
 	'evaluation_sam',
 	'exposure_time_sam',
+	'experimental_factor__growth_condition_exp',
+	'experimental_factor__phenotype_exp',
 	'extraction_sam',
 	'forward_seq_sam',
 	'growth_condition_sam',
@@ -209,17 +216,32 @@ other = [
 	'patient_inclusion_sam',
 	'transcription_factor_expression_level_sam',
 	'sex_calc',
+	'host_length_sam', # sometimes used when the host is a fish
+	'chip_target_sam_s_dpl133',
+	'mycobacterium_type_result_result', # kind of like organism, but let's not
 	'eight_pac_barcode_run',
 	'pacbio_rs_sequencing_kit_barcode_run',
 	'host_tot_mass_sam',
+	'arrayexpress_strain_or_line_sam',
+	'nominal_length_run',
+	'generations_sam',
 	'additional_information_sam',
+	'sequencing_method_sam',
+	'experimental_factor__immunoprecipitate_exp',
+	'exp_sam_s_dpl45',
+	'raw_cond_sam',
+	'sample_comment_sam',
 	'pacbio_rs_binding_kit_exp',
+	'bi_gssr_sample_type_sam',
+	'environment_sam',
 	'pacbio_rs_template_prep_kit_barcode_exp',
+	'experimental_factor__individual_exp',
 	'pacbio_rs_template_prep_kit_exp',
 	'pacbio_rs_binding_kit_barcode_exp',
 	'template_preparation_kit_insert_size_exp',
 	'afb_score_sam',
 	'alignment_software_exp',
+	'sample_condition_sam',
 	'aliquot_sam_s_dpl57',
 	'analysis_type_run',
 	'antibody_manufacturer_sam',
@@ -237,6 +259,8 @@ other = [
 	'arrayexpress_organismpart_sam',
 	'gender_and_age_sam',
 	'dissolved_oxygen_sam',
+	'experimental_factor__compound_exp',
+	'clusters_no__cluster_with__sam',
 	'strain_background_sam',
 	'treatment_sam_ss_dpl55',
 	'environmental_sample_sam',
@@ -267,6 +291,12 @@ other = [
 	'ref_biomaterial_sam',
 	'num_replicons_sam',
 	'chip_antibody_sam_ss_dpl428',
+	'altitude_sam_s_dpl11',
+	'env_broad_scale_sam',
+	'env_local_scale_sam',
+	'health_state_sam_s_dpl218',
+	'health_disease_stat_sam',
+	'library_outgrowth_conditions_sam',
 	'rel_to_oxygen_sam',
 	'perturbation_sam',
 	'reverse_reads_sam',
@@ -305,6 +335,7 @@ other = [
 	'reverse_read_length_run',
 	'samp_dis_stage_sam',
 	'samp_mat_process_sam',
+	'pulmonary_disord_sam,'
 	'sample_description_sam',
 	'sampling_sam_s_dpl133',
 	'samplingday_sam',

@@ -1,5 +1,5 @@
 # Ranchero
- When your *Mycobacterium bovis* isn't cooperating, you need Ranchero.
+Is your mycobacterial metadata a mess? Grab the *M. bovis* by the horns with Ranchero.
 
  > [!WARNING]  
  > Ranchero is currently being rebased. Things will change and break.
@@ -7,18 +7,22 @@
  Ranchero is a work-in-progress Python solution to the dozens of different metadata formats used in genomic datasets. While it is specifically focused on NCBI's collection of *Mycobacterium tuberculosis complex* metadata, it still has utility for other organisms. For information on what Ranchero considers "a sample" and the like, see (./docs/data_structure.md)[./docs/data_structure.md]. For information on how to configure Ranchero, see (.docs/configuration.md)[.docs/configuration.md].
 
  ## Features
- * Flatten all of those "missing" and "Not Applicable" strings into NaNs/empty strings
+ * Input a TSV/JSON/CSV of new samples and their metadata into a dataframe
+ * Merge columns of similar data types into a single column, filling in nulls/empty values as you go
+ * Input a TSV of metadata to "inject" into an existing dataframe, optionally overriding metadata already present
+ * Flatten all of those "missing" and "Not Applicable" strings into proper null values
  * Convert countries into three-letter country codes per (ISO 3166)[https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes]
  * Convert dates to YYYY-MM-DD format into an (ISO 8601)[https://en.wikipedia.org/wiki/ISO_8601]-like format -- missing months/days are denoted as NN.
  * Convert common host animal names to a standarized `Genus species "common name"` format
  * (tuberculosis only) Convert old-school strain names to the modern lineage system
 
  ## Dependencies
- * Python 3 (I use 3.11, you can probably get away with 3.7 or higher)
+ * Python 3.11-ish (3.7+ should be okay)
  * [pandas](https://pandas.pydata.org/) >= 2.0.0
  * [pyarrow](https://pypi.org/project/pyarrow/), even if not working with Apache Arrow datasets
  * [polars](https://github.com/pola-rs/polars) for Python
- * [tqdm](https://github.com/tqdm/tqdm)
+ * Optional: [tqdm](https://github.com/tqdm/tqdm)
+
 
  ## Supported inputs
  * JSON files directly from BigQuery

@@ -15,6 +15,128 @@
 # Since it runs below ten seconds even on the full size dataframe, I consider the pandas usage acceptable,
 # even though it annoys me on priniciple.
 
+	def nullify(self, polars_df, only_these_columns=None, no_match_NA=False):
+		"""
+		Turns stuff like "not collected" and "n/a" into pl.Null values, per null_values.py
+		Be aware that when matching on pl.List(pl.Utf8) columns, you CAN match on empty strings to properly remove them from
+		the list, but when matching on pl.Utf8 columns, you CANNOT match on empty strings or else the entire column gets wiped.
+		"""
+		import time
+		
+		all_cols = only_these_columns if only_these_columns is not None else polars_df.columns
+		string_cols = [col for col in all_cols if polars_df.schema[col] == pl.Utf8 and col not in kolumns.equivalence['run_index'] and col not in kolumns.equivalence['run_index']]
+		list_cols = [col for col in all_cols if polars_df.schema[col] == pl.List(pl.Utf8)]
+		real_null_values = null_values.null_values_regex if no_match_NA else null_values.null_values_regex_plus_NA
+
+		self.logging.info("METHOD ONE: contains()")
+		self.logging.info(string_cols)
+		start = time.time()
+		temp_polars_df = polars_df
+		for null_value in real_null_values:
+			self.logging.debug(f"Nullifying {null_value}...")
+			temp_polars_df = temp_polars_df.with_columns([
+				pl.when(pl.col(col).str.contains(null_value))
+				.then(None)
+				.otherwise(pl.col(col))
+				.alias(col) for col in string_cols])
+			temp_polars_df = temp_polars_df.with_columns([
+				pl.col(col).list.eval(
+					pl.element().filter(~pl.element().str.contains(null_value))
+				)
+				for col in list_cols])
+		self.logging.info(f"Finished nullifying in {time.time() - start} seconds")
+		self.print_value_counts(temp_polars_df, only_these_columns=['date_of_collection_sam', 'host_sam', 'organism_sam'])
+		self.logging.info("METHOD TWO: contains_any()")
+		start = time.time()
+		temp_polars_df = polars_df.with_columns([
+			pl.when(pl.col(col).str.contains_any(null_values.null_values_case_insensitive, ascii_case_insensitive=True))
+			.then(None)
+			.otherwise(pl.col(col))
+			.alias(col) for col in string_cols])
+		temp_polars_df = temp_polars_df.with_columns([
+			pl.col(col).list.eval(
+				pl.element().filter(~pl.element().str.contains_any(null_values.null_values_case_insensitive, ascii_case_insensitive=True))
+			)
+			for col in list_cols])
+		self.logging.info(f"Finished nullifying in {time.time() - start} seconds")
+		self.print_value_counts(temp_polars_df, only_these_columns=['date_of_collection_sam', 'host_sam', 'organism_sam'])
+		self.logging.info("METHOD THREE: is_in()")
+		self.logging.info("For reasons I don't understand, this ALSO doesn't seem to work on the host_sam column. See 2711 values of 'missing'!")
+		string_cols = [col for col, dtype in polars_df.schema.items() if dtype == pl.Utf8]
+		temp_polars_df = polars_df
+		temp_polars_df = temp_polars_df.with_columns([
+			pl.when(pl.col(col).is_in(null_values.null_values_regex))
+			.then(None)
+			.otherwise(pl.col(col))
+			.alias(col) for col in string_cols])
+
+		temp_polars_df = temp_polars_df.with_columns(pl.col(pl.List(pl.Utf8)).list.eval(
+			pl.element().filter(~pl.element().is_in(null_values.null_values_regex))
+		))
+		self.logging.info(f"Finished nullifying in {time.time() - start} seconds")
+		self.print_value_counts(temp_polars_df, only_these_columns=['date_of_collection_sam', 'host_sam', 'organism_sam'])
+		self.logging.info("METHOD FOUR: replace()")
+		self.logging.info("This just straight-up doesn't work.")
+		start = time.time()
+		temp_polars_df = polars_df.with_columns(pl.col(pl.Utf8).replace(null_values.null_values_plus_weird_stuff_dictionary))
+		self.logging.info(f"Finished half-nullifying in {time.time() - start} seconds")
+		temp_polars_df = temp_polars_df.with_columns(pl.col(pl.List(pl.Utf8)).replace(null_values.null_values_plus_weird_stuff_dictionary))
+		self.logging.info(f"Finished list-nullifying in {time.time() - start} seconds")
+		self.print_value_counts(temp_polars_df, only_these_columns=['date_of_collection_sam', 'host_sam', 'organism_sam'])
+
+
+		# TODO: add in an assertion that sample/run IDs didn't get dropped
+
+		exit(1)
+		return polars_df
+
+	def nullify(self, polars_df, only_these_columns=None, no_match_NA=False):
+		"""
+		Turns stuff like "not collected" and "n/a" into pl.Null values, per null_values.py
+		Be aware that when matching on pl.List(pl.Utf8) columns, you CAN match on empty strings to properly remove them from
+		the list, but when matching on pl.Utf8 columns, you CANNOT match on empty strings or else the entire column gets wiped.
+
+
+		Previously, this avoided for loops, but only worked on columns of type string and had case sensitivity.
+		There is probably a more effecient way to achieve these goals, but this is what I'm sticking to for now.
+		"""
+		null_values_plain = null_values.null_values if no_match_NA else null_values.null_values_plus_NA
+		null_values_regex = null_values.null_values_regex if no_match_NA else null_values.null_values_regex_plus_NA
+		#for null_value in null_values_regex:
+		if only_these_columns is None:
+			string_cols = [col for col, dtype in polars_df.schema.items() if dtype == pl.Utf8]
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col(col).is_in(null_values_regex))
+				#pl.when(pl.col(col).str.contains(null_value))
+				#pl.when(pl.col(col).str.contains_any(null_values_plain))
+				.then(None)
+				.otherwise(pl.col(col))
+				.alias(col) for col in string_cols])
+
+			polars_df = polars_df.with_columns(pl.col(pl.List(pl.Utf8)).list.eval(
+				pl.element().filter(~pl.element().is_in(null_values_regex))
+				#pl.element().filter(~pl.element().is_in(null_values_plain))
+				#pl.element().filter(~pl.element().str.contains_any(null_values.null_values, ascii_case_insensitive=True)))
+			))
+		else:
+			for only_this_column in only_these_columns:
+				if polars_df.schema[only_this_column] == pl.Utf8:
+					polars_df = polars_df.with_columns([
+						pl.when(pl.col(only_this_column).is_in(null_values_plain))
+						.then(None)
+						.otherwise(pl.col(only_this_column))
+						.alias(only_this_column)])
+				elif polars_df.schema[only_this_column] == pl.List:
+					 polars_df = polars_df.with_columns(pl.col(only_this_column).list.eval(
+					 	pl.element().filter(~pl.element().is_in(null_values_plain)))
+					 )
+				#polars_df = polars_df.with_columns(
+				#	 	pl.col(only_this_column).list.eval(pl.element().filter(~pl.element().str.contains_any(null_values.null_values, ascii_case_insensitive=True)))
+				#	 )
+				else:
+					logging.error(f"Tried to nullify {only_this_column} but has incompatiable type {polars_df[only_this_column].schema}")
+		return polars_df
+
 	def likely_is_run_indexed(polars_df):
 		# TODO: make more robust
 		singular_runs = (

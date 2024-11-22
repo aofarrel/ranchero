@@ -1,70 +1,58 @@
 # These values are used for turning stuff like "no data" and "not applicable" into null values.
+# There are three main ways this is done:
+# 1. pl.read_csv(null_values=null_value_list) when importing a CSV/TSV file
+# 2. pl.when(pl.col(col).str.contains_any(null_value_list)) and its list equivalent, which doesn't support regex
+#    but can be case insensitive via ascii_case_insensitive=True
+# 3. pl.when(pl.col(col).str.contains(null_value_str))) and its list equivalent, which supports regex (kind of)
+# (In theory .is_in() and .replace() could be used too, but I've had some issues getting those to work as I'd expect.)
+# There is no equivalent for #1 in pl.read_json(), so our main focus is going to be the other two methods.
 
 
-# This is used for matching on columns of type pl.List(pl.Utf8), which are lists of strings.
-# You CAN, and likely should, keep the empty string in this list. Also, you can't use regex here.
-null_values = [
-	'', # intentional empty string
+# 1) Whole-string matching, case sensitive, no regex
+nulls_CSV = [
+	'missing','Missing','MISSING',
+	'n/a','N/A',
+	'nan','Nan','NaN','NAN',
+	'no data','No data','No Data',
+	'None','none',
+	'not abblicable','not applicable','Not Applicable','Not applicable',
+	'Not available','Not Available','not available',
+	'not available: not collected',
+	'not collected','Not collected','Not Collected','NOT COLLECTED',
+	'not known','Not Known', 'Not known',
+	'Not Provided','Not provided',
+	'Not recorded',
+	'Not specified','not specified',
+	'null','Null',
+	'uncalculated',
+	'Unknown','unknown',
+	'unspecified','Unspecified',
+]
+
+# 2) Anywhere-in-string matching, case insensitive, no regex
+nulls_pl_contains_any = [
 	'missing',
-	'Missing',
-	'MISSING',
 	'n/a',
-	'N/A',
 	'nan',
-	'Nan',
-	'NaN',
-	'NAN',
 	'no data',
-	'No data',
-	'No Data',
 	'not abblicable',
 	'not applicable',
-	'Not Applicable',
-	'Not applicable',
 	'Not available',
-	'Not Available',
-	'not available',
-	'not available: not collected',
 	'not collected',
-	'Not collected',
-	'Not Collected',
-	'NOT COLLECTED',
 	'not known',
 	'Not Provided',
-	'Not provided',
+	'Not recorded',
 	'Not specified',
-	'not specified',
 	'null',
-	'Null',
 	'uncalculated',
-	'Unknown'
 	'unknown',
 	'unspecified',
-	'Unspecified',
 ]
 
-# this is its own thing to avoid issues with "NA" being "North America"
-null_values_plus_NA = null_values.append("NA")
-
-null_values_dictionary = {key: None for key in null_values}
-
-# This is used for matching on columns of type pl.Utf8, which are strings.
-# YOU CANNOT HAVE AN EMPTY STRING HERE or else it will turn all values into null.
-null_values_regex = [
-	r'(?i)missing',
-	r'(?i)n/a',
-	r'(?i)nan',
-	r'(?i)no data',
-	r'(?i)not applicable',
-	r'(?i)Not available',
-	r'(?i)not available: not collected',
-	r'(?i)not collected',
-	r'(?i)not known',
-	r'(?i)Not Provided',
-	r'(?i)Not specified',
-	r'(?i)null',
-	r'(?i)uncalculated',
-	r'(?i)unknown',
-	r'(?i)unspecified',
+# 3) Regex permitting, anywhere-in-string matching and case sensitive
+nulls_pl_contains = [
+	r'^$', # used to drop empty values from lists post-merging
+	r'^-$',
 ]
-null_values_regex_plus_NA = null_values.append("\bNA\b")
+
+nulls_pl_contains_plus_NA = nulls_pl_contains + [r'^NA$']
