@@ -141,7 +141,7 @@ class ProfessionalsHaveStandards():
 
 	def drop_no_longer_useful_columns(self, polars_df):
 		"""ONLY RUN THIS AFTER ALL METADATA PROCESSING"""
-		return polars_df.drop(kolumn for kolumn in kolumns.temporarily_useful if kolumn in polars_df.columns)
+		return polars_df.drop(kolumn for kolumn in kolumns.columns_to_drop_after_rancheroize if kolumn in polars_df.columns)
 
 	def simple_dictionary_match(self, polars_df, match_column: str, key: str, value, subtrings=False):
 		"""
@@ -627,11 +627,11 @@ class ProfessionalsHaveStandards():
 		assert 'i_strain' not in polars_df.columns
 		assert 'taxoncore_list' not in polars_df.columns
 		rm_phages = self._sentinal_handler(_cfg_rm_phages)
-		if group_column_name not in kolumns.columns_to_keep:
+		if group_column_name not in kolumns.columns_to_drop_after_rancheroize:
 			self.logging.warning(f"Bacterial group column will have name {group_column_name}, but might get removed later. Add {group_column_name} to kolumns.equivalence!")
 		if 'organism' in polars_df.columns and rm_phages:
 			polars_df = self.rm_all_phages(polars_df)
-		merge_these_columns = [col for col in polars_df.columns if col in sum(kolumns.merge__special_taxonomic_handling.values(), [])]
+		merge_these_columns = [col for col in polars_df.columns if col in sum(kolumns.special_taxonomic_handling.values(), [])]
 
 		for col in merge_these_columns:
 			if polars_df.schema[col] == pl.List:

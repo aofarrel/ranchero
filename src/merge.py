@@ -2,7 +2,7 @@ from .config import RancheroConfig
 from . import _NeighLib as NeighLib
 import polars as pl
 from polars.testing import assert_series_equal
-from src.statics import kolumns, null_values
+from src.statics import kolumns, null_values, drop_zone
 
 
 # https://peps.python.org/pep-0661/
@@ -125,7 +125,7 @@ class Merger:
 		merge_upon: str, left_name ="left", right_name="right", indicator=_DEFAULT_TO_CONFIGURATION,
 		bad_list_error=True,
 		fallback_on_left=True, drop_exclusive_right=False,
-		err_on_matching_failure=False):
+		escalate_warnings=False):
 		"""
 		Merge two polars dataframe upon merge_upon. 
 
@@ -140,7 +140,6 @@ class Merger:
 		column will be created temporarily but dropped before returning.
 		"""
 		self.logging.info(f"Merging {left_name} and {right_name} upon {merge_upon}")
-		print(err_on_matching_failure)
 		n_rows_left, n_rows_right = left.shape[0], right.shape[0]
 		n_cols_left, n_cols_right = left.shape[1], right.shape[1]
 		assert n_rows_left != 0 and n_rows_right != 0
@@ -245,11 +244,11 @@ class Merger:
 			if set(left.columns) == set(right.columns):
 				self.logging.debug("Set of left and right columns match")
 				initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-				really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, err_on_matching_failure=err_on_matching_failure)
+				really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
 			else:
 				self.logging.debug("Set of left and right columns DO NOT match")
 				initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-				really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, err_on_matching_failure=err_on_matching_failure)
+				really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
 			
 			# update left values and right values for later debugging
 			left_values, right_values = nullfilled_left[merge_upon], nullfilled_right[merge_upon]
@@ -269,10 +268,10 @@ class Merger:
 			for left_column in yargh:
 				if left_column in right.columns:
 
-					if left_column in kolumns.merge__drop:
+					if left_column in drop_zone.silly_columns:
 						left, right = left.drop(left_column), right.drop(left_column)
 
-					elif left_column in kolumns.merge__bad_list:
+					elif left_column in kolumns.list_throw_error:
 						if left.schema[left_column] == pl.List or right.schema[left_column] == pl.List:
 							if bad_list_error:
 								self.logging.error(f'{left_column} is marked as "error if becomes a list when merging" but is already a list in {left_name} and/or {right_name}!')
@@ -319,7 +318,7 @@ class Merger:
 					pass
 
 			initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, err_on_matching_failure=err_on_matching_failure)
+			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
 
 			really_merged_no_dupes = really_merged.unique()
 			self.logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")

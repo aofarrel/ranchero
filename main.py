@@ -145,7 +145,7 @@ def run_merges(tba6):
 	walker = Ranchero.from_tsv("./inputs/publications/run_indexed/Walker_2022-CRyPTIC-run/runindexed_Walker2022_pheno_WHO2021_CRyPTIC_PMC7612554.tsv", auto_rancheroize=True)
 	walker = Ranchero.NeighLib.add_column_of_just_this_value(walker, "pheno_source", "Walker_2022_PMC7612554")
 	walker = Ranchero.standardize_countries(walker)
-	start, merged = time.time(), Ranchero.merge_dataframes(merged, walker, merge_upon="run_index", right_name="Walker_2022", indicator="collection", fallback_on_left=True, err_on_matching_failure=False)
+	start, merged = time.time(), Ranchero.merge_dataframes(merged, walker, merge_upon="run_index", right_name="Walker_2022", indicator="collection", fallback_on_left=True, escalate_warnings=False)
 	print(f"Merged with run-based Walker in {time.time() - start:.4f} seconds")
 
 
@@ -235,7 +235,7 @@ Ranchero.to_tsv(merged_by_sample, "./merged_per_sample.tsv")
 # Eldholm 
 # Finci
 print(f"{_b_}Processing Finci{_bb_}")
-Finci_pheno = Ranchero.from_tsv("./inputs/publications/sample_indexed/Finci_2022 (PRJEB48275).tsv", auto_rancheroize=True)
+Finci_pheno = Ranchero.from_tsv("./inputs/publications/sample_indexed/Finci_2022 (PRJEB48275)/Finci_2022 (PRJEB48275).tsv", auto_rancheroize=True)
 start, merged = time.time(), Ranchero.merge_dataframes(merged, Finci_pheno, merge_upon="sample_index", right_name="input_tba3", indicator="collection")
 
 # Menardo (two of them...)
@@ -244,7 +244,7 @@ start = time.time()
 menardo_2018 = Ranchero.from_tsv("./inputs/publications/sample_indexed/Menardo_2018/menardo_2018_processed.csv", delimiter=',', auto_rancheroize=True)
 menardo_2021 = Ranchero.from_tsv("./inputs/publications/sample_indexed/Menardo_2021/menardo_REAL.tsv", auto_rancheroize=True)
 merged = Ranchero.merge_dataframes(merged_by_sample, menardo_2018, merge_upon="sample_index", right_name="menardo_2018", indicator="collection")
-merged = Ranchero.merge_dataframes(merged_by_sample, menardo_2021, merge_upon="sample_index", right_name="menardo_2021", indicator="collection", err_on_matching_failure=False)
+merged = Ranchero.merge_dataframes(merged_by_sample, menardo_2021, merge_upon="sample_index", right_name="menardo_2021", indicator="collection", escalate_warnings=False)
 print(f"Merged with menardo in {time.time() - start:.4f} seconds")
 
 # Merker (sample side of 2022)
@@ -256,13 +256,13 @@ standford_1 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.fro
 standford_2 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.from_tsv("./inputs/max_standford_YYYY-MM-DD.tsv", auto_rancheroize=True)))
 standford_3 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.from_tsv("./inputs/max_standford_DD-MM-YYYY.tsv", auto_rancheroize=True))) # this one should NOT overwrite left
 standford_4 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.from_tsv("./inputs/max_standford_slashdates.tsv", auto_rancheroize=True))) # ditto
-start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_1, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=False, err_on_matching_failure=False)
+start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_1, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=False, escalate_warnings=False)
 print(f"Merged with standford1 in {time.time() - start:.4f} seconds")
-start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_2, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=False, err_on_matching_failure=False)
+start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_2, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=False, escalate_warnings=False)
 print(f"Merged with standford2 in {time.time() - start:.4f} seconds")
-start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_3, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=True, err_on_matching_failure=False)
+start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_3, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=True, escalate_warnings=False)
 print(f"Merged with standford3 in {time.time() - start:.4f} seconds")
-start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_4, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=True, err_on_matching_failure=False)
+start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_4, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=True, escalate_warnings=False)
 print(f"Merged with standford4 in {time.time() - start:.4f} seconds")
 start, merged = time.time(), Ranchero.NeighLib.nullify(Ranchero.cleanup_dates(merged))
 print(f"Cleaned up dates so far in {time.time() - start:.4f} seconds")

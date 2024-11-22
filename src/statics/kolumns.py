@@ -16,7 +16,6 @@ equivalence = {
 		'avgspotlen': ['avgspotlen', 'AvgSpotLen'],
 		'bases': ['bases', 'Bases'],
 		'BioProject': ['BioProject', 'bioproject', 'Bioproject'],
-		#'BioSampleModel': ['BioSampleModel', 'biosamplemodel', 'biosamplemodel_sam'], # typically not useful
 		'bytes': ['bytes', 'Bytes'],
 		'center_name': ['center_name', 'Center Name', 'center_name_insdc', 'insdc_center_name_sam'],
 		'country': ['country'],
@@ -55,61 +54,110 @@ equivalence = {
 		'XRS_id': ['XRS_id', 'sample_acc'], # SRS/ERS/DRS accession
 	}
 id_columns = equivalence['run_index'] + equivalence['sample_index']
-columns_to_keep = equivalence.keys()
 assert len(set(sum(equivalence.values(), []))) == len(sum(equivalence.values(), []))  # effectively asserts no shared values (both within a key's value-lists, and across all other value-lists)
 
-# SRA columns that are useful for standardizing metadata, but should be dropped afterwards
-# columns that get dropped immediately are instead in drop_zone.py
-temporarily_useful = [item for value in equivalence.values() for item in value[1:]]
+# Once columns are merged, the "equivalence" columns are dropped since they have redundant information.
+columns_to_keep_after_rancheroize = equivalence.keys()
+columns_to_drop_after_rancheroize = [item for value in equivalence.values() for item in value[1:]]
 
-# when going from run-level to sample-level, or flattening existing lists as much as possible, how should we treat these columns?
+# Special handling for taxoninomic columns -- don't add them to any of the list-to-x stuff below.
+special_taxonomic_handling = {key: value for key, value in equivalence.items() if key in ['genotype', 'lineage', 'organism', 'strain']}
+all_taxoncore_columns = sum(special_taxonomic_handling.values(), [])
+
 
 # Sometimes we end up with list columns thanks to merges, or when going from run-to-sample, or because the original data was in list format.
-# How should we deal with these list columns?
+# Nested lists will be flattened automatically. But how should we deal with these flat list columns? Default behavior: list_to_set_uniq
 
-rts__list_to_float_via_sum = ['bytes', 'bases']
-rts__NEVER_list = ['isolation_source']
-rts__drop = ['eight_pac_barcode_run', 'pacbio_rs_binding_kit_barcode_exp', 'pacbio_rs_sequencing_kit_barcode_run', 'run_id_run', 'release_date', 'library_name', 'avgspotlen', 'datastore_region', 'mybytes', 'run_file_version', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
-rts__keep_as_list = ["pheno_AMIKACIN","pheno_CAPREOMYCIN","pheno_CIPROFLOXACIN","pheno_CYCLOSERINE","pheno_ETHAMBUTOL",
-"pheno_ETHIONAMIDE","pheno_ISONIAZID","pheno_KANAMYCIN","pheno_MOXIFLOXACIN","pheno_OFLOXACIN","pheno_PAS",
-"pheno_PYRAZINAMIDE","pheno_RIFAMPICIN","pheno_STREPTOMYCIN",
-'coscolla_mean_depth', 'coscolla_percent_not_covered', 'avgspotlen', 'run_file_create_date', 'mbytes', 'mbases', 'librarylayout', 'libraryselection', 'instrument', 'platform', 'isolate_info'] # non-unique values will be kept
-rts__keep_as_set = ['BioSampleModel', 'assay_type', 'center_name', 'center_name_insdc', 'BioProject', 'datastore_filetype', 'datastore_provider', 'primary_search', 'run_index', 'SRX_id', 'sra_study'] # non-unique values will be dropped
-rts__warn_if_list_with_unique_values = [
+# In: pl.List() of floats or integers
+# Out: Float
+list_to_float_sum = ['bytes', 'bases', 'mbases']
+
+# In: pl.List() of pl.Utf8
+# Out: pl.Utf8
+list_to_string_join = ['isolate_info', 'isolation_source']
+
+# In: pl.List() of any type
+# Out: pl.List() if any row contains at least two unique values, inner type otherwise
+list_to_set_uniq = [
+	'assay_type', 
+	'BioProject', 
+	'BioSampleModel',
+	'center_name', 
+	'center_name_insdc', 
+	'datastore_filetype', 
+	'datastore_provider',
+	'primary_search', 
+	'run_index', 
+	'sra_study',
+	'SRX_id'
+]
+
+# In: pl.List() of any type
+# Out: Inner type if flattening existing list, falling back on left or right if merge
+list_to_inner_FIFO_silent = ['center_name', 'center_name_insdc', 'host_disease', 'release_date']
+list_to_inner_FIFO_warning = [
+	'country',
+	'date_collected',
+	'date_isolation',
+	'host',
+	'host_commonname',
+	'host_confidence',
+	'host_scienname',
+	'latlon',
+	'pheno_AMIKACIN',
+	'pheno_CAPREOMYCIN',
+	'pheno_CIPROFLOXACIN',
+	'pheno_CYCLOSERINE',
+	'pheno_ETHAMBUTOL',
+	'pheno_ETHIONAMIDE',
+	'pheno_ISONIAZID',
+	'pheno_KANAMYCIN',
+	'pheno_MOXIFLOXACIN',
+	'pheno_OFLOXACIN',
+	'pheno_PAS',
+	'pheno_PYRAZINAMIDE',
+	'pheno_RIFAMPICIN',
+	'pheno_STREPTOMYCIN',
+	'platform',
+	'region',
+	'release_date'
+]
+
+# In: pl.List() of any type
+# Out: Inner type, but rows that previously had lists of 2+ values turn to pl.Null
+list_to_null = [
+	'coscolla_country', 
+	'coscolla_mean_depth',
+	'coscolla_percent_not_covered',
+	'coscolla_sublineage',
+	'napier_country',
+	'napier_lineage',
+	'SRX_id', 
+	'sra_study'
+]
+
+# Unchanged
+list_to_list_silent = [
+	'assay_type',
+	'avgspotlen',
+	'collection',
+	'geoloc_country_calc',
+	'geoloc_country_or_sea', 
+	'geoloc_name', 
+	'instrument',
+	'librarylayout',
+	'libraryselection',
 	'librarysource',
-	'napier_lineage', 'coscolla_sublineage',
-	'date_collected', 
-	'geoloc_latlon', 'geoloc_name', 'geoloc_country_calc', 'geoloc_country_or_sea', 'coscolla_country', 'napier_country',
-	'host', 'host_sciname',
-	'organism_common', 
-	'release_date']
+	'platform',
+	'run_file_create_date',
+]
 
-# when merging existing datasets, how should we treat these columns, if (not equivalent after nullfill AND neither are already lists)?
-# if either are already lists, will use rts behavior
-
-# merge__drop and merge__bad_list will always drop these columns if present in left AND right dataframe, even if not already a list
-merge__drop = ['run_id_run', 'datastore_filetype', 'datastore_provider', 'release_date', 'library_name', 'avgspotlen', 'datastore_region', 'napier_type'] # napier_type causes issues due to duplicates in the Napier dataset
-
-merge__bad_list = [
-	'date_collected', 
-	'host', 'host_scienname', 'host_commonname', 'host_confidence', 
-	'BioSample', 'sample_index', 
-	'country', 'region', 'latlon', 'geoloc_name', 'geoloc_country_calc', 'geoloc_country_or_sea', 
-	'librarylayout', 'librarysource', 'platform', 'assay_type']
-merge__sum = []
-merge__make_list = ['collection', 'run_file_create_date'] # non-unique values will be kept
-merge__make_set = ['run_index',  'primary_search', 'BioProject', 'instrument', 'libraryselection'] # non-unique values will be dropped
-merge__warn_then_pick_arbitrarily_to_keep_singular = [
-	'SRX_id', 'sra_study',
-	'center_name', 'center_name_insdc', 
-	'isolation_source',
-	'isolate_info', 'host_disease',
-	'release_date']
-merge__special_taxonomic_handling = {key: value for key, value in equivalence.items() if key in ['genotype', 'lineage', 'organism', 'strain']}
-all_taxoncore_columns = sum(merge__special_taxonomic_handling.values(), [])
+# Throw an error (error can be made non-fatal in which case it will fallback on left or right per function settings)
+list_throw_error = ["BioSample", "sample_index"]
 
 # not used, but I'm leaving this here for people who want it
 equivalence_extended = {
+		'BioSampleModel': ['BioSampleModel', 'biosamplemodel', 'biosamplemodel_sam'],
 		'datastore_filetype': ['datastore_filetype', 'DATASTORE filetype'],
 		'datastore_provider': ['datastore_provider', 'DATASTORE provider'],
 		'datastore_region': ['datastore_region', 'DATASTORE region'],
@@ -122,16 +170,6 @@ equivalence_extended = {
 common_col_to_ranchero_col = {
 	"Sample Name": "other_id",  # *sometimes* SAME/SAMN/SAMD but often something else
 }
-
-# some real and hypothetical confusing fields that should be dropped
-purposeful_exclusions = [
-	"additional_instrument_model_run",
-	"experimental_factor__genotype_exp", 
-	"MB", "mb", "mB",  # ambigious - megabytes or megabases?
-	"quality_control_method_version_run",
-	"sampling_platform_sam",
-	"strain_background_sam_s_dpl381" # seems to be mouse strain
-]
 
 not_strings = {
 	"avgspotlen": pl.Int32(),  # tba5 is fine with Int16, but tba6 needs Int32

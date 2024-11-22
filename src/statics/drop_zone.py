@@ -1,7 +1,7 @@
 ########## drop zone ##############
 tb_but_not_used = ['mycobacteriaceae_family_sam', 'mycobacterium_genus_sam']
 datastore = ['datastore_filetype', 'datastore_region']
-mildly_problematic = ['BioSampleModel', 'run_file_version', 'host_disease_sam', 'library_name', 'sequencing_protocol_exp', 'author', 'continent']
+mildly_problematic = ["MB", "mb", "mB", 'BioSampleModel', 'run_file_version', 'host_disease_sam', 'avgspotlen', 'mybytes', 'library_name', 'sequencing_protocol_exp', 'author', 'continent']
 
 sample_ids_that_are_not_uuids = [
 	'run_id_run',
@@ -232,7 +232,9 @@ other = [
 	'raw_cond_sam',
 	'sample_comment_sam',
 	'pacbio_rs_binding_kit_exp',
+	'additional_instrument_model_run',
 	'bi_gssr_sample_type_sam',
+	'experimental_factor__genotype_exp',
 	'environment_sam',
 	'pacbio_rs_template_prep_kit_barcode_exp',
 	'experimental_factor__individual_exp',
@@ -240,11 +242,14 @@ other = [
 	'pacbio_rs_binding_kit_barcode_exp',
 	'template_preparation_kit_insert_size_exp',
 	'afb_score_sam',
+	'strain_background_sam_s_dpl381', # mouse strain, not TB strain
 	'alignment_software_exp',
 	'sample_condition_sam',
 	'aliquot_sam_s_dpl57',
 	'analysis_type_run',
+	'sampling_platform_sam',
 	'antibody_manufacturer_sam',
+	'quality_control_method_version_run',
 	'antibody_sam_ss_dpl59',
 	'antibiotic_treatment_sam',
 	'pipe_material_sam',
