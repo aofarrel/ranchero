@@ -357,6 +357,7 @@ class ProfessionalsHaveStandards():
 			polars_df = self.standardize_hosts_eager(polars_df)
 		else:
 			polars_df = self.standardize_hosts_lazy(polars_df)
+		polars_df = polars_df.drop('host')
 		return polars_df
 
 	def standardize_hosts_eager(self, polars_df):
@@ -687,14 +688,15 @@ class ProfessionalsHaveStandards():
 				polars_df = self.iso_the_countries(polars_df, "country")
 				return polars_df
 
-			if 'region' not in polars_df.columns:
+			elif 'region' not in polars_df.columns:
 				self.logging.warning("Skipping standardization of locations, as no 'geoloc_name' nor 'region' column was found.")
-				return # non-fatal, don't exit
+				return polars_df
 			else:
 				self.logging.error("""Tried to standardize countries, but 'geoloc_name', as well as 'country 'and/or 'region', are missing from the dataframe's columns.
 					Most likely, you need to rancheroize this dataframe to standardize its columns.""")
 				exit(1) # you done messed up
 		assert ['country_colon_region', 'new_region', 'new_country', 'all_geoloc_names', 'temp_probably_country', 'temp_probably_region'] not in polars_df.columns
+		assert polars_df.schema['country'] == pl.Utf8
 
 		# TODO: if polars_df.schema['geoloc_name'] == pl.Utf8, do a simpler version
 

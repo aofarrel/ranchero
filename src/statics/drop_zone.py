@@ -1,13 +1,14 @@
 ########## drop zone ##############
 tb_but_not_used = ['mycobacteriaceae_family_sam', 'mycobacterium_genus_sam']
 datastore = ['datastore_filetype', 'datastore_region']
-mildly_problematic = ["MB", "mb", "mB", 'BioSampleModel', 'run_file_version', 'host_disease_sam', 'avgspotlen', 'mybytes', 'library_name', 'sequencing_protocol_exp', 'author', 'continent']
+mildly_problematic = ["MB", "mb", "mB", 'BioSampleModel', 'biosamplemodel_sam', 'sample_description_sam', 'library_type_run', 'run_file_version', 'host_disease_sam', 'avgspotlen', 'mybytes', 'library_name', 'sequencing_protocol_exp', 'author', 'continent']
 
 sample_ids_that_are_not_uuids = [
 	'run_id_run',
 	'filename2_sam',
 	'uniqueidentifier_sam',
 	'gold_stamp_id_sam',
+	'UNIQUEID',
 	'seek_uid_sam',
 	'doi_location_sam',
 	'sequencing_id_sam',
@@ -229,6 +230,10 @@ other = [
 	'sequencing_method_sam',
 	'experimental_factor__immunoprecipitate_exp',
 	'exp_sam_s_dpl45',
+	'conc_sam',
+	'assembly_sam', 
+	'drug_susceptibility_testing_profiles_sam',
+	'mlst_sam',
 	'raw_cond_sam',
 	'sample_comment_sam',
 	'pacbio_rs_binding_kit_exp',

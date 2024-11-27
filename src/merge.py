@@ -248,6 +248,11 @@ class Merger:
 			else:
 				self.logging.debug("Set of left and right columns DO NOT match")
 				initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
+				NeighLib.print_col_where(initial_merge, 'run_index', 'ERR2659162', cols_of_interest=initial_merge.columns)
+				NeighLib.print_col_where(initial_merge, 'run_index', 'SRR1238557', cols_of_interest=initial_merge.columns)
+				NeighLib.print_col_where(initial_merge, 'run_index', 'SRR1238558', cols_of_interest=initial_merge.columns)
+				NeighLib.super_print_pl(initial_merge.select(['sample_index', 'sample_index_right', 'run_index', 'collection']), "please")
+				
 				really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
 			
 			# update left values and right values for later debugging
@@ -319,10 +324,10 @@ class Merger:
 
 			initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
-
 			really_merged_no_dupes = really_merged.unique()
 			self.logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")
 			merged_dataframe = really_merged_no_dupes
+
 
 		merged_dataframe.drop_nulls()
 		self.check_if_unexpected_rows(merged_dataframe, merge_upon=merge_upon, 

@@ -86,7 +86,7 @@ class FileReader():
 		if auto_rancheroize: polars_df = NeighLib.rancheroize_polars(polars_df)		
 		return polars_df
 
-	def polars_from_tsv(self, tsv, delimiter='\t', drop_columns=list(), 
+	def polars_from_tsv(self, tsv, delimiter='\t', drop_columns=list(), explode_upon=None,
 		auto_parse_dates=_cfg_auto_parse_dates,
 		auto_rancheroize=_cfg_auto_rancheroize,
 		check_index=_cfg_check_index, 
@@ -95,8 +95,9 @@ class FileReader():
 		"""
 		1. Read a TSV (or similar) and convert to Polars dataframe
 		2. Drop columns in drop_columns, if any
-		3. Check index (optional)
-		4. Rancheroize (optional)
+		3. Explode the index (optional)
+		4. Check index (optional)
+		5. Rancheroize (optional)
 		"""
 		auto_rancheroize = self._sentinal_handler(_cfg_auto_rancheroize)
 		auto_parse_dates = self._sentinal_handler(_cfg_auto_parse_dates)
@@ -105,6 +106,8 @@ class FileReader():
 
 		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, ignore_errors=ignore_polars_read_errors)
 		polars_df = polars_df.drop(drop_columns)
+		if explode_upon != None:
+			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), delimiter=explode_upon, drop_new_non_unique=check_index)
 		if check_index: NeighLib.check_index(polars_df)
 		if auto_rancheroize: polars_df = NeighLib.rancheroize_polars(polars_df)
 		return polars_df
@@ -192,30 +195,29 @@ class FileReader():
 		)
 		return polars_df
 
-	def polars_explode_delimited_rows_recklessly(self, polars_df, column="run_index", delimiter=";", drop_new_non_unique=True):
+	def polars_explode_delimited_rows(self, polars_df, column="run_index", delimiter=";", drop_new_non_unique=True):
 		"""
 		column 			some_other_column		
-		"SRR123;SRR124"	SchemaFieldNotFoundError
-		"SRR125" 		TapeError
+		"SRR123;SRR124"	12
+		"SRR125" 		555
 
 		becomes
 
 		column 			some_other_column		
-		"SRR123"		SchemaFieldNotFoundError
-		"SRR124"		SchemaFieldNotFoundError
-		"SRR125" 		TapeError
+		"SRR123"		12
+		"SRR124"		12
+		"SRR125" 		555
 		"""
 		exploded = (polars_df.with_columns(pl.col(column).str.split(delimiter)).explode(column)).unique()
-		if len(polars_df) == len(polars_df.select(column).unique()):
-			if len(exploded) != len(exploded.select(column).unique()):
-				self.logging.info(f"Exploding created non-unique values for the previously unique-only column {column}, so we'll be merging...")
-				exploded = self.merge_row_duplicates(exploded, column)
-				if len(exploded) != len(exploded.select(column).unique()): # probably should never happen
-					self.logging.warning("Attempted to merge duplicates caused by exploding, but it didn't work.")
-					self.logging.warning(f"Debug information: Exploded df has len {len(exploded)}, unique in {column} len {len(exploded.select(column).unique())}")
-					raise ValueError
+		if len(polars_df) == len(polars_df.select(column).unique()) and len(exploded) != len(exploded.select(column).unique()) and drop_new_non_unique:
+			self.logging.info(f"Exploding created non-unique values for the previously unique-only column {column}, so we'll be merging...")
+			exploded = self.merge_row_duplicates(exploded, column)
+			if len(exploded) != len(exploded.select(column).unique()): # probably should never happen
+				self.logging.warning("Attempted to merge duplicates caused by exploding, but it didn't work.")
+				self.logging.warning(f"Debug information: Exploded df has len {len(exploded)}, unique in {column} len {len(exploded.select(column).unique())}")
+				raise ValueError
 		else:
-			# there aren't unique values to begin with so who cares lol
+			# there aren't unique values to begin with so who cares lol (or exploding didn't make a difference)
 			pass
 		return exploded
 
@@ -293,8 +295,10 @@ class FileReader():
 		[SRR125]        | SAMN2        | [bizz]
 		[SRR126]        | SAMN3        | [bar]
 		"""
+		self.logging.info("Converting from run-index to sample-index...")
 		assert run_index in polars_df.columns
 		assert sample_index in polars_df.columns
+		assert pl.col(sample_index).is_not_null().all()
 
 		if not skip_rancheroize:
 			polars_df = NeighLib.rancheroize_polars(polars_df) # runs check_index()
@@ -303,6 +307,7 @@ class FileReader():
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index))
+		NeighLib.check_index(polars_df)
 		return polars_df
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search=True):

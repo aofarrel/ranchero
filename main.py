@@ -52,6 +52,7 @@ def inject_metadata(tba6):
 	#norway = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB12184 - good.tsv", drop_columns=["literature_lineage"])
 	PRJNA575883p1 = Ranchero.injector_from_tsv("./inputs/overrides/PRJNA575883p1.tsv")
 	PRJNA575883p2 = Ranchero.injector_from_tsv("./inputs/overrides/PRJNA575883p2.tsv")
+	imrl = Ranchero.injector_from_tsv("./inputs/overrides/IMRL/IMRL.csv")
 
 	# I've already verified that injecting per-biosample vs per-bioproject doesn't make a difference in output, at least
 	# when it comes to BioProject PRJEB2138 getting set to Russia 
@@ -64,6 +65,7 @@ def inject_metadata(tba6):
 	#tba6 = Ranchero.inject_metadata(tba6, norway, overwrite=True)
 	tba6 = Ranchero.inject_metadata(tba6, PRJNA575883p1, overwrite=True)
 	tba6 = Ranchero.inject_metadata(tba6, PRJNA575883p2, overwrite=True)
+	tba6 = Ranchero.inject_metadata(tba6, imrl, overwrite=True)
 
 	print(f"{_b_}Injected metadata in {time.time() - start:.4f} seconds{_bb_}")
 	null = Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, None, 'country')
@@ -83,40 +85,43 @@ def inject_metadata(tba6):
 
 
 def run_merges(tba6):
-
 	merged = tba6
 
-	# Brites
+	# Brites and Bos
 	print(f"{_b_}Processing Brites{_bb_}")
-	brites = Ranchero.from_tsv("./inputs/publications/run_indexed/Brites_2018/brites_cleaned.tsv", auto_rancheroize=True)
-	brites = Ranchero.explode_delimited_index(brites, delimiter=';')
-	brites = brites.drop("country") # has several incorrect ones
-	brites = Ranchero.standardize_everything(brites)
-	brites = Ranchero.NeighLib.add_column_of_just_this_value(brites, "pheno_source", "Brites_2018_PMC6277475")
-	merged = Ranchero.merge_dataframes(merged, brites, merge_upon="run_index", left_name="tba6", right_name="Brites", drop_exclusive_right=True)
+	brites = Ranchero.from_tsv("./inputs/publications/run_indexed/Brites_2018/brites_cleaned.tsv", 
+		auto_rancheroize=True, explode_upon=";", 
+		drop_columns=['country']) # several incorrect countries
+	brites = brites.with_columns(sample_index=None)
+	brites = brites.with_columns(country=None)
+	brites = brites.with_columns(region=None)
+	seals = Ranchero.injector_from_tsv("./inputs/overrides/pinnipeds_and_friends.tsv")
+	bos = Ranchero.injector_from_tsv("./inputs/overrides/Bos_2015/ancient.tsv")
+	brites = Ranchero.inject_metadata(Ranchero.inject_metadata(brites, bos, overwrite=True), seals, overwrite=True)
+	brites = Ranchero.standardize_countries(brites)
+	merged = Ranchero.merge_dataframes(merged, brites, merge_upon="run_index", left_name="tba6", right_name="Brites", drop_exclusive_right=False)
 
 	# Coll
 	print(f"{_b_}Processing Coll{_bb_}")
 	coll = Ranchero.from_tsv("./inputs/publications/run_indexed/Coll_2018/coll_processed.tsv", auto_rancheroize=True)
+	coll = Ranchero.NeighLib.add_column_of_just_this_value(coll, "pheno_source", "Coll_2018")
 	merged = Ranchero.merge_dataframes(merged, coll, merge_upon="run_index", left_name="tba6", right_name="Coll", drop_exclusive_right=True)
 
 	# Coscolla
 	print(f"{_b_}Processing Coscolla{_bb_}")
-	coscolla = Ranchero.from_tsv("./inputs/publications/run_indexed/Coscolla_2021/coscolla_sans_weird.tsv", auto_rancheroize=True)
-	coscolla = Ranchero.explode_delimited_index(coscolla)
-	coscolla = coscolla.drop(['coscolla_number_of_reads', 'coscolla_percent_not_covered', 'coscolla_mapping_percentage', 'coscolla_lineage'])
-	coscolla = Ranchero.NeighLib.add_column_of_just_this_value(coscolla, "pheno_source", "Coscolla_2021_PMC8208692")
+	coscolla = Ranchero.standardize_countries(Ranchero.from_tsv("./inputs/publications/run_indexed/Coscolla_2021/coscolla_sans_weird.tsv", explode_upon=";", auto_rancheroize=True))
 	merged = Ranchero.merge_dataframes(merged, coscolla, merge_upon="run_index", left_name="tba6", right_name="Coscolla", drop_exclusive_right=True)
 
 	# CRyPTIC Reuse Table (NOT WALKER 2022)
 	print(f"{_b_}Processing CRyPTIC reuse table{_bb_}")
-	CRyPTIC = Ranchero.from_tsv("./inputs/publications/run_indexed/CRyPTIC reuse table/CRyPTIC_reuse_table_20240917.csv", delimiter=",", auto_rancheroize=True)
-	CRyPTIC = CRyPTIC.drop(["AMI_MIC","BDQ_MIC","CFZ_MIC","DLM_MIC","EMB_MIC","ETH_MIC","INH_MIC","KAN_MIC","LEV_MIC","LZD_MIC","MXF_MIC","RIF_MIC","RFB_MIC",
+	CRyPTIC = Ranchero.from_tsv("./inputs/publications/run_indexed/CRyPTIC reuse table/CRyPTIC_reuse_table_20240917.csv", delimiter=",", auto_rancheroize=True,
+		drop_columns=["AMI_MIC","BDQ_MIC","CFZ_MIC","DLM_MIC","EMB_MIC","ETH_MIC","INH_MIC","KAN_MIC","LEV_MIC","LZD_MIC","MXF_MIC","RIF_MIC","RFB_MIC",
 		"AMI_PHENOTYPE_QUALITY","BDQ_PHENOTYPE_QUALITY","CFZ_PHENOTYPE_QUALITY","DLM_PHENOTYPE_QUALITY","EMB_PHENOTYPE_QUALITY","ETH_PHENOTYPE_QUALITY",
 		"INH_PHENOTYPE_QUALITY","KAN_PHENOTYPE_QUALITY","LEV_PHENOTYPE_QUALITY","LZD_PHENOTYPE_QUALITY","MXF_PHENOTYPE_QUALITY","RIF_PHENOTYPE_QUALITY",
 		"RFB_PHENOTYPE_QUALITY","ENA_SAMPLE","VCF","REGENOTYPED_VCF"])
 	CRyPTIC = Ranchero.NeighLib.add_column_of_just_this_value(CRyPTIC, "pheno_source", "CRyPTIC_reuse_PMC9363010")
 	CRyPTIC = Ranchero.explode_delimited_index(CRyPTIC, column="run_index", delimiter=".")
+
 	merged = Ranchero.merge_dataframes(merged, CRyPTIC, merge_upon="run_index", left_name="tba6", right_name="CRyPTIC", drop_exclusive_right=True)
 
 	# Merker (two of them...)
@@ -128,8 +133,7 @@ def run_merges(tba6):
 	
 	# Napier
 	print(f"{_b_}Processing Napier{_bb_}")
-	napier = Ranchero.from_tsv("./inputs/publications/run_indexed/Napier_2020/napier_samples_github_sans_weird.csv", delimiter=",", auto_rancheroize=True)
-	napier = Ranchero.explode_delimited_index(napier, delimiter="_")
+	napier = Ranchero.from_tsv("./inputs/publications/run_indexed/Napier_2020/napier_samples_github_sans_weird.csv", delimiter=",", explode_upon="_", auto_rancheroize=True)
 	merged = Ranchero.merge_dataframes(merged, napier, merge_upon="run_index", right_name="Napier", drop_exclusive_right=True)
 	print(f"Nulls in sample_index: {Ranchero._NeighLib.get_count_of_x_in_column_y(merged, None, 'sample_index')}")
 
@@ -151,18 +155,13 @@ def run_merges(tba6):
 
 	# the Nextstrain tree
 	print(f"{_b_}Processing Nextstrain tree{_bb_}")
-	nextstrain = Ranchero.from_tsv("./inputs/nextstrain_fixed_metadata.tsv", auto_rancheroize=True)
-	nextstrain = Ranchero.explode_delimited_index(nextstrain)
-	nextstrain = nextstrain.drop(["date_collected", 'Pyrazinamide','Capreomycin','Ethambutol','Rifampicin','Isoniazid','Ethionamide','Streptomycin','Pyrazinamide','Fluoroquinolones','Kanamycin','Amikacin']) # dates unreliable, antibiotic data mostly null
+	nextstrain = Ranchero.from_tsv("./inputs/nextstrain_fixed_metadata.tsv", auto_rancheroize=True, explode_upon=";",
+		# dates unreliable, antibiotic data mostly null
+		drop_columns=["date_collected", 'Pyrazinamide','Capreomycin','Ethambutol','Rifampicin','Isoniazid','Ethionamide','Streptomycin','Pyrazinamide','Fluoroquinolones','Kanamycin','Amikacin'])
 	nextstrain = Ranchero.standardize_everything(nextstrain)
 	merged = Ranchero.merge_dataframes(merged, nextstrain, merge_upon="run_index", right_name="nextstrain", drop_exclusive_right=True)
-	Ranchero.print_col_where(merged, 'sample_index', 'SAMN02360560')
-	
-	
-
+	print(f"{_b_}Finishing up run-based stuff...{_bb_}")
 	merged = Ranchero.rancheroize(merged)
-	Ranchero.print_col_where(merged, 'sample_index', 'SAMN02360560')
-
 	start = time.time()
 	Ranchero.to_tsv(merged, "./merged_by_run.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
@@ -235,8 +234,13 @@ Ranchero.to_tsv(merged_by_sample, "./merged_per_sample.tsv")
 # Eldholm 
 # Finci
 print(f"{_b_}Processing Finci{_bb_}")
-Finci_pheno = Ranchero.from_tsv("./inputs/publications/sample_indexed/Finci_2022 (PRJEB48275)/Finci_2022 (PRJEB48275).tsv", auto_rancheroize=True)
-start, merged = time.time(), Ranchero.merge_dataframes(merged, Finci_pheno, merge_upon="sample_index", right_name="input_tba3", indicator="collection")
+Finci_pheno = Ranchero.from_tsv("./inputs/publications/sample_indexed/Finci_2022 (PRJEB48275)/PRJEB48275_Finci_plus_pheno.tsv", 
+	drop_columns=["pheno_WHO_resistance","pheno_INH_MIC","pheno_RMP_MIC","pheno_EMB_MIC","pheno_PZA_MIC","pheno_AMK_MIC","pheno_CAP_MIC",
+	"pheno_KAN_MIC","pheno_MFX_MIC","pheno_LFX_MIC"], auto_rancheroize=True)
+Finci_pheno = Ranchero.standardize_countries(Finci_pheno)
+Finci_pheno = Ranchero.NeighLib.add_column_of_just_this_value(Finci_pheno, "pheno_source", "Finci_2022_PMC9436784")
+start, merged = time.time(), Ranchero.merge_dataframes(merged, Finci_pheno, merge_upon="sample_index", right_name="finci_2022", indicator="collection")
+
 
 # Menardo (two of them...)
 print(f"{_b_}Processing Menardo (two of them){_bb_}")

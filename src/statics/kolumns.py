@@ -27,7 +27,7 @@ equivalence = {
 		'geoloc_name': ['geoloc_name', 'geo_loc_name_country', 'geo_loc_name_country_calc', 'geoloc_country_calc', 'geo_loc_name_country_continent', 'geographic_location_sam_s_dpl93', 'geo_loc_name_country_continent_calc', 'geo_loc_name_sam', 'geographical_location_sam', 'geo_loc_name_sam_s_dpl209', 'isolation_country_sam', 'country_sam', 'geographic_location__region_and_locality__sam', 'geographic_location__country_and_or_sea__region__sam', 'geographic_location__countryand_orsea_region__sam', 'geographic_location__country_and_or_sea__sam', 'region_sam', 'geoloc_country_or_sea', 'geoloc_country_or_sea_region', 'isolation_site_sam', 'geo_loc_name_run', 'geographic_location__country_and_or_sea__run'], # doi_location_sam and geo_accession_exp should be lowest priority
 		'host': ['host', 'host_sciname', 'host_sam', 'host_taxid_sam', 'specific_host_sam', 'host_common', 'host_common_name_sam', 'host_run', 'host_scientific_name_sam', 'host_taxon_id_sam', 'host_common_name_run', 'host_scientific_name_run'],
 		'host_disease': ['host_disease', 'disease', 'disease_sam', 'host_disease_sam'],
-		'host_info': ['host_info', 'host_disease_stat_sam', 'host_life_stage_sam', 'pathogenicity_sam', 'passaged_in_sam', 'patient_year_of_arrival_to_israel_sam', 'passage_species_sam', 'patient_country_of_birth_sam', 'subsrc_note_sam_s_dpl392', 'host_status_sam', 'patient_year_of_birth_sam', 'patientid_sam', 'patient_finished_treatment_sam', 'patient_has_hiv_sam', 'patient_sex_sam', 'patient_number_sam_s_dpl111', 'age_sam', 'host_disease_outcome_sam', 'host_disease_stage_sam', 'host_sex_sam', 'pulmonary_disord_sam', 'host_age_sam', 'host_health_state_sam', 'host_subject_id_sam', 'host_description_sam', 'age_at_death_sam', 'age_at_death_units_sam', 'age_atdeath_weeks_sam'],
+		#'host_info': ['host_info', 'host_disease_stat_sam', 'host_life_stage_sam', 'pathogenicity_sam', 'passaged_in_sam', 'patient_year_of_arrival_to_israel_sam', 'passage_species_sam', 'patient_country_of_birth_sam', 'subsrc_note_sam_s_dpl392', 'host_status_sam', 'patient_year_of_birth_sam', 'patientid_sam', 'patient_finished_treatment_sam', 'patient_has_hiv_sam', 'patient_sex_sam', 'patient_number_sam_s_dpl111', 'age_sam', 'host_disease_outcome_sam', 'host_disease_stage_sam', 'host_sex_sam', 'pulmonary_disord_sam', 'host_age_sam', 'host_health_state_sam', 'host_subject_id_sam', 'host_description_sam', 'age_at_death_sam', 'age_at_death_units_sam', 'age_atdeath_weeks_sam'],
 		'host_scienname': ['host_scienname'],
 		'host_confidence': ['host_confidence'],
 		'host_commonname': ['host_commonname', 'host_streetname'],
@@ -94,8 +94,12 @@ list_to_set_uniq = [
 
 # In: pl.List() of any type
 # Out: Inner type if flattening existing list, falling back on left or right if merge
-list_to_inner_FIFO_silent = ['center_name', 'center_name_insdc', 'host_disease', 'release_date']
-list_to_inner_FIFO_warning = [
+# The distinction between this and list_to_null only matters in the merge usecase.
+list_fallback_or_null = [
+	'center_name',
+	'center_name_insdc',
+	'host_disease',
+	'release_date'
 	'country',
 	'date_collected',
 	'date_isolation',
@@ -104,20 +108,7 @@ list_to_inner_FIFO_warning = [
 	'host_confidence',
 	'host_scienname',
 	'latlon',
-	'pheno_AMIKACIN',
-	'pheno_CAPREOMYCIN',
-	'pheno_CIPROFLOXACIN',
-	'pheno_CYCLOSERINE',
-	'pheno_ETHAMBUTOL',
-	'pheno_ETHIONAMIDE',
-	'pheno_ISONIAZID',
-	'pheno_KANAMYCIN',
-	'pheno_MOXIFLOXACIN',
-	'pheno_OFLOXACIN',
-	'pheno_PAS',
-	'pheno_PYRAZINAMIDE',
-	'pheno_RIFAMPICIN',
-	'pheno_STREPTOMYCIN',
+	'mycobact_type',
 	'platform',
 	'region',
 	'release_date'
@@ -132,6 +123,26 @@ list_to_null = [
 	'coscolla_sublineage',
 	'napier_country',
 	'napier_lineage',
+	'pheno_AMIKACIN',
+	'pheno_BEDAQUILINE',
+	'pheno_CAPREOMYCIN',
+	'pheno_CIPROFLOXACIN',
+	'pheno_CLOFAZIMINE',
+	'pheno_CYCLOSERINE',
+	'pheno_DELAMANID',
+	'pheno_ETHAMBUTOL',
+	'pheno_ETHIONAMIDE',
+	'pheno_LEVOFLOXACIN',
+	'pheno_ISONIAZID',
+	'pheno_KANAMYCIN',
+	'pheno_LINEZOLID',
+	'pheno_MOXIFLOXACIN',
+	'pheno_OFLOXACIN',
+	'pheno_PAS',
+	'pheno_PYRAZINAMIDE',
+	'pheno_RIFABUTIN',
+	'pheno_RIFAMPICIN',
+	'pheno_STREPTOMYCIN',
 	'SRX_id', 
 	'sra_study'
 ]

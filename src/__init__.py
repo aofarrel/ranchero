@@ -36,7 +36,7 @@ from_bigquery = _FileReader.polars_from_bigquery
 from_ncbi_run_selector = _FileReader.polars_from_ncbi_run_selector
 injector_from_tsv = _FileReader.read_metadata_injection
 run_index_to_sample_index = _FileReader.polars_run_to_sample
-explode_delimited_index = _FileReader.polars_explode_delimited_rows_recklessly
+explode_delimited_index = _FileReader.polars_explode_delimited_rows
 
 merge_dataframes = _Merger.merge_polars_dataframes
 

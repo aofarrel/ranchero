@@ -4,6 +4,7 @@ import polars as pl
 import datetime
 from src.statics import kolumns, drop_zone, null_values
 from polars.testing import assert_series_equal
+import polars.selectors as cs
 from .config import RancheroConfig
 
 # my crummy implementation of https://peps.python.org/pep-0661/
@@ -120,7 +121,7 @@ class NeighLib:
 				for col in list_cols])
 		return polars_df
 
-	def print_col_where(self, polars_df, column="source", equals="Coscolla", cols_of_interest=kolumns.id_columns):
+	def print_col_where(self, polars_df, column="source", equals="Coscolla", cols_of_interest=kolumns.id_columns, everything=False):
 		if column not in polars_df.columns:
 			self.logging.warning(f"Tried to print where {column} equals {equals}, but that column isn't in the dataframe")
 			return
@@ -134,7 +135,10 @@ class NeighLib:
 			filtah = polars_df.filter(pl.col(column).list.contains(equals))
 		else:
 			filtah = polars_df.filter(pl.col(column) == equals)
-		cols_to_print = list(set([thingy for thingy in cols_of_interest if thingy in polars_df.columns] + [column]))
+		if not everything:
+			cols_to_print = list(set([thingy for thingy in cols_of_interest if thingy in polars_df.columns] + [column]))
+		else:
+			cols_to_print = polars_df.columns
 		with pl.Config(tbl_cols=-1, tbl_rows=40):
 			print(filtah.select(cols_to_print))
 
@@ -353,6 +357,8 @@ class NeighLib:
 			
 			polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col)
 			try:
+				# TODO: this breaks in situations like when we add Brites before Bos, since Brites has three run accessions with no sample_index,
+				# resulting in assertionerror but no printed conflicts
 				assert_series_equal(polars_df[base_col], polars_df[right_col].alias(base_col))
 				polars_df = polars_df.drop(right_col)
 				self.logging.debug(f"All values in {base_col} and {right_col} are the same after an filling in each other's nulls. Dropped {right_col}.")
@@ -367,21 +373,18 @@ class NeighLib:
 			
 			elif base_col in kolumns.list_throw_error:
 				self.logging.error(f"[kolumns.list_throw_error] {base_col} --> Fatal error. There should never be lists in this column.")
-				self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col, index_column]), f"conflicts")
+				print_cols = [base_col, right_col, index_column, self.cfg.indicator_column] if self.cfg.indicator_column in polars_df.columns else [base_col, right_col, index_column]
+				self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(print_cols), f"conflicts")
 				exit(1)
 			
-			elif base_col in kolumns.list_to_inner_FIFO_warning:
+			elif base_col in kolumns.list_fallback_or_null:
 				if escalate_warnings:
-					self.logging.error(f"[list_to_inner_FIFO_warning] {base_col} --> Fatal error due to escalate_warnings=True")
+					self.logging.error(f"[list_fallback_or_null] {base_col} --> Fatal error due to escalate_warnings=True")
 					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col, index_column]), f"conflicts")
 					exit(1)
 				else:
-					self.logging.warning(f"[kolumns.list_to_inner_FIFO_warning] {base_col} --> Falling back on {base_col if fallback_on_left else right_col}")
+					self.logging.warning(f"[kolumns.list_fallback_or_null] {base_col} --> Falling back on {base_col if fallback_on_left else right_col}")
 					polars_df = polars_df.drop(right_col) if fallback_on_left else polars_df.drop(base_col).rename({right_col: base_col})
-			
-			elif base_col in kolumns.list_to_inner_FIFO_silent:
-				self.logging.debug(f"[kolumns.list_to_inner_FIFO_silent] {base_col} --> Falling back on {base_col if fallback_on_left else right_col}")
-				polars_df = polars_df.drop(right_col) if fallback_on_left else polars_df.drop(base_col).rename({right_col: base_col}) 
 			
 			elif base_col in kolumns.list_to_null:
 				self.logging.debug(f"[kolumns.list_to_null] {base_col} --> Conflicts turned to null")
@@ -452,14 +455,11 @@ class NeighLib:
 			polars_df = self.iteratively_merge_these_columns(polars_df, merge_these_columns, recursion_depth=recursion_depth+1)
 		return polars_df.rename({left_col: equivalence_key}) if equivalence_key is not None else polars_df
 
-	def get_rows_where_list_col_more_than_one_value(self, polars_df, list_col, force_uniq=False):
-		""" See also print_only_where_col_list_is_big()"""
+	def get_rows_where_list_col_more_than_one_value(self, polars_df, list_col):
+		""" See also print_only_where_col_list_is_big()
+		The .and_() is necessary for now due to https://github.com/pola-rs/polars/issues/19987"""
 		assert polars_df.schema[list_col] == pl.List
-		if force_uniq:
-			polars_df = polars_df.with_columns(pl.col(list_col).list.unique().alias(f"{list_col}_uniq"))
-			return polars_df.filter(pl.col(f"{list_col}_uniq").list.len() > 1)
-		else:
-			return polars_df.filter(pl.col(list_col).list.len() > 1)
+		return polars_df.filter(pl.col(list_col).list.len().and_(pl.col(list_col).list.first().is_not_null()) > 1)
 
 	def get_paired_illumina(self, polars_df, inverse=False):
 		rows_before = polars_df.shape[0]
@@ -498,7 +498,6 @@ class NeighLib:
 		self.logging.debug(f"Dataframe shape before rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
 		polars_df = self.drop_known_unwanted_columns(polars_df)
 		self.get_null_count_in_column(polars_df, self.get_index_column(polars_df), warn=True, error=True)
-
 		if drop_non_mycobact_columns:
 			polars_df = self.drop_non_tb_columns(polars_df)
 		if nullify:
@@ -602,15 +601,17 @@ class NeighLib:
 			else:
 				return [5]
 
-	def coerce_to_not_list_if_possible(self, polars_df, column, index_column):
-		if len(self.get_rows_where_list_col_more_than_one_value(polars_df, column, False)) == 0:
-			self.logging.debug(f"-->After removing non-uniques, we can turn {column} into single-value")
+	def coerce_to_not_list_if_possible(self, polars_df, column, index_column, prefix_arrow=False):
+		arrow = '-->' if prefix_arrow else ''
+		assert column != index_column
+		if len(self.get_rows_where_list_col_more_than_one_value(polars_df, column)) == 0:
+			self.logging.debug(f"{arrow}No rows of {column} have a length more than one, converting to inner type")
 			return polars_df.with_columns(pl.col(column).list.first().alias(column))
 		else:
 			if self.logging.getEffectiveLevel() == 10:
-				self.logging.debug(f"-->After removing non-uniques, we still have {len(self.get_rows_where_list_col_more_than_one_value(polars_df, column, False))} multi-element lists in {column}")
-				debug_print = self.get_rows_where_list_col_more_than_one_value(polars_df, column, False)
-				self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(30), f"polars_df, after set treatment (true len {len(debug_print)})")
+				debug_print = self.get_rows_where_list_col_more_than_one_value(polars_df, column)
+				self.logging.debug(f"-->{len(debug_print)} multi-element lists in {column}")
+				self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(30), f"list cols with more than one value (true len {len(debug_print)})")
 			return polars_df
 
 	def flatten_list_col_as_set(self, polars_df, column):
@@ -652,8 +653,9 @@ class NeighLib:
 					continue
 
 				if col in kolumns.list_to_float_sum:
-					#self.logging.debug(f"-->Summing {col}")
+					self.logging.debug(f"{col}\n-->[[kolumns.list_to_float_sum]")
 					if datatype.inner == pl.String:
+						self.logging.debug(f"-->Inner type is string, casting to pl.Int32 first")
 						polars_df = polars_df.with_columns(
 							pl.col(col).list.eval(
 								pl.when(pl.element().is_not_null())
@@ -668,22 +670,38 @@ class NeighLib:
 					continue
 				
 				elif col in kolumns.list_to_list_silent:
-					#self.logging.debug(f"-->Handling {col} as a list")
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column)
-					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'list-and-shrink'})
+					self.logging.debug(f"{col}\n-->[[kolumns.list_to_list_silent]")
+					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': '.'})
+					continue
+
+				elif col in kolumns.list_to_null:
+					self.logging.debug(f"{col}\n-->[[kolumns.list_to_null]")
+					polars_df = polars_df.with_columns([
+						pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
+					])
+					self.logging.debug(f"-->Set null in conflicts, now trying to delist")
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'null conflicts'})
 					continue
 				
 				elif col in kolumns.list_to_set_uniq: 
-					#self.logging.debug(f"-->Handling {col} as a set per kolumn rules")
+					self.logging.debug(f"{col}\n-->[[kolumns.list_to_set_uniq]")
 					polars_df = polars_df.with_columns(pl.col(col).list.unique())
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column)
+					self.logging.debug("-->Used uniq, now checking if we can delist")
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set-and-shrink'})
 					continue
 					
-				elif col in kolumns.list_to_inner_FIFO_warning:
-					self.logging.warning(f"Expected {col} to only have one non-null per sample, but that's not the case. Will keep as a set.")
+				elif col in kolumns.list_fallback_or_null:
+					# If this had happened during a merge of two dataframes, we would be falling back on one df or the other. But here, we
+					# don't know what value to fall back upon, so it's better to just null this stuff.
+					self.logging.warning(f"{col}\n-->[kolumns.list_fallback_or_null] Expected {col} to only have one non-null per sample, but that's not the case. Will null those bits.")
 					polars_df = polars_df.with_columns(pl.col(col).list.unique())
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column)
+					polars_df = polars_df.with_columns([
+						pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
+					])
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+					#assert len(self.get_rows_where_list_col_more_than_one_value(polars_df, col, False)) == 0 # https://github.com/pola-rs/polars/issues/19987
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set-and-shrink (!!!WARNING!!)'})
 					if hard_stop:
 						exit(1)
@@ -692,7 +710,7 @@ class NeighLib:
 				else:
 					self.logging.warning(f"-->Not sure how to handle {col}, will treat it as a set")
 					polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column)
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set (no rules)'})
 					continue
 
@@ -712,7 +730,27 @@ class NeighLib:
 			NeighLib.super_print_pl(report, "Finished flattening list columns. Results:")
 		return polars_df
 
-	def check_index(self, polars_df, manual_index_column=None, rm_dupes=_cfg_rm_dupes, force_NCBI_runs=_cfg_force_SRR_ERR_DRR_run_index, force_BioSamples=_cfg_force_SAMN_SAME_SAMD_sample_index):
+	def rstrip(self, polars_df, column, strip_char=" "):
+		return polars_df.with_columns([
+			pl.when(pl.col(column).str.ends_with(" "))
+			.then(pl.col(column).str.slice(-1))
+			.otherwise(pl.col(column))
+			.alias(column)
+		])
+	
+	def recursive_rstrip(self, polars_df, column, strip_char=" "):
+		while polars_df[column].str.ends_with(" ").any():
+			self.logging.info("Recursing...")
+			polars_df = self.rstrip(polars_df, column, strip_char)
+		return polars_df
+
+	def check_index(self, polars_df, 
+			manual_index_column=None, 
+			rm_dupes=_cfg_rm_dupes, 
+			force_NCBI_runs=_cfg_force_SRR_ERR_DRR_run_index, 
+			force_BioSamples=_cfg_force_SAMN_SAME_SAMD_sample_index,
+			rstrip=False, # VERY SLOW AND NOT WELL TESTED!
+			force_str_index=True):
 		"""
 		Check a polars dataframe's apparent index, which is expected to be either run accessions or sample accessions, for the following issues:
 		* pl.null/None values
@@ -725,6 +763,12 @@ class NeighLib:
 		force_NCBI_runs = self._sentinal_handler(_cfg_force_SRR_ERR_DRR_run_index)
 		force_BioSamples = self._sentinal_handler(_cfg_force_SAMN_SAME_SAMD_sample_index)
 		apparent_index_column = self.get_index_column(polars_df)
+		
+		if force_str_index:
+			assert polars_df.schema[apparent_index_column] == pl.Utf8
+
+		if rstrip:
+			polars_df = self.recursive_rstrip(polars_df, apparent_index_column, strip_char=" ")
 
 		if manual_index_column is not None:
 			if manual_index_column not in polars_df.columns:
@@ -768,7 +812,7 @@ class NeighLib:
 			run_or_sample = 'run_index' if index_column in kolumns.equivalence['run_index'] else 'sample_index'
 			if rm_dupes:
 				self.logging.warning(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- will attempt to remove them (THIS MAY LEAD TO DATA LOSS)")
-				self.logging.warning(f"Duplicates: {duplicates}")
+				self.logging.warning(f"Duplicates: {duplicates.select(index_column)}")
 				return subset
 			else:
 				self.logging.error(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- not removing as per cfg perferences")
@@ -794,7 +838,7 @@ class NeighLib:
 				if len(invalid_rows) > 0:
 					self.logging.warning("Found samples that don't start with SAMN/SAME/SAMD (will be dropped):")
 					print(invalid_rows)
-					polars_df = valid_rows
+					return valid_rows
 			elif column in kolumns.equivalence['run_index'] and force_NCBI_runs and polars_df.schema[column] != pl.List:
 				good = (
 					polars_df[column].str.starts_with("SRR") |
@@ -806,7 +850,9 @@ class NeighLib:
 				if len(invalid_rows) > 0:
 					self.logging.warning("Found runs that don't start with SRR/ERR/DRR (will be dropped):")
 					print(invalid_rows)
-					polars_df = valid_rows
+					return valid_rows
+			else:
+				continue
 		return 0
 
 	def drop_non_tb_columns(self, polars_df):
@@ -936,7 +982,6 @@ class NeighLib:
 
 	def drop_null_columns(self, polars_df):
 		""" Drop columns of type null or list(null) """
-		import polars.selectors as cs
 		polars_df = polars_df.drop(cs.by_dtype(pl.Null))
 		polars_df = polars_df.drop(cs.by_dtype(pl.List(pl.Null)))
 		return polars_df

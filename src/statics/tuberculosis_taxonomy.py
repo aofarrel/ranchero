@@ -36,38 +36,49 @@ def convert_to_regex_no_substrings(list_to_convert):
 tuberculosis_sensu_stricto = ["Mycobacterium tuberculosis sensu stricto", "M. tuberculosis sensu stricto", "Mycobacterium tuberculosis subsp. tuberculosis"]
 
 tuberculosis_in_general = tuberculosis_sensu_stricto + [
+	"M. tuberculosis",
 	"Mycobacterium tuberculosis",
 
+	"M. africanum",
 	"Mycobacterium africanum",
 	"Mycobacterium tuberculosis variant africanum",
 
+	"M. bovis",
 	"Mycobacterium bovis",
 	"Mycobacterium tuberculosis variant bovis",
 
+	"M. caprae",
 	"Mycobacterium caprae",
 	"Mycobacterium tuberculosis variant caprae",
 
 	# NCBI does *NOT* consider this TB, but TBProfiler classifies its lineage, so I'm keeping it here
 	# https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=1305738&lvl=3&lin=f&keep=1&srchmode=1&unlock
+	"M. orygis",
 	"Mycobacterium orygis",
 	"Mycobacterium tuberculosis variant orygis",
 
 	# NCBI considers this TB, not just part of the complex
 	# https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=1806&lvl=3&lin=f&keep=1&srchmode=1&unlock
+	"M. microti",
 	"Mycobacterium microti",
 	"Mycobacterium tuberculosis variant microti",
+
+	# variant name of M. microti
+	# do NOT match on "M. muris" as that's more likely https://en.wikipedia.org/wiki/Mastophorus_muris
 	"Mycobacterium tuberculosis variant muris",
 	"Mycobacterium tuberculosis var. muris",
 	"Mycobacterium muris",
-	"vole bacillus",
 
 	# NCBI considers this TB, not just part of the complex
 	# https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=194542&lvl=3&lin=f&keep=1&srchmode=1&unlock
+	"M. pinnipedii",
 	"Mycobacterium pinnipedii",
 	"Mycobacterium tuberculosis variant pinnipedii"
 ]
 
 tuberculosis_complex_specific = tuberculosis_in_general + [
+	"M. canetti",  # surprisingly common typo
+	"M. canettii",
 	"Mycobacterium canettii",
 
 	"Mycobacterium tuberculosis complex",
@@ -75,8 +86,10 @@ tuberculosis_complex_specific = tuberculosis_in_general + [
 	"Mycobacterium tuberculosis complex bacterium",
 	"unclassified Mycobacterium tuberculosis complex",
 
+	"M. mungi",
 	"Mycobacterium mungi",
 
+	"M. suricattae",
 	"Mycobacterium suricattae"
 ]
 recommended_tuberculosis_regex = convert_to_regex(tuberculosis_complex_specific)
@@ -87,19 +100,9 @@ other_MTBC_terms = [
 	"dassie bacillus",     # MTBC member found only in Procavia capensis
 	"Koch's bacillus",     # another name for Mycobacterium tuberculosis 
 	"Kochs bacillus",      # typo of above
+	"vole bacillus",
 	"M. tb complex",
 	"M. tb",
-	"M. africanum",
-	"M. bovis",
-	"M. canetti",  # surprisingly common typo
-	"M. canettii",
-	"M. caprae",
-	"M. microti",
-	"M. mungi",
-	"M. orygis",
-	"M. pinnipedii",
-	"M. suricattae",
-	"M. tuberculosis",
 	"M.tb"
 	"MTB complex",
 	"Mtb",

@@ -24,6 +24,7 @@ nulls_CSV = [
 	'Not recorded',
 	'Not specified','not specified',
 	'null','Null',
+	'-',
 	'uncalculated',
 	'Unknown','unknown',
 	'unspecified','Unspecified',
