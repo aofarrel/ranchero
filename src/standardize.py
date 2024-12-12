@@ -37,13 +37,6 @@ class ProfessionalsHaveStandards():
 		
 		if 'date_collected' in polars_df.columns:
 			self.logging.info("Cleaning up dates...")
-			polars_df = self.cleanup_dates(polars_df)
-			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMD00179045")
-			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN28527860")
-			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN15853859")
-			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN35981938")
-			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN15180445")
-			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN30381257")
 
 		if ['date_collected_year', 'date_collected_month'] in polars_df.columns:
 			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_year')
@@ -88,23 +81,12 @@ class ProfessionalsHaveStandards():
 		pl.when(pl.col("BioProject") == "PRJEB15463").then(pl.lit("Kinshasa")).otherwise(pl.col("region")).alias("region")
 		"""
 		indicators = []
-		#keys_to_drop = []
 		for ordered_dictionary in metadata_dictlist:
 			for key in ordered_dictionary:
 				if key not in polars_df.columns:
 					self.logging.error(f"Attempted to inject {key} metadata, but existing column with that name doesn't exist")
-					#if key != self.cfg.indicator_column:
-					#	self.logging.error(f"Attempted to inject {key} metadata, but existing column with that name doesn't exist, nor is {key} equivalent to the config's indicator column {self.cfg.indicator_column}")
-					#	raise ValueError
-					#else:
-					#	# this is an indicator column that needs special handling
-					#	ordered_dictionary_copy = ordered_dictionary.copy()
-					#	match = ordered_dictionary_copy.popitem(last=False) # FIFO
-					#	match_key, match_value = match[0], match[1]
-					#	indicators.append([match_key, match_value, ordered_dictionary[key]]) # ["BioProject", "PRJEB15463", "FZB_DRC"]
-					#	keys_to_drop.append(ordered_dictionary[key])
+					return 0
 		assert type(metadata_dictlist[0]) == OrderedDict
-		#[ordered_dictionary.pop(key) for key in keys_to_drop if key in ordered_dictionary]
 
 		for ordered_dictionary in metadata_dictlist:
 			# {"BioProject": "PRJEB15463", "country": "DRC", "region": "Kinshasa"}

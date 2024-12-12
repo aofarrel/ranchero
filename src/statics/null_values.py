@@ -24,6 +24,7 @@ nulls_CSV = [
 	'Not recorded',
 	'Not specified','not specified',
 	'null','Null',
+        'nan',
 	'-',
 	'uncalculated',
 	'Unknown','unknown',
@@ -34,8 +35,8 @@ nulls_CSV = [
 nulls_pl_contains_any = [
 	'missing',
 	'n/a',
-	'nan',
 	'no data',
+        'none',
 	'not abblicable',
 	'not applicable',
 	'Not available',

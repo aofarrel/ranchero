@@ -6,7 +6,7 @@ _b_ = "\033[1m"
 _bb_ = "\033[0m"
 print(f"Module import time: {time.time() - start:.4f}")
 slim = False
-start_from_scratch = False
+start_from_scratch = True
 inject = True
 do_run_index_merges = True
 

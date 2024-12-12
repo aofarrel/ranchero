@@ -9,8 +9,6 @@ from .analyze import *
 from .merge import *
 from .read_file import FileReader
 from .standardize import ProfessionalsHaveStandards
-from .verify import *
-
 
 _FileReader = FileReader(Configuration)
 _Merger = Merger(Configuration)

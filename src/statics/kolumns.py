@@ -87,8 +87,8 @@ list_to_set_uniq = [
 	'datastore_filetype', 
 	'datastore_provider',
 	'pheno_source',
-	'primary_search', 
-	'run_index', 
+	'primary_search',
+	'run_index',
 	'sra_study',
 	'SRX_id'
 ]
@@ -98,6 +98,7 @@ list_to_list_silent = [
 	'assay_type',
 	'avgspotlen',
 	'collection',
+        'geo_loc_name_sam',
 	'geoloc_country_calc',
 	'geoloc_country_or_sea', 
 	'geoloc_name', 

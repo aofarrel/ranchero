@@ -936,17 +936,9 @@ class NeighLib:
 
 
 	def flatten_nested_list_cols(self, polars_df):
-		"""Flatten nested list columns"""
-
-		# This version seems to breaking the schema:
-		#polars_df = polars_df.with_columns(
-		#   [pl.col(x).list.eval(pl.lit("'") + pl.element() + pl.lit('"')).list.join(",").alias(x) for x, y in polars_df.schema.items() if isinstance(y, pl.List) and isinstance(y.inner, pl.List)]
-		#)
-
+		"""There are other ways to do this, but this one doesn't break the schema, so we're sticking with it"""
 		nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
 		for col in nested_lists:
-			#new_col = pl.col(col).list.eval(pl.element().cast(pl.Utf8).map_elements(lambda s: f"'{s}'")).alias(f"{col}_flattened")
-			#new_col = pl.col(col).list.eval(pl.element().cast(pl.Utf8).map_elements(lambda s: f"'{s}'", return_dtype=str)).list.join(",").alias(f"{col}_flattened")
 			polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten().drop_nulls()))
 		
 		# this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
@@ -956,44 +948,39 @@ class NeighLib:
 		return(polars_df)
 
 	def stringify_one_list_column(self, polars_df, column):
-
-		# TODO: iterating through the entire df is ridiculous. why the hell did I write it like this?
-
 		assert column in polars_df.columns
-		for col, datatype in polars_df.schema.items():
-			if col==column and datatype == pl.List(pl.String):
-				polars_df = polars_df.with_columns(
-					pl.when(pl.col(col).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
-					.then(pl.col(col).list.eval(pl.element()).list.join(""))
-					.otherwise(
-						pl.lit("[")
-						+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
-						+ pl.lit("]")
-					).alias(col)
-				)
-				return polars_df
-			
-			# pl.Int doesn't exist and pl.List(int) doesn't seem to work, so we'll take the silly route
-			elif col==column and (datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64)):
-				polars_df = polars_df.with_columns((
+		datatype = polars_df[column].schema
+
+		if datatype == pl.List(pl.String):
+			polars_df = polars_df.with_columns(
+				pl.when(pl.col(col).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
+				.then(pl.col(col).list.eval(pl.element()).list.join(""))
+				.otherwise(
 					pl.lit("[")
-					+ pl.col(col).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
+					+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
 					+ pl.lit("]")
-				).alias(col))
-				return polars_df
-			
-			elif col==column and datatype == pl.Object:
-				polars_df = polars_df.with_columns((
-					pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)
-				).alias(col))
-				return polars_df
+				).alias(col)
+			)
+			return polars_df
+		
+		# pl.Int doesn't exist and pl.List(int) doesn't seem to work, so we'll take the silly route
+		elif datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64):
+			polars_df = polars_df.with_columns((
+				pl.lit("[")
+				+ pl.col(col).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
+				+ pl.lit("]")
+			).alias(col))
+			return polars_df
+		
+		# This makes assumptions about the structure of the object and may not be universal
+		elif datatype == pl.Object:
+			polars_df = polars_df.with_columns((
+				pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)
+			).alias(col))
+			return polars_df
 
-			elif col==column:
-				raise ValueError(f"Tried to make {col} into a string column, but we don't know what to do with type {datatype}")
-
-			else:
-				continue
-		raise LookupError(f"Could not find {col} in dataframe")	
+		else:
+			raise ValueError(f"Tried to make {col} into a string column, but we don't know what to do with type {datatype}")
 
 	@staticmethod
 	def stringify_all_list_columns(polars_df):
@@ -1022,6 +1009,7 @@ class NeighLib:
 					+ pl.lit("]")
 				).alias(col))
 			
+			# This makes assumptions about the structure of the object and may not be universal
 			elif datatype == pl.Object:
 				polars_df = polars_df.with_columns((
 					pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)
@@ -1031,6 +1019,9 @@ class NeighLib:
 				polars_df = polars_df.with_columns((
 					pl.col(col).map_elements(lambda s: "[" + ", ".join(f"{item}" for item in sorted(s)) + "]" if isinstance(s, set) else str(s), return_dtype=str)
 				).alias(col))
+
+			else:
+				continue
 
 		return polars_df
 
@@ -1046,7 +1037,6 @@ class NeighLib:
 		return polars_df.drop(column)
 
 	def drop_null_columns(self, polars_df):
-		""" Drop columns of type null or list(null) """
 		polars_df = polars_df.drop(cs.by_dtype(pl.Null))
 		polars_df = polars_df.drop(cs.by_dtype(pl.List(pl.Null)))
 		return polars_df
@@ -1058,9 +1048,9 @@ class NeighLib:
 		if len(columns_with_type_list_or_obj) > 0:
 			df_to_write = self.stringify_all_list_columns(df_to_write)
 		try:
-			### DEBUG ###
-			debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})
-			self.logging.debug(f"Non-string types, and what they converted to: {debug}")
+			if self.logging.getEffectiveLevel() == 10:
+				debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})
+				self.logging.debug(f"Non-string types, and what they converted to: {debug}")
 			df_to_write.write_csv(path, separator='\t', include_header=True, null_value='')
 			self.logging.info(f"Wrote dataframe to {path}")
 		except pl.exceptions.ComputeError:
@@ -1084,7 +1074,7 @@ class NeighLib:
 		return dupes
 	
 	def assert_unique_columns(self, pandas_df):
-		"""Assert all columns in a pandas df are unique -- useful if converting to polars """
+		"""Assert all columns in a !!!PANDAS!!! dataframe are unique -- useful if converting to polars """
 		if len(pandas_df.columns) != len(set(pandas_df.columns)):
 			dupes = []
 			not_dupes = set()

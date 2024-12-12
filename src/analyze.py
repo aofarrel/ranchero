@@ -1,7 +1,6 @@
 import polars as pl
 import pandas as pd
 from src.neigh import NeighLib
-#from src.statics import tuberculosis_organisms
 
 def drop_lowcount_columns(polars_df, cutoff=3, verbose=True):
 	dropped = []
@@ -17,8 +16,6 @@ def drop_lowcount_columns(polars_df, cutoff=3, verbose=True):
 	if verbose: print(f"Removed {starting_columns - ending_columns} columns with less than {cutoff} unique values")
 	if verbose: print(dropped)
 	return polars_df
-
-
 
 
 def rm_all_not_beginning_with_myco(polars_df, inverse=False, column='organism'):

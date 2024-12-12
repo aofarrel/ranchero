@@ -265,8 +265,7 @@ class Merger:
 							# let merge_right_columns() handle it
 
 						else:
-							self.logging.debug(f"* {left_column}: LIST | SING")
-							print("1")
+							self.logging.debug(f"* {left_column}: LIST | SING (beware: this might be slow)")
 							small_merge = (
 								left.lazy()
 								.select([merge_upon, left_column])
@@ -284,22 +283,7 @@ class Merger:
 							)
 							left = left.drop(left_column)
 							right = right.drop(left_column)
-							print("2")
 							left = left.join(small_merge, on=merge_upon, how="left")
-
-							# TODO: this basically replaces merge right columns which doesn't work for this somehow
-							#print("1")
-							#small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
-							#print("2")
-							#small_merge = small_left.join(small_right, merge_upon, how="outer_coalesce")
-							#print("3")
-							#small_merge = small_merge.with_columns(concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls())
-							#print("4")
-							#small_merge = small_merge.drop(left_column).drop(f"{left_column}_right").rename({"concat_list": left_column})
-							#print("5")
-							#left, right = left.drop(left_column), right.drop(left_column) # prevent merge right columns from running after full merge
-							#left = left.join(small_merge, merge_upon, how='outer_coalesce')
-
 
 					else:
 						if right.schema[left_column] == pl.List(pl.String):

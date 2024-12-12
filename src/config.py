@@ -25,9 +25,6 @@ class RancheroConfig:
 				print(f"⋆ {keys}: Initialized with {len(stuff['taxoncore_ruleset'])} values")
 			else:
 				print(f"⋆ {keys}: {stuff[keys]}")
-		#import polars as pl
-		#del stuff['unwanted']
-		#print(pl.from_dict(stuff, strict=False))
 
 	def read_config(self, config_file: str):
 		raise ValueErrror("Reading configuration files currently isn't implemented!")
@@ -74,7 +71,7 @@ class RancheroConfig:
 		self.ignore_polars_read_errors = True
 		self.indicator_column = "collection"
 		self.intermediate_files = False
-		self.loglevel = logging.DEBUG # DEBUG = 10, INFO = 20
+		self.loglevel = logging.INFO # DEBUG = 10, INFO = 20
 		self.paired_illumina_only = False
 		self.polars_normalize = True
 		self.rm_dupes = True
