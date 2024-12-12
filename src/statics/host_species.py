@@ -6,24 +6,24 @@ from numpy import nan as nan
 exact_match_only = {
 	'9606': ['Homo sapiens', 3, "human"], # NCBI taxid 9606 is human
 	'9606, Homo sapiens': ['Homo sapiens', 3, "human"], # NCBI taxid 9606 is human
-	'antelope': ['null', 3, "antelope"],
-	'Buffalo': ['null', 3, "buffalo"],
+	'antelope': [None, 3, "antelope"],
+	'Buffalo': [None, 3, "buffalo"],
 	'Canis': ['Canis sp.', 3, "canine"],
-	'DEER': ['null', 3, "deer"],
-	'Deer': ['null', 3, "deer"],
-	'deer': ['null', 3, "deer"],
+	'DEER': [None, 3, "deer"],
+	'Deer': [None, 3, "deer"],
+	'deer': [None, 3, "deer"],
 	'dog': ['Canis lupus familiaris', 2, "domestic dog"],
-	'Elk': ['null', 3, "elk"],
-	'elk': ['null', 3, "elk"],
-	'Elephant': ['null', 3, "elephant"],
+	'Elk': [None, 3, "elk"],
+	'elk': [None, 3, "elk"],
+	'Elephant': [None, 3, "elephant"],
 }
 
 species = {
 	'African Elephant': ['Loxodonta sp.', 3, "African elephant"],
 	'Amphibian : African clawed toad': ['Xenopus laevis', 3, 'African clawed frog'],
 	'Antelope Cervicapra': ['Antilope cervicapra', 3, "blackbuck"],
-	'antelope zoo': ['null', 3, "antelope"],
-	'antilope zoo': ['null', 3, "antelope"],
+	'antelope zoo': [None, 3, "antelope"],
+	'antilope zoo': [None, 3, "antelope"],
 	'Antilope cervicapra blackbuck': ['Antilope cervicapra', 3, "blackbuck"],
 	'Axis axis': ['Axis axis', 3, "chital deer"],
 	'Acipenser baerii': ['Acipenser baerii', 3, 'Siberian sturgeon'],
@@ -37,7 +37,7 @@ species = {
 	'Bison bison athabascae wood bison': ['Bison bison athabascae', 3, "wood bison"],
 	'Bison bonasus': ['Bison bonasus', 3, "European bison"],
 	'Bison bonasus European bison': ['Bison bonasus', 3, "European bison"],
-	'Body organs': ['null', 0, 'null'], # many of these seem to be PRJNA643892 which is 'multispecies'
+	'Body organs': [None, None, None], # many of these seem to be PRJNA643892 which is 'multispecies'
 	'Bobcat': ['Lynx rufus', 2, "bobcat"],
 	'Bos indicus': ['Bos indicus', 3, "zebu"],
 	'Bos gaurus': ['Bos gaurus', 3, "guar"],
@@ -61,9 +61,9 @@ species = {
 	'Cattle:Dairy': ['Bos taurus', 2, "domestic cattle"],
 	'Cattle': ['Bos taurus', 2, "domestic cattle"],
 	'cattle': ['Bos taurus', 2, "domestic cattle"],
-	'Cervid': ['null', 2, "deer"],
-	'CERVINE': ['null', 2, "deer"],
-	'Cervine': ['null', 2, "deer"],
+	'Cervid': [None, 2, "deer"],
+	'CERVINE': [None, 2, "deer"],
+	'Cervine': [None, 2, "deer"],
 	'Cervus elaphus': ['Cervus elaphus', 3, "red deer"],
 	'Cow?': ['Bos taurus', 2, "domestic cattle"],
 	'cow': ['Bos taurus', 2, "domestic cattle"],
@@ -71,7 +71,7 @@ species = {
 	'COW': ['Bos taurus', 2, "domestic cattle"],
 	'Coyote': ['Canis latrans', 3, "coyote"],
 	'Chimpanzee': ['Pan troglodytes', 3, "chimpanzee"],
-	'Culture': ['null', 0, 'null'],
+	'Culture': [None, None, None],
 	
 	'Dama dama': ['Dama dama', 3, "fallow deer"],
 	'Dassie': ['Procavia capensis', 3, "dassie"],
@@ -79,14 +79,14 @@ species = {
 	'dairy herd': ['Bos taurus', 2, "domestic cattle"],
 	'dairy': ['Bos taurus', 2, "domestic cattle"],
 	'Dasypus novemcinctus': ['Dasypus novemcinctus', 3, "nine-banded armadillo"],
-	'Deer Unknown': ['null', 3, "deer"],
+	'Deer Unknown': [None, 3, "deer"],
 	'Didelphis virginiana': ['Didelphis virginiana', 3, "Virgina opossum"],
 	'Didelphis virginiana Virgina opossum': ['Didelphis virginiana', 3, "Virgina opossum"],
 	'Dicentrarchus labra': ['Dicentrarchus labra', 3, "European seabass"],
 	
 	'Elephas maximus': ['Elephas maximus', 3, "Asian elephant"],
 	'Elephas maximus Asian elephant': ['Elephas maximus', 3, "Asian elephant"],
-	'Environment': ['null', 0, 'null'],
+	'Environment': [None, None, None],
 	'Eulemur fulvus': ['Eulemur fulvus', 3, "common brown lemur"],
 	
 	'Feline': ['Felis catus', 1, "domestic cat"], # likely domestic cats since it's just NZ so far
@@ -96,14 +96,14 @@ species = {
 	'Felis catus domestic cat': ['Felis catus', 3, "domestic cat"],
 	'FERRET': ['Mustela sp.', 2, "ferret"], # could be domestic, could be black-footed
 	'Ferret':  ['Mustela sp.', 2, "ferret"], # could be domestic, could be black-footed
-	'Fox': ['null', 3, "fox"],
-	'fox': ['null', 3, "fox"],
+	'Fox': [None, 3, "fox"],
+	'fox': [None, 3, "fox"],
 	
 	'Goat': ['Capra hircus', 3, "domestic goat"],
 	'Gymnothorax funebris': ['Gymnothorax funebris', 3, "green moray"],
 	
-	'Hedgehog': ['null', 3, "hedgehog"],
-	'hedgehog': ['null', 3, "hedgehog"],
+	'Hedgehog': [None, 3, "hedgehog"],
+	'hedgehog': [None, 3, "hedgehog"],
 	'Helarctos malayanus': ['Helarctos malayanus', 3, "sun bear"],
 	'Homosapian': ['Homo sapiens', 3, "human"],
 	'Homo-sapien': ['Homo sapiens', 3, "human"],
@@ -120,7 +120,7 @@ species = {
 	'Human host': ['Homo sapiens', 3, "human"],
 	'human': ['Homo sapiens', 3, "human"],
 	'human patient': ['Homo sapiens', 3, "human"],
-	'Human/Culture': ['null', 0, 'null'],
+	'Human/Culture': ['Homo sapiens', 1, "human"],
 	'Hydrochoerus hydrochaeris': ['Hydrochoerus hydrochaeris', 3, "capybara"],
 	'Hydrochoerus hydrochaeris capybara': ['Hydrochoerus hydrochaeris', 3, "capybara"],
 	'Hynobius hidamontanus': ['Hynobius hidamontanus', 3, "Hakuba salamander"],
@@ -131,9 +131,9 @@ species = {
 	'Kobus ellipsiprymnus': ['Kobus ellipsiprymnus', 3, "waterbuck"],
 	'Kobus ellipsiprymnus waterbuck': ['Kobus ellipsiprymnus', 3, "waterbuck"],
 	
-	'Laboratory': ['null', 2, 'lab strain'],
-	'laboratory': ['null', 2, 'lab strain'],
-	'Lab strain': ['null', 2, 'lab strain'],
+	'Laboratory': [None, 2, 'lab strain'],
+	'laboratory': [None, 2, 'lab strain'],
+	'Lab strain': [None, 2, 'lab strain'],
 	'Lama glama': ['Lama glama', 3, "llama"],
 	'Loxodonta': ['Loxodonta sp.', 2,"African elephant"],
 	'Lutra lutra': ['Lutra lutra', 3, "Eurasian otter"],
@@ -145,7 +145,7 @@ species = {
 	'mouse': ['Mus musculus', 2, "mouse"],
 	'Mouse': ['Mus musculus', 2, "mouse"],
 	'Mungos mungo': ['Mungos mungo', 3, "banded mongoose"],
-	'Monkey': ['null', 2, "monkey"],
+	'Monkey': [None, 2, "monkey"],
 	'Monkey, Cynomolgus': ['Macaca fascicularis', 2, "crab-eating macaque"],
 	'Moufflon': ['Ovis gmelini', 3, "moufflon"],
 	'Mus musculus': ['Mus musculus', 3, "mouse"],
@@ -154,15 +154,15 @@ species = {
 	'Mustela sp.': ['Mustela sp.', 2, "ferret"],
 	'Mustela sp. ferret': ['Mustela sp.', 2, "ferret"],
 	'Mustela erminea': ['Mustela erminea', 3, "stoat"],
-	'Mycobacterium tuberculosis': ['null', 0, 'null'],
+	'Mycobacterium tuberculosis': [None, 0, None],
 	'Morone saxatilis': ['Morone saxatilis', 3, "striped bass"],
 	
-	'NAN': ['null', 0, 'null'],
-	'None': ['null', 0, 'null'],
+	'NAN': [None, None, None],
+	'None': [None, None, None],
 	'nine banded armadillo': ['Dasypus novemcinctus', 3, "nine-banded armadillo"],
-	'non human primate': ['null', 2, "non-human primate"],
-	'non-human primate': ['null', 2, "non-human primate"],
-	'NHP': ['null', 1, "non-human primate"], # see https://www.cdc.gov/mmwr/volumes/73/wr/mm7307a2.htm
+	'non human primate': [None, 2, "non-human primate"],
+	'non-human primate': [None, 2, "non-human primate"],
+	'NHP': [None, 1, "non-human primate"], # see https://www.cdc.gov/mmwr/volumes/73/wr/mm7307a2.htm
 	
 	'Opossum': ['Didelphis virginiana', 1, "opossum"], # there are other species but they usually aren't just called "opossum"
 	'Otaria byronia': ['Otaria byronia', 3, "South American sea lion"],
@@ -172,15 +172,16 @@ species = {
 	'Ovis aries domestic sheep': ['Ovis aries', 3, "domestic sheep"],
 	
 	'Pan troglodytes': ['Pan troglodytes', 3, "chimpanzee"],
+	'Panicum virgatum L. cultivar Cave-in-rock': ['Panicum virgatum L. cultivar Cave-in-rock', 3, 'Cave-in-Rock switchgrass'],
 	'Panthera leo': ['Panthera leo', 3, "lion"],
 	'Panthera onca': ['Panthera onca', 3, "jaguar"],
 	'Panthera pardus': ['Panthera pardus', 3, "leopard"],
 	'Papio sp.': ['Papio sp.', 2, "baboon"],
-	'Primate': ['null', 2, "non-human primate"],
-	'primate': ['null', 2, "non-human primate"],
+	'Primate': [None, 2, "non-human primate"],
+	'primate': [None, 2, "non-human primate"],
 	'PORCINE': ['Sus scrofa', 1, "wild boar or pig"],
-	'POSSUM': ['null', 2, 'possum'], # not the same as opossum
-	'Possum': ['null', 2, 'possum'], # not the same as opossum
+	'POSSUM': [None, 2, 'possum'], # not the same as opossum
+	'Possum': [None, 2, 'possum'], # not the same as opossum
 	'Pig': ['Sus scrofa domesticus', 2, "domestic pig"],
 	'Procavia capensis': ['Procavia capensis', 3, "dassie"],
 	'Propithecus coquereli': ['Propithecus coquereli', 3, "Coquerel`s sifaka"],
@@ -193,11 +194,11 @@ species = {
 	'Red deer': ['Cervus elaphus', 2, "red deer"],
 	'reddeer': ['Cervus elaphus', 2, "red deer"],
 	'Red fox': ['Vulpes vulpes', 2, "red fox"],
-	'Rhino': ['null', 3, "rhinoceros"],
-	'rhinoceros': ['null', 3, "rhinoceros"],
+	'Rhino': [None, 3, "rhinoceros"],
+	'rhinoceros': [None, 3, "rhinoceros"],
 	'Rudarius ercodes': ['Rudarius ercodes', 3, "whitespotted pygmy filefish"],
 	
-	'sea lion': ['null', 3, "sea lion"],
+	'sea lion': [None, 3, "sea lion"],
 	'Sheep': ['Ovis aries', 2, "domestic sheep"],
 	'STOAT': ['Mustela erminea', 2, "stoat"],
 	'Stoat': ['Mustela erminea', 2, "stoat"],
@@ -209,10 +210,10 @@ species = {
 	'Sparus aurata': ['Sparus aurata', 3, "gilt-head bream"],
 	'Sporobolus alterniflorus': ['Sporobolus alterniflorus', 3, "smooth cordgrass"],
 	
-	'Tissue: Lymph nodes': ['null', 0, 'null'],
+	'Tissue: Lymph nodes': [None, None, None],
 	'Tragelaphus strepsiceros': ['Tragelaphus strepsiceros', 3, "greater kudu"],
 	'Tragelaphus strepsiceros greater kudu': ['Tragelaphus strepsiceros', 3, "greater kudu"],
-	'Tuberculosis': ['null', 0, 'null'],
+	'Tuberculosis': [None, None, None],
 
 	'Ursus thibetanus': ['Ursus thibetanus', 3, "Asian black bear"],
 	

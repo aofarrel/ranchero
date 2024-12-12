@@ -23,6 +23,7 @@ equivalence = {
 		'date_collected_year': ['date_collected_year', 'collection_year_sam', 'year_isolated_sam'],
 		'date_collected_month': ['date_collected_month', 'collection_month_sam'],
 		'date_collected_day': ['date_collected_day', 'samplingday_sam'],
+		'date_sequenced': ['run_file_create_date', 'run_date_run'],
 		'genotype': ['genotype', 'genotype_sam_ss_dpl92', 'genotype_variation_sam', 'spoligotype_sam',  'mlva___spoligotype_sam', 'vntr_sam', 'serotype_sam', 'serovar_sam', 'orgmod_note_sam_s_dpl305', 'atpe_mutation_sam', 'rv0678_mutation_sam', 'mutant_sam', 'subtype_sam', 'pathotype_sam', 'subgroup_sam', 'arrayexpress_species_sam'],
 		'geoloc_name': ['geoloc_name', 'geo_loc_name_country', 'geo_loc_name_country_calc', 'geoloc_country_calc', 'geo_loc_name_country_continent', 'geographic_location_sam_s_dpl93', 'geo_loc_name_country_continent_calc', 'geo_loc_name_sam', 'geographical_location_sam', 'geo_loc_name_sam_s_dpl209', 'isolation_country_sam', 'country_sam', 'geographic_location__region_and_locality__sam', 'geographic_location__country_and_or_sea__region__sam', 'geographic_location__countryand_orsea_region__sam', 'geographic_location__country_and_or_sea__sam', 'region_sam', 'geoloc_country_or_sea', 'geoloc_country_or_sea_region', 'isolation_site_sam', 'geo_loc_name_run', 'geographic_location__country_and_or_sea__run'], # doi_location_sam and geo_accession_exp should be lowest priority
 		'host': ['host', 'host_sciname', 'host_sam', 'host_taxid_sam', 'specific_host_sam', 'host_common', 'host_common_name_sam', 'host_run', 'host_scientific_name_sam', 'host_taxon_id_sam', 'host_common_name_run', 'host_scientific_name_run'],
@@ -46,7 +47,6 @@ equivalence = {
 		'primary_search': ['primary_search'],
 		'region': ['region'],
 		'run_index': ['run_index', 'acc', 'run', 'Run', 'run_accession', 'run_acc'],
-		'run_file_create_date': ['run_file_create_date'],
 		'sample_index': ['sample_index', 'biosample', 'BioSample', 'Biosample', 'sample'],
 		'sra_study': ['sra_study', 'SRA Study'], # SRP ID
 		'strain': ['strain', 'strain_sam_ss_dpl139', 'strain_name_alias_sam', 'strain_geno', 'sub_strain_sam_s_dpl389', 'strain_genotype_sam_s_dpl382', 'cell_line_sam', 'cell_line_run'],
@@ -70,7 +70,7 @@ all_taxoncore_columns = sum(special_taxonomic_handling.values(), [])
 
 # In: pl.List() of floats or integers
 # Out: Float
-list_to_float_sum = ['bytes', 'bases', 'mbases']
+list_to_float_sum = ['bytes', 'bases', 'mbases', 'mbytes']
 
 # In: pl.List() of pl.Utf8
 # Out: pl.Utf8
@@ -86,42 +86,59 @@ list_to_set_uniq = [
 	'center_name_insdc', 
 	'datastore_filetype', 
 	'datastore_provider',
+	'pheno_source',
 	'primary_search', 
 	'run_index', 
 	'sra_study',
 	'SRX_id'
 ]
 
+# Unchanged
+list_to_list_silent = [
+	'assay_type',
+	'avgspotlen',
+	'collection',
+	'geoloc_country_calc',
+	'geoloc_country_or_sea', 
+	'geoloc_name', 
+	'instrument',
+	'librarylayout',
+	'libraryselection',
+	'librarysource',
+	'platform',
+]
+
+# Throw an error (error can be made non-fatal in which case it will fallback on left or right per function settings)
+list_throw_error = ["BioSample", "sample_index"]
+
 # In: pl.List() of any type
 # Out: Inner type if flattening existing list, falling back on left or right if merge
-# The distinction between this and list_to_null only matters in the merge usecase.
 list_fallback_or_null = [
-	'center_name',
-	'center_name_insdc',
-	'host_disease',
-	'release_date'
 	'country',
-	'date_collected',
-	'date_isolation',
+	'host_disease',
 	'host',
 	'host_commonname',
 	'host_confidence',
 	'host_scienname',
-	'latlon',
 	'mycobact_type',
 	'platform',
-	'region',
-	'release_date'
+	'region'
 ]
 
 # In: pl.List() of any type
 # Out: Inner type, but rows that previously had lists of 2+ values turn to pl.Null
+# Additionally, columns in list_to_null will be coalesced when merging equivalent columns, 
+# rather than turned into a list and then re-processed later.
 list_to_null = [
+	'center_name',
+	'center_name_insdc',
 	'coscolla_country', 
 	'coscolla_mean_depth',
 	'coscolla_percent_not_covered',
 	'coscolla_sublineage',
-	'napier_country',
+	'date_collected',
+	'date_sequenced',
+	'latlon',
 	'napier_lineage',
 	'pheno_AMIKACIN',
 	'pheno_BEDAQUILINE',
@@ -143,28 +160,12 @@ list_to_null = [
 	'pheno_RIFABUTIN',
 	'pheno_RIFAMPICIN',
 	'pheno_STREPTOMYCIN',
+	'release_date',
 	'SRX_id', 
 	'sra_study'
 ]
 
-# Unchanged
-list_to_list_silent = [
-	'assay_type',
-	'avgspotlen',
-	'collection',
-	'geoloc_country_calc',
-	'geoloc_country_or_sea', 
-	'geoloc_name', 
-	'instrument',
-	'librarylayout',
-	'libraryselection',
-	'librarysource',
-	'platform',
-	'run_file_create_date',
-]
 
-# Throw an error (error can be made non-fatal in which case it will fallback on left or right per function settings)
-list_throw_error = ["BioSample", "sample_index"]
 
 # not used, but I'm leaving this here for people who want it
 equivalence_extended = {

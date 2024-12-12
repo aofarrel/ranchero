@@ -20,7 +20,8 @@ Is your mycobacterial metadata a mess? Grab the *M. bovis* by the horns with Ran
  * Python 3.11-ish (3.7+ should be okay)
  * [pandas](https://pandas.pydata.org/) >= 2.0.0
  * [pyarrow](https://pypi.org/project/pyarrow/), even if not working with Apache Arrow datasets
- * [polars](https://github.com/pola-rs/polars) for Python -- recommended 1.15 or higher thanks to https://github.com/pola-rs/polars/pull/19911
+ * [polars](https://github.com/pola-rs/polars) for Python ==1.16.0
+   * Please check the minimum version; this code expects the behavior of https://github.com/pola-rs/polars/issues/20069
  * Optional: [tqdm](https://github.com/tqdm/tqdm)
 
 

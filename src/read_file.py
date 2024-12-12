@@ -276,7 +276,7 @@ class FileReader():
 		return grouped_df_
 
 
-	def run_to_sample_index(self, polars_df, run_index='run_index', sample_index='sample_index', skip_rancheroize=False):
+	def run_to_sample_index(self, polars_df, run_index='run_index', sample_index='sample_index', skip_rancheroize=False, drop_bad_news=True):
 		"""
 		Flattens an input file using polar. This is designed to essentially turn run accession indexed dataframes
 		into BioSample-indexed dataframes. This will typically create columns of type list.
@@ -296,9 +296,32 @@ class FileReader():
 		[SRR126]        | SAMN3        | [bar]
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
-		assert run_index in polars_df.columns
+		NeighLib.check_index(polars_df, manual_index_column=run_index)
 		assert sample_index in polars_df.columns
-		assert pl.col(sample_index).is_not_null().all()
+		duplicated_samples = polars_df.filter(pl.col(run_index).is_duplicated())
+		if duplicated_samples.shape[0] > 0:
+			if drop_bad_news:
+				self.logging.warning(f"Found {duplicated_samples.shape[0]} duplicated run indeces in {run_index}. Dropping...")
+				polars_df = polars_df.filter(~pl.col(run_index).is_duplicated())
+			else:
+				self.logging.error(f"""Found {duplicated_samples.shape[0]} duplicated run indeces in {run_index}.
+					To drop these in-place instead of erroring, set drop_bad_news to True. Here's some of those dupes:""")
+				NeighLib.super_print_pl(duplicated_samples)
+				exit(1)
+		nulls_in_sample_index = polars_df.with_columns(pl.when(
+			pl.col(sample_index).is_null())
+			.then(pl.col(run_index))
+			.otherwise(None)
+			.alias(f"{run_index} with null {sample_index}")).drop_nulls(subset=f"{run_index} with null {sample_index}")
+		if nulls_in_sample_index.shape[0] > 0:
+			if drop_bad_news:
+				self.logging.warning(f"Found {nulls_in_sample_index.shape[0]} rows with null values for {sample_index}. Dropping...")
+				polars_df = polars_df.drop_nulls(subset=sample_index)
+			else:
+				self.logging.error(f"""Found {nulls_in_sample_index.shape[0]} rows with null values for {sample_index}.
+					To drop these in-place instead of erroring, set drop_bad_news to True. Here's {run_index} where {sample_index} is null:""")
+				NeighLib.super_print_pl(nulls_in_sample_index)
+				exit(1)
 
 		if not skip_rancheroize:
 			polars_df = NeighLib.rancheroize_polars(polars_df) # runs check_index()
@@ -307,7 +330,16 @@ class FileReader():
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index))
-		NeighLib.check_index(polars_df)
+		duplicated_samples = polars_df.filter(pl.col(sample_index).is_duplicated())
+		if duplicated_samples.shape[0] > 0:
+			if drop_bad_news:
+				self.logging.warning(f"Found {duplicated_samples.shape[0]} duplicated sample indeces in {sample_index}. Dropping...")
+				polars_df = polars_df.filter(~pl.col(sample_index).is_duplicated())
+			else:
+				self.logging.error(f"""Found {duplicated_samples.shape[0]} duplicated sample indeces in {sample_index}.
+					To drop these in-place instead of erroring, set drop_bad_news to True. Here's {run_index} where {sample_index} is null:""")
+				NeighLib.super_print_pl(duplicated_samples)
+				exit(1)
 		return polars_df
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search=True):

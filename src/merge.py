@@ -87,7 +87,7 @@ class Merger:
 		n_rows_merged = merged_df.shape[0]
 		n_rows_expected = sum([len(intersection_values), len(exclusive_left_values), len(exclusive_right_values)])
 
-		NeighLib.check_index(merged_df)
+		merged_df = NeighLib.check_index(merged_df)
 
 		# we expect n_rows_merged = intersection_values + exclusive_left_values + exclusive_right_values
 		if n_rows_merged == n_rows_expected:
@@ -112,7 +112,7 @@ class Merger:
 			duplicated_indices = merged_df.filter(pl.col(merge_upon).is_duplicated())
 			if len(duplicated_indices) > 0:
 				self.logging.error(f"Found {len((duplicated_indices).unique())} duplicated values in column {merge_upon}! This indicates a merge failure.")
-				print(duplicated_indices.unique())
+				print(duplicated_indices.unique().select(merge_upon))
 				exit(1)
 			else:
 				self.logging.info(f"Right-hand dataframe appears to have added {n_rows_expected - n_rows_merged} new samples.")
@@ -216,6 +216,7 @@ class Merger:
 
 		shared_columns = NeighLib.get_dupe_columns_of_two_polars(left, right, assert_shared_cols_equal=False)
 		shared_columns.remove(merge_upon)
+		merged_columns = [] # for printing at the end
 		left_list_cols = [col for col, dtype in zip(left.columns, left.dtypes) if dtype == pl.List]
 		right_list_cols = [col for col, dtype in zip(right.columns, right.dtypes) if dtype == pl.List]
 
@@ -228,50 +229,19 @@ class Merger:
 			else:
 				merged_dataframe = left.join(right, merge_upon, how="outer_coalesce").unique()
 
-		# TODO: should probably just merge this with the else logic
-		elif len(left_list_cols) == 0 and len(right_list_cols) == 0:
-			self.logging.debug(f"Neither {left_name} nor {right_name} have columns of type pl.List")
-
-			nullfilled_left = left.join(right, on=merge_upon, how="left").with_columns(
-					[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in left.columns if col != merge_upon and col in right.columns]
-			).select(left.columns).sort(merge_upon)
-			nullfilled_right = right.join(left, on=merge_upon, how="left").with_columns(
-				[pl.col(f"{col}").fill_null(pl.col(f"{col}_right")).alias(col) for col in right.columns if col != merge_upon and col in left.columns]
-			).select(right.columns).sort(merge_upon)
-			nullfilled_left = NeighLib.drop_null_columns(nullfilled_left)
-			nullfilled_right = NeighLib.drop_null_columns(nullfilled_right)
-		
+		else:
 			if set(left.columns) == set(right.columns):
 				self.logging.debug("Set of left and right columns match")
-				initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-				really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
 			else:
-				self.logging.debug("Set of left and right columns DO NOT match")
-				initial_merge = nullfilled_left.join(nullfilled_right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-				NeighLib.print_col_where(initial_merge, 'run_index', 'ERR2659162', cols_of_interest=initial_merge.columns)
-				NeighLib.print_col_where(initial_merge, 'run_index', 'SRR1238557', cols_of_interest=initial_merge.columns)
-				NeighLib.print_col_where(initial_merge, 'run_index', 'SRR1238558', cols_of_interest=initial_merge.columns)
-				NeighLib.super_print_pl(initial_merge.select(['sample_index', 'sample_index_right', 'run_index', 'collection']), "please")
-				
-				really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
-			
-			# update left values and right values for later debugging
-			left_values, right_values = nullfilled_left[merge_upon], nullfilled_right[merge_upon]
-			exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
-
-			really_merged_no_dupes = really_merged.unique()
-			self.logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")
-			merged_dataframe = really_merged_no_dupes
-
-		else:
-			# shared list columns will be concatenated (such as the indicator column)
-			self.logging.debug("Found columns in common and also some list columns")
+				self.logging.debug("Set of left and right columns don't match (this is fine and dandy)")
 
 			yargh = list(left.columns)
 			yargh.remove(merge_upon)
 
 			for left_column in yargh:
+				assert f"{merge_upon}_right" not in left.columns
 				if left_column in right.columns:
+					merged_columns.append(f"\n\t* {left_column}")
 
 					if left_column in drop_zone.silly_columns:
 						left, right = left.drop(left_column), right.drop(left_column)
@@ -283,32 +253,56 @@ class Merger:
 								self.logging.error(f'Rancheroize and flatten your lists.')
 								exit(1)
 							else:
+								self.logging.warning('A column in kolumns.list_throw_error was merged. Checking if everything is okay...')
+								mini_merged = left.join(right, on=merge_upon, how="inner")
+								assert f"{mini_merged}_right" not in mini_merged
 
-								print("oops we didn't implement this lol")
-
-
-					elif left.select(left_column).dtypes == [pl.List(pl.String)]: # TODO: get this to work on integers
+					elif left.schema[left_column] == pl.List(pl.String): # TODO: get this to work on integers
 						
-
-
-
-						if right.select(left_column).dtypes == [pl.List(pl.String)]:
+						if right.schema[left_column] == pl.List(pl.String):
 							self.logging.debug(f"* {left_column}: LIST | LIST")
 
 							# let merge_right_columns() handle it
 
 						else:
 							self.logging.debug(f"* {left_column}: LIST | SING")
+							print("1")
+							small_merge = (
+								left.lazy()
+								.select([merge_upon, left_column])
+								.join(
+									right.lazy().select([merge_upon, left_column]),
+									on=merge_upon,
+									how="outer",
+								)
+								.with_columns(
+									concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls()
+								)
+								.drop([left_column, f"{left_column}_right", f"{merge_upon}_right"])
+								.rename({"concat_list": left_column})
+								.collect()
+							)
+							left = left.drop(left_column)
+							right = right.drop(left_column)
+							print("2")
+							left = left.join(small_merge, on=merge_upon, how="left")
 
 							# TODO: this basically replaces merge right columns which doesn't work for this somehow
-							small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
-							small_merge = small_left.join(small_right, merge_upon, how="outer_coalesce")
-							small_merge = small_merge.with_columns(concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls())
-							small_merge = small_merge.drop(left_column).drop(f"{left_column}_right").rename({"concat_list": left_column})
-							left, right = left.drop(left_column), right.drop(left_column) # prevent merge right columns from running after full merge
-							left = left.join(small_merge, merge_upon, how='outer_coalesce')
+							#print("1")
+							#small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
+							#print("2")
+							#small_merge = small_left.join(small_right, merge_upon, how="outer_coalesce")
+							#print("3")
+							#small_merge = small_merge.with_columns(concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls())
+							#print("4")
+							#small_merge = small_merge.drop(left_column).drop(f"{left_column}_right").rename({"concat_list": left_column})
+							#print("5")
+							#left, right = left.drop(left_column), right.drop(left_column) # prevent merge right columns from running after full merge
+							#left = left.join(small_merge, merge_upon, how='outer_coalesce')
+
+
 					else:
-						if right.select(left_column).dtypes == [pl.List(pl.String)]:
+						if right.schema[left_column] == pl.List(pl.String):
 							self.logging.debug(f"* {left_column}: SING | LIST")
 							self.logging.warning("Merging a singular left column with a list right column is untested")
 							small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
@@ -322,16 +316,23 @@ class Merger:
 				else:
 					pass
 
+			# update left values and right values for later debugging
+			left_values, right_values = left[merge_upon], right[merge_upon]
+			exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
+
 			initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
 			really_merged_no_dupes = really_merged.unique()
-			self.logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})")
+			self.logging.info(f"""Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe.
+			Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})
+			The columns that were merged were:{''.join(thing for thing in merged_columns)}""")
 			merged_dataframe = really_merged_no_dupes
 
-
+		self.logging.info("Checking merged dataframe for unexpected rows...")
 		merged_dataframe.drop_nulls()
 		self.check_if_unexpected_rows(merged_dataframe, merge_upon=merge_upon, 
 			intersection_values=intersection_values, exclusive_left_values=exclusive_left_values, exclusive_right_values=exclusive_right_values, 
 			n_rows_left=n_rows_left, n_rows_right=n_rows_right, right_name=right_name, right_name_in_this_column=indicator)
+		self.logging.info("Checking merged dataframe's index...")
 		NeighLib.check_index(merged_dataframe)
 		return merged_dataframe

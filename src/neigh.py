@@ -7,6 +7,9 @@ from polars.testing import assert_series_equal
 import polars.selectors as cs
 from .config import RancheroConfig
 
+# for debugging
+import traceback
+
 # my crummy implementation of https://peps.python.org/pep-0661/
 globals().update({f"_cfg_{name}": object() for name in [
 	"force_SRR_ERR_DRR_run_index", "force_SAMN_SAME_SAMD_sample_index",
@@ -93,6 +96,7 @@ class NeighLib:
 		# use contains_any() for the majority of checks, as it is much faster than iterating through a list + contains()
 		# the downside of contains_any() is that it doesn't allow for regex
 		# in either case, we do string columns first, then list columns
+		##traceback.print_stack()
 		self.logging.debug("Nullifying with contains_any()")
 		polars_df = polars_df.with_columns([
 			pl.when(pl.col(col).str.contains_any(null_values.nulls_pl_contains_any, ascii_case_insensitive=True))
@@ -108,7 +112,7 @@ class NeighLib:
 		self.logging.debug("Nullifying with contains()")
 		contains_list = null_values.nulls_pl_contains if no_match_NA else null_values.nulls_pl_contains_plus_NA
 		for null_value in contains_list:
-			self.logging.debug(f"-->Nullifying {null_value}...")
+			#self.logging.debug(f"-->Nullifying {null_value}...")
 			polars_df = polars_df.with_columns([
 				pl.when(pl.col(col).str.contains(null_value))
 				.then(None)
@@ -282,14 +286,20 @@ class NeighLib:
 
 	def print_schema(self, polars_df):
 		schema_df = pl.DataFrame({
-			"COLUMN": [name for name, _ in df.schema.items()],
-			"TYPE": [dtype.__name__ for _, dtype in df.schema.items()]
+			"COLUMN": [name for name, _ in polars_df.schema.items()],
+			"TYPE": [str(dtype) for _, dtype in polars_df.schema.items()]
 		})
 		print(schema_df)
 
 	def try_nullfill(self, polars_df, left_col, right_col):
+		before = self.get_null_count_in_column(polars_df, left_col, warn=False)
+		if polars_df.schema[left_col] is pl.List or before <= 0:
+			self.logging.debug(f"{left_col} is a list or has no nulls, will not nullfill")
+			return polars_df, False
 		try:
 			polars_df = polars_df.with_columns(pl.col(left_col).fill_null(pl.col(right_col)))
+			after = self.get_null_count_in_column(polars_df, left_col, warn=False)
+			self.logging.info(f"Filled in {before - after} nulls in {left_col}")
 			status = True
 		except pl.exceptions.InvalidOperationError:
 			self.logging.debug("Could not nullfill (this isn't an error, nulls will be filled if pl.Ut8 or list[str])")
@@ -297,20 +307,20 @@ class NeighLib:
 		return polars_df, status
 
 	def cast_to_list(self, polars_df, column):
-		if polars_df[base_col].dtype != pl.List:
-			return polars_df.with_columns(pl.col(base_col).cast(pl.List(str)))
+		if polars_df[column].dtype != pl.List:
+			return polars_df.with_columns(pl.col(column).cast(pl.List(str)))
 		else:
 			return polars_df
 
 	def check_base_and_right_in_df(self, polars_df, left_col, right_col):
-		if left_col not in polars_df.columns and not escalate_warnings:
-			self.logging.warning(f"Found {right_col}, but {left_col} not in dataframe -- will drop that column and continue, but this may break things later")
-			polars_df = polars_df.drop(right_col)
-			return 1
-		elif left_col not in polars_df.columns:
+		#if left_col not in polars_df.columns and not escalate_warnings:
+		#	self.logging.warning(f"Found {right_col}, but {left_col} not in dataframe")
+			#we don't return this so who cares: polars_df = polars_df.drop(right_col)
+		#	exit(1)
+		if left_col not in polars_df.columns:
 			self.logging.error(f"Found {right_col}, but {left_col} not in dataframe -- this is a sign something broke in an earlier function")
 			exit(1)
-		self.logging.debug(f"\n{left_col}: {polars_df[left_col].dtype}\n{right_col}: {polars_df[right_col].dtype}")
+		self.logging.debug(f" {polars_df[left_col].dtype} | {polars_df[right_col].dtype}")
 		return 0
 
 	def concat_columns_list(self, polars_df, left_col, right_col, uniq):
@@ -331,6 +341,34 @@ class NeighLib:
 		assert polars_df.select(pl.col(left_col)).dtypes == [pl.List]
 		return polars_df
 
+	def postmerge_fallback_or_null(self, polars_df, left_col, right_col, fallback=None, dont_crash_please=0):
+		if dont_crash_please >= 3:
+			self.logging.error(f"We keep getting polars.exceptions.ComputeError trying to merge {left_col} (type {polars_df.schema[left_col]}) and {right_col} (type {polars_df.schema[right_col]})")
+			exit(1)
+		try:
+			if fallback == "left":
+				polars_df = polars_df.with_columns([
+					pl.when(polars_df[right_col] == polars_df[left_col]).then(pl.col(right_col)).otherwise(pl.col(left_col)).alias(right_col),
+					pl.when(polars_df[left_col] == polars_df[right_col]).then(pl.col(left_col)).otherwise(pl.col(left_col)).alias(left_col),
+				])
+			elif fallback == "right":
+				polars_df = polars_df.with_columns([
+					pl.when(polars_df[right_col] == polars_df[left_col]).then(pl.col(right_col)).otherwise(pl.col(right_col)).alias(right_col),
+					pl.when(polars_df[left_col] == polars_df[right_col]).then(pl.col(left_col)).otherwise(pl.col(right_col)).alias(left_col),
+				])
+			else:
+				polars_df = polars_df.with_columns([
+					pl.when(polars_df[right_col] == polars_df[left_col]).then(pl.col(right_col)).otherwise(None).alias(right_col),
+					pl.when(polars_df[left_col] == polars_df[right_col]).then(pl.col(left_col)).otherwise(None).alias(left_col),
+				])
+			polars_df = self.try_nullfill(polars_df, left_col, right_col)[0]
+			return polars_df.drop(right_col) # nullfill operates on the left column, so we want that one even if fallback on right
+		except pl.exceptions.ComputeError:
+			polars_df = polars_df.with_columns([
+				pl.col(right_col).cast(pl.Utf8),
+				pl.col(left_col).cast(pl.Utf8)
+			])
+			return self.postmerge_fallback_or_null(polars_df, left_col, right_col, fallback, dont_crash_please=dont_crash_please+1)
 
 	def merge_right_columns(self, polars_df, fallback_on_left=True, escalate_warnings=True):
 		"""
@@ -350,11 +388,9 @@ class NeighLib:
 		index_column = self.get_index_column(polars_df)
 		assert index_column not in right_columns
 		for right_col in right_columns:
-			self.logging.debug(f"[{right_columns.index(right_col)}/{len(right_columns)}] Trying to merge {right_col}...")
+			self.logging.debug(f"\n[{right_columns.index(right_col)}/{len(right_columns)}] Trying to merge {right_col}...")
 			base_col, nullfilled = right_col.replace("_right", ""), False
-			if self.check_base_and_right_in_df(polars_df, base_col, right_col) == 1:
-				continue
-			
+			self.check_base_and_right_in_df(polars_df, base_col, right_col)
 			polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col)
 			try:
 				# TODO: this breaks in situations like when we add Brites before Bos, since Brites has three run accessions with no sample_index,
@@ -383,19 +419,13 @@ class NeighLib:
 					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col, index_column]), f"conflicts")
 					exit(1)
 				else:
-					self.logging.warning(f"[kolumns.list_fallback_or_null] {base_col} --> Falling back on {base_col if fallback_on_left else right_col}")
-					polars_df = polars_df.drop(right_col) if fallback_on_left else polars_df.drop(base_col).rename({right_col: base_col})
+					self.logging.warning(f"[kolumns.list_fallback_or_null] {base_col} --> Conflicts fall back on {'left' if fallback_on_left else 'right'}")
+					polars_df = self.postmerge_fallback_or_null(polars_df, base_col, right_col, fallback='left' if fallback_on_left else 'right')
 			
 			elif base_col in kolumns.list_to_null:
 				self.logging.debug(f"[kolumns.list_to_null] {base_col} --> Conflicts turned to null")
-				polars_df = polars_df.with_columns([
-					pl.when(polars_df[right_col] == polars_df[base_col]).then(pl.col(right_col)).otherwise(None).alias(right_col),
-					pl.when(polars_df[right_col] == polars_df[base_col]).then(pl.col(base_col)).otherwise(None).alias(base_col),
-				])
-				if not nullfilled:
-					polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col) # small chance more nulls solved the issue
-				polars_df = polars_df.drop(right_col)
-
+				polars_df = self.postmerge_fallback_or_null(polars_df, base_col, right_col, fallback=None)
+			
 			elif base_col in kolumns.list_to_float_sum:
 				self.logging.error("TODO NOT IMPLEMENTED")
 				exit(1)
@@ -420,6 +450,7 @@ class NeighLib:
 					polars_df = self.cast_to_list(polars_df, base_col)
 					polars_df = self.cast_to_list(polars_df, right_col)
 				polars_df = self.concat_columns_list(polars_df, base_col, right_col, True)
+				self.logging.debug(self.get_rows_where_list_col_more_than_one_value(polars_df, base_col).select([self.get_index_column(polars_df), base_col]))
 
 			assert base_col in polars_df.columns
 			assert right_col not in polars_df.columns
@@ -431,6 +462,18 @@ class NeighLib:
 		# non-unique rows might be dropped here, fyi
 		return polars_df
 
+	def drop_nulls_from_possible_list_column(self, polars_df, column):
+		assert column in polars_df.columns
+		if polars_df.schema[column] == pl.List:
+			if self.logging.getEffectiveLevel() == 10:
+				nulls = polars_df.filter(pl.col(column).list.eval(pl.element().is_null()).list.any())
+				if len(nulls) > 0:
+					self.logging.debug("Found lists with null values:")
+					print(polars_df.select(self.get_valid_id_columns(polars_df) + [column]))
+			return polars_df.with_columns(pl.col(column).list.drop_nulls())
+		return polars_df
+
+	
 	def iteratively_merge_these_columns(self, polars_df, merge_these_columns: list, equivalence_key=None, recursion_depth=0):
 		"""
 		Merges columns named in merged_these_columns.
@@ -443,7 +486,8 @@ class NeighLib:
 		if recursion_depth != 0:
 			self.logging.debug(f"Intending to merge:\n\t{merge_these_columns}")
 		left_col, right_col = merge_these_columns[0], merge_these_columns[1]
-
+		polars_df = self.drop_nulls_from_possible_list_column(self.drop_nulls_from_possible_list_column(polars_df, left_col), right_col)
+		
 		self.logging.debug(f"\n\t\tIteration {recursion_depth}\n\t\tLeft: {left_col}\n\t\tRight: {right_col} (renamed to {left_col}_right)")
 		polars_df = polars_df.rename({right_col: f"{left_col}_right"})
 		polars_df = self.merge_right_columns(polars_df)
@@ -456,10 +500,13 @@ class NeighLib:
 		return polars_df.rename({left_col: equivalence_key}) if equivalence_key is not None else polars_df
 
 	def get_rows_where_list_col_more_than_one_value(self, polars_df, list_col):
-		""" See also print_only_where_col_list_is_big()
-		The .and_() is necessary for now due to https://github.com/pola-rs/polars/issues/19987"""
+		""" Assumes https://github.com/pola-rs/polars/issues/19987 has been fixed, and that you have already
+		run drop_nulls() if you wanted to.
+		A partial workaround for older versions of polars: 
+		no_nulls = polars_df.filter(pl.col(list_col).list.first.is_not_null())
+		"""
 		assert polars_df.schema[list_col] == pl.List
-		return polars_df.filter(pl.col(list_col).list.len().and_(pl.col(list_col).list.first().is_not_null()) > 1)
+		return polars_df.filter(pl.col(list_col).list.len() > 1)
 
 	def get_paired_illumina(self, polars_df, inverse=False):
 		rows_before = polars_df.shape[0]
@@ -506,7 +553,7 @@ class NeighLib:
 		if flatten:
 			polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False) # this makes merging better for "geo_loc_name_sam"
 		if disallow_right:
-			assert len([col for col in polars_df.columns if col.endswith("_right")]) == 0
+			assert len([col for col in polars_df.columns if col.endswith("_right")]) == 0, "Found columns with _right in their name, indicating a merge failure"
 		if self.cfg.paired_illumina_only:
 			polars_df = self.get_paired_illumina(polars_df)
 
@@ -529,6 +576,11 @@ class NeighLib:
 					#polars_df = polars_df.with_columns(pl.implode(merge_these_columns)) # this gets sigkilled; don't bother!
 					if key in drop_zone.silly_columns:
 						polars_df = polars_df.drop(col)
+					elif key in kolumns.list_fallback_or_null or key in kolumns.list_to_null:
+						self.logging.info(f"  Coalescing these columns into {key}: {merge_these_columns}")
+						polars_df = polars_df.with_columns(pl.coalesce(merge_these_columns).alias("TEMPTEMPTEMP"))
+						polars_df = polars_df.drop(merge_these_columns)
+						polars_df = polars_df.rename({"TEMPTEMPTEMP": key})
 					#don't add kolumns.list_to_float_sum here, that's not what it's made for and it'll cause errors
 					else:
 						self.logging.info(f"  Merging these columns: {merge_these_columns}")
@@ -539,7 +591,8 @@ class NeighLib:
 				assert key in polars_df.columns
 		
 		# do not flatten list cols again, at least not yet. use the equivalence columns for standardization.
-		self.check_index(polars_df)
+		self.logging.debug("Checking index...")
+		polars_df = self.check_index(polars_df)
 		self.logging.debug(f"Dataframe shape after rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
 		return polars_df
 
@@ -605,12 +658,12 @@ class NeighLib:
 		arrow = '-->' if prefix_arrow else ''
 		assert column != index_column
 		if len(self.get_rows_where_list_col_more_than_one_value(polars_df, column)) == 0:
-			self.logging.debug(f"{arrow}No rows of {column} have a length more than one, converting to inner type")
+			print(f"{arrow}Can delist") if self.logging.getEffectiveLevel() == 10 else None
 			return polars_df.with_columns(pl.col(column).list.first().alias(column))
 		else:
 			if self.logging.getEffectiveLevel() == 10:
 				debug_print = self.get_rows_where_list_col_more_than_one_value(polars_df, column)
-				self.logging.debug(f"-->{len(debug_print)} multi-element lists in {column}")
+				print(f"{arrow}{len(debug_print)} multi-element lists in {column}") if self.logging.getEffectiveLevel() == 10 else None
 				self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(30), f"list cols with more than one value (true len {len(debug_print)})")
 			return polars_df
 
@@ -621,7 +674,7 @@ class NeighLib:
 		polars_df = self.coerce_to_not_list_if_possible(polars_df, column, index_column)
 		return polars_df
 
-	def flatten_all_list_cols_as_much_as_possible(self, polars_df, hard_stop=False, force_strings=False):
+	def flatten_all_list_cols_as_much_as_possible(self, polars_df, hard_stop=False, force_strings=False, just_these_columns=None):
 		"""
 		Flatten list columns as much as possible. If a column is just a bunch of one-element lists, for
 		instance, then just take the 0th value of that list and make a column that isn't a list.
@@ -636,8 +689,17 @@ class NeighLib:
 		polars_df = self.flatten_nested_list_cols(polars_df)
 		self.logging.debug("Unnested lists. Index seems okay.")
 		what_was_done = []
+
+		if just_these_columns is None:
+			col_dtype = polars_df.schema
+		else:
+			col_dtype = dict()
+			for col in just_these_columns:
+				assert col in polars_df
+				dtype = polars_df.schema[col]
+				col_dtype[col] = dtype
 		
-		for col, datatype in polars_df.schema.items():
+		for col, datatype in col_dtype.items():
 			#self.logging.debug(f"Evaulating on {col} of type {datatype}") # summary table at the end should suffice
 			
 			if col in drop_zone.silly_columns:
@@ -646,16 +708,20 @@ class NeighLib:
 				continue
 			
 			if datatype == pl.List and datatype.inner != datetime.datetime:
+
+				if col in kolumns.equivalence['run_index'] and index_column in kolumns.equivalence['sample_index']:
+					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'skipped (runs in samp-indexed df)'})
+					continue
 				
-				if polars_df[col].drop_nulls().shape[0] == 0:
-					#self.logging.warning(f"{col} has datatype {datatype} but seems empty or contains only nulls, skipping...")
+				elif polars_df[col].drop_nulls().shape[0] == 0:
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'skipped (empty/nulls)'})
 					continue
 
-				if col in kolumns.list_to_float_sum:
-					self.logging.debug(f"{col}\n-->[[kolumns.list_to_float_sum]")
+				elif col in kolumns.list_to_float_sum:
+					# TODO: use logger adaptors instead of this print cringe
+					print(f"{col}\n-->[kolumns.list_to_float_sum]") if self.logging.getEffectiveLevel() == 10 else None
 					if datatype.inner == pl.String:
-						self.logging.debug(f"-->Inner type is string, casting to pl.Int32 first")
+						print(f"-->Inner type is string, casting to pl.Int32 first") if self.logging.getEffectiveLevel() == 10 else None
 						polars_df = polars_df.with_columns(
 							pl.col(col).list.eval(
 								pl.when(pl.element().is_not_null())
@@ -670,24 +736,24 @@ class NeighLib:
 					continue
 				
 				elif col in kolumns.list_to_list_silent:
-					self.logging.debug(f"{col}\n-->[[kolumns.list_to_list_silent]")
+					print(f"{col}\n-->[kolumns.list_to_list_silent]") if self.logging.getEffectiveLevel() == 10 else None
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': '.'})
 					continue
 
 				elif col in kolumns.list_to_null:
-					self.logging.debug(f"{col}\n-->[[kolumns.list_to_null]")
+					print(f"{col}\n-->[kolumns.list_to_null]") if self.logging.getEffectiveLevel() == 10 else None
 					polars_df = polars_df.with_columns([
 						pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
 					])
-					self.logging.debug(f"-->Set null in conflicts, now trying to delist")
+					print(f"-->Set null in conflicts, now trying to delist") if self.logging.getEffectiveLevel() == 10 else None
 					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'null conflicts'})
 					continue
 				
 				elif col in kolumns.list_to_set_uniq: 
-					self.logging.debug(f"{col}\n-->[[kolumns.list_to_set_uniq]")
+					print(f"{col}\n-->[kolumns.list_to_set_uniq]") if self.logging.getEffectiveLevel() == 10 else None
 					polars_df = polars_df.with_columns(pl.col(col).list.unique())
-					self.logging.debug("-->Used uniq, now checking if we can delist")
+					print("-->Used uniq, now trying to delist") if self.logging.getEffectiveLevel() == 10 else None
 					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set-and-shrink'})
 					continue
@@ -701,14 +767,14 @@ class NeighLib:
 						pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
 					])
 					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
-					#assert len(self.get_rows_where_list_col_more_than_one_value(polars_df, col, False)) == 0 # https://github.com/pola-rs/polars/issues/19987
+					#assert len(self.get_rows_where_list_col_more_than_one_value(polars_df, col, False)) == 0 # beware: https://github.com/pola-rs/polars/issues/19987
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set-and-shrink (!!!WARNING!!)'})
 					if hard_stop:
 						exit(1)
 					else:
 						continue
 				else:
-					self.logging.warning(f"-->Not sure how to handle {col}, will treat it as a set")
+					self.logging.warning(f"{col}-->Not sure how to handle, will treat it as a set")
 					polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set (no rules)'})
@@ -719,7 +785,6 @@ class NeighLib:
 				what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'skipped (date.date)'})
 			
 			else:
-				#self.logging.debug(f"-->Leaving {col} as-is")
 				what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': '-'})
 		
 		if force_strings:
@@ -813,7 +878,7 @@ class NeighLib:
 			if rm_dupes:
 				self.logging.warning(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- will attempt to remove them (THIS MAY LEAD TO DATA LOSS)")
 				self.logging.warning(f"Duplicates: {duplicates.select(index_column)}")
-				return subset
+				polars_df = subset # do not return yet
 			else:
 				self.logging.error(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- not removing as per cfg perferences")
 				raise ValueError
@@ -836,7 +901,7 @@ class NeighLib:
 				invalid_rows = polars_df.filter(~good)
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
-					self.logging.warning("Found samples that don't start with SAMN/SAME/SAMD (will be dropped):")
+					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
 					print(invalid_rows)
 					return valid_rows
 			elif column in kolumns.equivalence['run_index'] and force_NCBI_runs and polars_df.schema[column] != pl.List:
@@ -848,12 +913,12 @@ class NeighLib:
 				invalid_rows = polars_df.filter(~good)
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
-					self.logging.warning("Found runs that don't start with SRR/ERR/DRR (will be dropped):")
+					self.logging.warning(f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR (will be dropped, leaving {len(valid_rows)} afterwards):")
 					print(invalid_rows)
 					return valid_rows
 			else:
 				continue
-		return 0
+		return polars_df
 
 	def drop_non_tb_columns(self, polars_df):
 		dont_drop_these = [col for col in polars_df.columns if col not in drop_zone.clearly_not_tuberculosis]

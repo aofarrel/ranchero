@@ -1,4 +1,4 @@
-from src.statics import host_species, sample_sources, kolumns, generated_taxoncore_dictionary, countries, regions
+from src.statics import host_species, sample_sources, kolumns, countries, regions
 from .config import RancheroConfig
 import polars as pl
 from collections import OrderedDict # dictionaries are ordered in Python 3.7+, but OrderedDict has a better popitem() function we need
@@ -18,6 +18,7 @@ class ProfessionalsHaveStandards():
 		else:
 			self.cfg = configuration
 			self.logging = self.cfg.logger
+			self.taxoncore_ruleset = self.cfg.taxoncore_ruleset
 
 	def _sentinal_handler(self, arg):
 		"""Handles "allow overriding config" variables in function calls"""
@@ -34,11 +35,20 @@ class ProfessionalsHaveStandards():
 			self.logging.info("Standardizing countries...")
 			polars_df = self.standardize_countries(polars_df)
 		
-		if ['date_collected_year', 'date_collected_month', 'date_collected_day', 'date_collected'] in polars_df.columns:
-			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMEA110052021")
+		if 'date_collected' in polars_df.columns:
 			self.logging.info("Cleaning up dates...")
 			polars_df = self.cleanup_dates(polars_df)
-			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMEA110052021")
+			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMD00179045")
+			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN28527860")
+			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN15853859")
+			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN35981938")
+			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN15180445")
+			#NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMN30381257")
+
+		if ['date_collected_year', 'date_collected_month'] in polars_df.columns:
+			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_year')
+			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_month')
+			exit(1)
 		
 		if 'isolation_source' in polars_df.columns:
 			self.logging.info("Standardizing isolation sources...")
@@ -55,9 +65,7 @@ class ProfessionalsHaveStandards():
 			polars_df = self.sort_out_taxoncore_columns(polars_df)
 
 		polars_df = self.drop_no_longer_useful_columns(polars_df)
-		NeighLib.check_index(polars_df)
-		NeighLib.print_a_where_b_is_foo(polars_df, "date_collected", "sample_index", "SAMEA110052021")
-
+		polars_df = NeighLib.check_index(polars_df)
 		return polars_df
 
 	def standardize_sample_source(self, polars_df):
@@ -148,9 +156,9 @@ class ProfessionalsHaveStandards():
 		Replace a pl.Utf8 column's values with the values in a dictionary per its key-value pairs.
 		Case-insensitive. If subtrings, will match substrings (ex: "US Virgin Islands" matches "US")
 		"""
-		assert polars_df.schema[match_column] == pl.Utf8
+		assert polars_df.schema[match_column] == pl.Utf8, f"{match_column} has type {polars_df.schema[match_column]} but we expected pl.Utf8 (string)"
 		if subtrings:
-			self.logging.debug(f"Checking {match_column}: \"\\b(?i){key}\\b\"-->\"{value}\"")
+			#self.logging.debug(f"Checking {match_column}: \"\\b(?i){key}\\b\"-->\"{value}\"")
 			polars_df = polars_df.with_columns([
 				pl.when(pl.col(match_column) == f"(?i){key}")
 				.then(pl.lit(value))
@@ -158,7 +166,7 @@ class ProfessionalsHaveStandards():
 				.alias(match_column)])
 			
 		else:
-			self.logging.debug(f"Checking {match_column}: \"(?i){key}\"-->\"{value}\"")
+			#self.logging.debug(f"Checking {match_column}: \"(?i){key}\"-->\"{value}\"")
 			polars_df = polars_df.with_columns([
 				pl.when(pl.col(match_column).str.contains(f"(?i){key}"))
 				.then(pl.lit(value))
@@ -428,13 +436,24 @@ class ProfessionalsHaveStandards():
 		polars_df = self.unmask_mice(self.unmask_badgers(polars_df))
 		return polars_df
 
-	def cleanup_dates(self, polars_df, keep_only_bad_examples=False):
+	def cleanup_dates(self, polars_df, keep_only_bad_examples=False, err_on_list=True):
 		"""
 		Notes:
 		* keep_only_bad_examples is for debugging; it effectively hides dates that are probably good
 		* len_bytes() is way faster than len_chars()
 		* yeah you can have mutliple expressions in one with_columns() but that'd require tons of alias columns plus nullify so I'm not doing that
 		"""
+
+		if polars_df.schema['date_collected'] == pl.List:
+			polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=['date_collected'])
+			if polars_df.schema['date_collected'] == pl.List:
+				if err_on_list:
+					self.logging.error("Tried to flatten date_collected, but there seems to be some rows with unique values.")
+					print(NeighLib.get_rows_where_list_col_more_than_one_value(polars_df, 'date_collected').select([NeighLib.get_index_column(polars_df), 'date_collected']))
+					exit(1)
+				else:
+					self.logging.warning("Tried to flatten date_collected, but there seems to be some rows with unique values. Will convert to string. This may be less accurate.")
+					polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['date_collected'])
 
 		if polars_df.schema['date_collected'] != pl.Utf8:
 			self.logging.warning("Date column is not of type string. Will attempt to cast it as string.")
@@ -557,37 +576,37 @@ class ProfessionalsHaveStandards():
 		if exact:
 			polars_df = polars_df.with_columns([pl.when(pl.col('taxoncore_list').list.eval(pl.element() == match_string).list.any())
 				.then(pl.lit(i_group)).otherwise(pl.col('i_group')).alias('i_group'),pl.when(pl.col('taxoncore_list').list.eval(pl.element() == match_string).list.any())
-				.then(pl.lit(i_organism)).otherwise(pl.col('i_organism')).alias('i_organism')
+				.then(pl.lit(i_organism) if i_organism is not pl.Null else pl.Null).otherwise(pl.col('i_organism')).alias('i_organism')
 			])
 		else:
 			polars_df = polars_df.with_columns([pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
 				.then(pl.lit(i_group)).otherwise(pl.col('i_group')).alias('i_group'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
-				.then(pl.lit(i_organism)).otherwise(pl.col('i_organism')).alias('i_organism')
+				.then(pl.lit(i_organism) if i_organism is not pl.Null else pl.Null).otherwise(pl.col('i_organism')).alias('i_organism')
 			])
 		return polars_df
 	
 	def taxoncore_GOS(self, polars_df, match_string, i_group, i_organism, i_strain):
 		polars_df = polars_df.with_columns([pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
 			.then(pl.lit(i_group)).otherwise(pl.col('i_group')).alias('i_group'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
-			.then(pl.lit(i_organism)).otherwise(pl.col('i_organism')).alias('i_organism'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
-			.then(pl.lit(i_strain)).otherwise(pl.col('i_strain')).alias('i_strain')
+			.then(pl.lit(i_organism) if i_organism is not pl.Null else pl.Null).otherwise(pl.col('i_organism')).alias('i_organism'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
+			.then(pl.lit(i_strain) if i_strain is not pl.Null else pl.Null).otherwise(pl.col('i_strain')).alias('i_strain')
 		])
 		return polars_df
 	
 	def taxoncore_GOL(self, polars_df, match_string, i_group, i_organism, i_lineage):
 		polars_df = polars_df.with_columns([pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
 			.then(pl.lit(i_group)).otherwise(pl.col('i_group')).alias('i_group'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
-			.then(pl.lit(i_organism)).otherwise(pl.col('i_organism')).alias('i_organism'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
-			.then(pl.lit(i_lineage)).otherwise(pl.col('i_lineage')).alias('i_lineage')
+			.then(pl.lit(i_organism) if i_organism is not pl.Null else pl.Null).otherwise(pl.col('i_organism')).alias('i_organism'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
+			.then(pl.lit(i_lineage) if i_lineage is not pl.Null else pl.Null).otherwise(pl.col('i_lineage')).alias('i_lineage')
 		])
 		return polars_df
 	
 	def taxoncore_GOLS(self, polars_df, match_string, i_group, i_organism, i_lineage, i_strain):
 		polars_df = polars_df.with_columns([pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
 			.then(pl.lit(i_group)).otherwise(pl.col('i_group')).alias('i_group'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
-			.then(pl.lit(i_organism)).otherwise(pl.col('i_organism')).alias('i_organism'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
-			.then(pl.lit(i_lineage)).otherwise(pl.col('i_lineage')).alias('i_lineage'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
-			.then(pl.lit(i_strain)).otherwise(pl.col('i_strain')).alias('i_strain')
+			.then(pl.lit(i_organism) if i_organism is not pl.Null else pl.Null).otherwise(pl.col('i_organism')).alias('i_organism'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
+			.then(pl.lit(i_lineage) if i_lineage is not pl.Null else pl.Null).otherwise(pl.col('i_lineage')).alias('i_lineage'),pl.when(pl.col('taxoncore_list').list.eval(pl.element().str.contains(match_string)).list.any())
+			.then(pl.lit(i_strain) if i_strain is not pl.Null else pl.Null).otherwise(pl.col('i_strain')).alias('i_strain')
 		])
 		return polars_df
 
@@ -599,13 +618,14 @@ class ProfessionalsHaveStandards():
 		if self.cfg.taxoncore_ruleset is None:
 			raise ValueError("A taxoncore ruleset failed to initialize, so we cannot use function taxoncore_iterate_rules!")
 		for when, strain, lineage, organism, bacterial_group, comment in (entry.values() for entry in self.cfg.taxoncore_ruleset):
-			if strain is None and lineage is None:
+			if strain is pl.Null and lineage is pl.Null:
 				polars_df = self.taxoncore_GO(polars_df, when, i_group=bacterial_group, i_organism=organism)
-			elif strain is None:
+			elif strain is pl.Null:
 				polars_df = self.taxoncore_GOL(polars_df, when,  i_group=bacterial_group, i_organism=organism, i_lineage=lineage)
-			elif lineage is None:
-				polars_df = self.taxoncore_GOS(polars_df, when,  i_group=bacterial_group, i_organism=organism, i_strain=strains)
+			elif lineage is pl.Null:
+				polars_df = self.taxoncore_GOS(polars_df, when,  i_group=bacterial_group, i_organism=organism, i_strain=strain)
 			else:
+				self.logging.debug(f"strain: {strain} {type(strain)}\nlineage: {lineage} {type(lineage)}\norganism: {organism}\ngroup: {bacterial_group}")
 				polars_df = self.taxoncore_GOLS(polars_df, when,  i_group=bacterial_group, i_organism=organism, i_lineage=lineage, i_strain=strain)
 		return polars_df
 
@@ -695,8 +715,7 @@ class ProfessionalsHaveStandards():
 				self.logging.error("""Tried to standardize countries, but 'geoloc_name', as well as 'country 'and/or 'region', are missing from the dataframe's columns.
 					Most likely, you need to rancheroize this dataframe to standardize its columns.""")
 				exit(1) # you done messed up
-		assert ['country_colon_region', 'new_region', 'new_country', 'all_geoloc_names', 'temp_probably_country', 'temp_probably_region'] not in polars_df.columns
-		assert polars_df.schema['country'] == pl.Utf8
+		assert ['country_colon_region', 'new_region', 'aaaa_country', 'aaaa_region', 'new_country', 'all_geoloc_names', 'temp_probably_country', 'temp_probably_region'] not in polars_df.columns
 
 		# TODO: if polars_df.schema['geoloc_name'] == pl.Utf8, do a simpler version
 
@@ -749,8 +768,20 @@ class ProfessionalsHaveStandards():
 				.then(pl.col('all_geoloc_names')).alias("temp_probably_region"),
 			])
 
-			polars_df = polars_df.with_columns(pl.coalesce(["new_country", "temp_probably_country"]).alias("country"))
-			polars_df = polars_df.with_columns(pl.coalesce(["new_region", "temp_probably_region"]).alias("region"))
+			if 'country' not in polars_df.columns:
+				polars_df = polars_df.with_columns(pl.coalesce(["new_country", "temp_probably_country"]).alias("country"))
+			else:
+				polars_df = polars_df.with_columns(pl.coalesce(["country", "new_country", "temp_probably_country"]).alias("aaaa_country"))
+				polars_df = polars_df.drop("country")
+				polars_df = polars_df.with_columns(pl.col("aaaa_country").alias("country"))
+
+			if 'region' not in polars_df.columns:
+				polars_df = polars_df.with_columns(pl.coalesce(["new_region", "temp_probably_region"]).alias("region"))
+			else:
+				polars_df = polars_df.with_columns(pl.coalesce(["region", "new_region", "temp_probably_region"]).alias("aaaa_region"))
+				polars_df = polars_df.drop("region")
+				polars_df = polars_df.with_columns(pl.col("aaaa_region").alias("region"))
+
 			polars_df = polars_df.drop(['country_colon_region', 'new_region', 'new_country', 'all_geoloc_names', 'temp_probably_country', 'temp_probably_region', 'geoloc_name'])
 
 			# manually deal with some regions that don't have countries

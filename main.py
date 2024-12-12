@@ -1,9 +1,11 @@
 import time
 start = time.time()
+import gc
 import src as Ranchero
 _b_ = "\033[1m"
 _bb_ = "\033[0m"
 print(f"Module import time: {time.time() - start:.4f}")
+slim = False
 start_from_scratch = False
 inject = True
 do_run_index_merges = True
@@ -16,6 +18,8 @@ def inital_file_parse():
 	print(f"Parsed tba6 file from bigquery in {time.time() - start:.4f} seconds")  # should be under five minutes for tba5, less for tba6
 	start, tba6 = time.time(), Ranchero.drop_non_tb_columns(tba6)
 	print(f"Dropped non-TB-related columns in {time.time() - start:.4f} seconds")
+
+	tba6 = tba6.drop(['center_name', 'insdc_center_name_sam']) # these are a pain in the neck to standardize and not necessary for the tree
 	
 	# initial rancheroize
 	start, tba6 = time.time(), Ranchero.rancheroize(tba6)
@@ -28,6 +32,9 @@ def inital_file_parse():
 	print(f"Removed columns with few values in {time.time() - start:.4f}s seconds") # should be done last
 
 	Ranchero._NeighLib.print_a_where_b_is_foo(tba6, "date_collected", "sample_index", "SAMEA110052021")
+
+	print(tba6.estimated_size(unit='mb'))
+
 	# move to demo.py
 	#print(Ranchero.unique_bioproject_per_center_name(tba6))
 	#Ranchero.print_a_where_b_is_null(tba6, 'region', 'country')
@@ -81,6 +88,8 @@ def inject_metadata(tba6):
 	Ranchero.NeighLib.print_a_where_b_is_foo(tba6, "date_collected", "sample_index", "SAMN16755333")
 	Ranchero.NeighLib.print_a_where_b_is_foo(tba6, "latlon", "sample_index", "SAMN16755333")
 
+	gc.collect()
+
 	return tba6
 
 
@@ -92,14 +101,15 @@ def run_merges(tba6):
 	brites = Ranchero.from_tsv("./inputs/publications/run_indexed/Brites_2018/brites_cleaned.tsv", 
 		auto_rancheroize=True, explode_upon=";", 
 		drop_columns=['country']) # several incorrect countries
-	brites = brites.with_columns(sample_index=None)
-	brites = brites.with_columns(country=None)
-	brites = brites.with_columns(region=None)
-	seals = Ranchero.injector_from_tsv("./inputs/overrides/pinnipeds_and_friends.tsv")
-	bos = Ranchero.injector_from_tsv("./inputs/overrides/Bos_2015/ancient.tsv")
-	brites = Ranchero.inject_metadata(Ranchero.inject_metadata(brites, bos, overwrite=True), seals, overwrite=True)
-	brites = Ranchero.standardize_countries(brites)
-	merged = Ranchero.merge_dataframes(merged, brites, merge_upon="run_index", left_name="tba6", right_name="Brites", drop_exclusive_right=False)
+	#brites = brites.with_columns(sample_index=None)
+	#brites = brites.with_columns(country=None)
+	#brites = brites.with_columns(region=None)
+	#seals = Ranchero.injector_from_tsv("./inputs/overrides/pinnipeds_and_friends.tsv")
+	#bos = Ranchero.injector_from_tsv("./inputs/overrides/Bos_2015/ancient.tsv")
+	#brites = Ranchero.inject_metadata(Ranchero.inject_metadata(brites, bos, overwrite=True), seals, overwrite=True)
+	#brites = Ranchero.standardize_countries(brites)
+	merged = Ranchero.merge_dataframes(merged, brites, merge_upon="run_index", left_name="tba6", right_name="Brites",
+		drop_exclusive_right=True) # we have to do this or else run-to-sample breaks
 
 	# Coll
 	print(f"{_b_}Processing Coll{_bb_}")
@@ -115,13 +125,12 @@ def run_merges(tba6):
 	# CRyPTIC Reuse Table (NOT WALKER 2022)
 	print(f"{_b_}Processing CRyPTIC reuse table{_bb_}")
 	CRyPTIC = Ranchero.from_tsv("./inputs/publications/run_indexed/CRyPTIC reuse table/CRyPTIC_reuse_table_20240917.csv", delimiter=",", auto_rancheroize=True,
+		explode_upon=".",
 		drop_columns=["AMI_MIC","BDQ_MIC","CFZ_MIC","DLM_MIC","EMB_MIC","ETH_MIC","INH_MIC","KAN_MIC","LEV_MIC","LZD_MIC","MXF_MIC","RIF_MIC","RFB_MIC",
 		"AMI_PHENOTYPE_QUALITY","BDQ_PHENOTYPE_QUALITY","CFZ_PHENOTYPE_QUALITY","DLM_PHENOTYPE_QUALITY","EMB_PHENOTYPE_QUALITY","ETH_PHENOTYPE_QUALITY",
 		"INH_PHENOTYPE_QUALITY","KAN_PHENOTYPE_QUALITY","LEV_PHENOTYPE_QUALITY","LZD_PHENOTYPE_QUALITY","MXF_PHENOTYPE_QUALITY","RIF_PHENOTYPE_QUALITY",
 		"RFB_PHENOTYPE_QUALITY","ENA_SAMPLE","VCF","REGENOTYPED_VCF"])
 	CRyPTIC = Ranchero.NeighLib.add_column_of_just_this_value(CRyPTIC, "pheno_source", "CRyPTIC_reuse_PMC9363010")
-	CRyPTIC = Ranchero.explode_delimited_index(CRyPTIC, column="run_index", delimiter=".")
-
 	merged = Ranchero.merge_dataframes(merged, CRyPTIC, merge_upon="run_index", left_name="tba6", right_name="CRyPTIC", drop_exclusive_right=True)
 
 	# Merker (two of them...)
@@ -134,6 +143,7 @@ def run_merges(tba6):
 	# Napier
 	print(f"{_b_}Processing Napier{_bb_}")
 	napier = Ranchero.from_tsv("./inputs/publications/run_indexed/Napier_2020/napier_samples_github_sans_weird.csv", delimiter=",", explode_upon="_", auto_rancheroize=True)
+	napier = Ranchero.standardize_countries(napier)
 	merged = Ranchero.merge_dataframes(merged, napier, merge_upon="run_index", right_name="Napier", drop_exclusive_right=True)
 	print(f"Nulls in sample_index: {Ranchero._NeighLib.get_count_of_x_in_column_y(merged, None, 'sample_index')}")
 
@@ -165,6 +175,10 @@ def run_merges(tba6):
 	start = time.time()
 	Ranchero.to_tsv(merged, "./merged_by_run.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
+
+	print(merged.estimated_size(unit='mb'))
+
+	gc.collect()
 	return merged
 
 
@@ -193,6 +207,13 @@ else:
 	start, merged = time.time(), Ranchero.from_tsv("merged_by_run.tsv")
 	print(f"Imported run-indexed tba6 file, with some merges, in {time.time() - start:.4f} seconds")
 
+if slim:
+	boooooo = merged.columns
+	merged = merged.drop([boo for boo in boooooo if boo not in ['collection', 'run_index', 'sample_index']])
+
+merged = merged.drop(['atc_sam', 'bdq_mic_sam', 'total_bases_run'])
+
+print(merged.estimated_size(unit='mb'))
 
 print("Columns so far:")
 print(merged.columns)
@@ -212,9 +233,10 @@ Ranchero.NeighLib.print_value_counts(tba6, ['sample_source'])
 start, merged_flat = time.time(), Ranchero.hella_flat(merged)
 print(f"Flattened everything in {time.time() - start:.4f} seconds")
 
+gc.collect()
 start, merged_by_sample = time.time(),Ranchero.run_index_to_sample_index(merged_flat)
 
-
+gc.collect()
 print(f"Converted run indeces to sample indeces in {time.time() - start:.4f} seconds")
 #Ranchero.to_tsv(merged_by_sample, "./merged_per_sample_not_flat.tsv")
 
@@ -227,7 +249,9 @@ Ranchero.to_tsv(merged_by_sample, "./merged_per_sample.tsv")
 #atypical = Ranchero.from_tsv("./inputs/atypical.tSV", auto_rancheroize=True)
 #merged = Ranchero.merge_dataframes(merged, atypical, merge_upon="sample_index", left_name="tba6", right_name="atypical_genotypes", drop_exclusive_right=False)
 
-
+print(merged_by_sample.estimated_size(unit='mb'))
+merged = merged_by_sample
+gc.collect()
 
 # Andres
 # Bateson
@@ -268,14 +292,14 @@ start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_3, merg
 print(f"Merged with standford3 in {time.time() - start:.4f} seconds")
 start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_4, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=True, escalate_warnings=False)
 print(f"Merged with standford4 in {time.time() - start:.4f} seconds")
-start, merged = time.time(), Ranchero.NeighLib.nullify(Ranchero.cleanup_dates(merged))
+start, merged = time.time(), Ranchero.cleanup_dates(merged)
 print(f"Cleaned up dates so far in {time.time() - start:.4f} seconds")
 
 # Walker (CRyPTIC big pheno table)
 print(f"{_b_}Processing Walker pheno data (WHO2021, CRyPTIC, PMC7612554, only the sample-indexed samples){_bb_}")
-walker = Ranchero.from_tsv("./inputs/publications/sample_indexed/sampleindexed_pheno_WHO2021_CRyPTIC_PMC7612554.tsv", auto_rancheroize=True)
+walker = Ranchero.from_tsv("./inputs/publications/sample_indexed/Walker_2022-CRyPTIC-samp/sampleindexed_Walker2022_pheno_WHO2021_CRyPTIC_PMC7612554.tsv", auto_rancheroize=True, explode_upon=" ")
 walker = Ranchero.NeighLib.add_column_of_just_this_value(walker, "pheno_source", "CRyPTIC_WHO2021_PMC7612554")
-start, merged = Ranchero.merge_dataframes(merged_by_sample, walker, merge_upon="sample_index", right_name="Walker_2022", indicator="collection")
+start, merged = time.time(), Ranchero.merge_dataframes(merged_by_sample, walker, merge_upon="sample_index", right_name="Walker_2022", indicator="collection")
 print(f"Merged with sample-based Walker in {time.time() - start:.4f} seconds")
 
 
@@ -303,6 +327,7 @@ print(f"Merged with denylist in {time.time() - start:.4f} seconds")
 
 Ranchero.to_tsv(merged, "./ranchero_partial_rc4.tsv")
 Ranchero.print_schema(merged)
+Ranchero.NeighLib.print_value_counts(merged, ['libraryselection'])
 Ranchero.NeighLib.print_value_counts(merged, ['host_scienname', 'host_confidence', 'host_streetname'])
 Ranchero.NeighLib.big_print_polars(merged, "merged hosts and dates", ['sample_index', 'date_collected', 'host_scienname', 'lineage'])
 #Ranchero.NeighLib.big_print_polars(merged.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{2}")), "merged has date slashes in 2 2 2 format", ['sample_index', 'date_collected'])
