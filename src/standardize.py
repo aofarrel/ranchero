@@ -37,10 +37,11 @@ class ProfessionalsHaveStandards():
 		
 		if 'date_collected' in polars_df.columns:
 			self.logging.info("Cleaning up dates...")
+			polars_df = self.cleanup_dates(polars_df)
 
 		if ['date_collected_year', 'date_collected_month'] in polars_df.columns:
-			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_year')
-			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_month')
+			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_year', cols_of_interest=kolumns.id_columns+'date_collected'+'date_collected_year')
+			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_month', cols_of_interest=kolumns.id_columns+'date_collected'+'date_collected_year')
 			exit(1)
 		
 		if 'isolation_source' in polars_df.columns:
@@ -67,7 +68,7 @@ class ProfessionalsHaveStandards():
 		else:
 			return self.standardize_sample_source_as_string(polars_df)
 
-	def inject_metadata(self, polars_df, metadata_dictlist, dataset=None, overwrite=False):
+	def inject_metadata(self, polars_df: pl.DataFrame, metadata_dictlist, dataset=None, overwrite=False):
 		"""
 		Modify a Rancheroized polars_df with BioProject-level metadata as controlled by a dictionary. For example:
 		metadata_dictlist=[{"BioProject": "PRJEB15463", "country": "DRC", "region": "Kinshasa"}]
@@ -81,11 +82,12 @@ class ProfessionalsHaveStandards():
 		pl.when(pl.col("BioProject") == "PRJEB15463").then(pl.lit("Kinshasa")).otherwise(pl.col("region")).alias("region")
 		"""
 		indicators = []
+		drop_me = []
 		for ordered_dictionary in metadata_dictlist:
 			for key in ordered_dictionary:
 				if key not in polars_df.columns:
-					self.logging.error(f"Attempted to inject {key} metadata, but existing column with that name doesn't exist")
-					return 0
+					self.logging.warning(f"Attempted to inject {key} metadata, but existing column with that name doesn't exist")
+					drop_me.append(key)
 		assert type(metadata_dictlist[0]) == OrderedDict
 
 		for ordered_dictionary in metadata_dictlist:
@@ -502,6 +504,14 @@ class ProfessionalsHaveStandards():
 			.alias("date_collected"),
 		)
 
+		if 'date_collected_year' in polars_df.columns:
+			polars_df = NeighLib.try_nullfill(polars_df, 'date_collected', 'date_collected_year')[0]
+			polars_df.drop('date_collected_year')
+
+		# this is going to be annoying to handle properly and might not ever be helpful -- low priority TODO
+		if 'date_collected_month' in polars_df.columns:
+			polars_df.drop('date_collected_month')
+
 		if keep_only_bad_examples:
 			polars_df = polars_df.with_columns(
 				pl.when(pl.col('date_collected').str.len_bytes() == 4)
@@ -520,7 +530,7 @@ class ProfessionalsHaveStandards():
 				.then(pl.lit('foo')).otherwise(pl.col('date_collected')).alias("date_collected"),
 			)
 
-		return NeighLib.nullify(polars_df, only_these_columns=['date_collected'])
+		return polars_df
 
 	def unmask_badgers(self, polars_df):
 		"""
@@ -630,7 +640,7 @@ class ProfessionalsHaveStandards():
 		assert 'i_strain' not in polars_df.columns
 		assert 'taxoncore_list' not in polars_df.columns
 		rm_phages = self._sentinal_handler(_cfg_rm_phages)
-		if group_column_name not in kolumns.columns_to_drop_after_rancheroize:
+		if group_column_name not in kolumns.columns_to_keep_after_rancheroize:
 			self.logging.warning(f"Bacterial group column will have name {group_column_name}, but might get removed later. Add {group_column_name} to kolumns.equivalence!")
 		if 'organism' in polars_df.columns and rm_phages:
 			polars_df = self.rm_all_phages(polars_df)

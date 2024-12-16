@@ -62,21 +62,65 @@ class RancheroConfig:
 
 	def _make_default_config(self):
 		""" Creates a default configuration, called by __init__"""
+
+		# Automatically cast types when reading a file
 		self.auto_cast_types = True
+
+		# Automatically parse dates when reading a file
 		self.auto_parse_dates = True
+
+		# Automatically rancheroize dataframes
 		self.auto_rancheroize = True
+
+		# When doing things that might modify the index, check it for integrity/lack of duplicates
 		self.check_index = True
+
+		# Values in run_index column must start with SRR, ERR, or DRR
 		self.force_SRR_ERR_DRR_run_index = True
-		self.force_SAMN_SAME_SAMD_sample_index = True
+
+		# Values in sample_index column must start with SAMN, SAME, or SAMD
+		self.force_SAMN_SAME_SAMD_sample_index = False
+
+		# How to handle columns relating to host information found in "attrs" in BQ JSONs, which are much less useful
+		# if they had been combined into a single column like we would locational data n stuff, but can add a ton of
+		# columns with barely any filled-in values
+		#   dictionary: Create a single 'host_info' column with a list(dict()) of key-value pairs
+		#   drop: Drop them
+		#   columns: Treat like anything else in attrs -- each key becomes its own column
+		# What we consider to be "host information columns" is defined in kolumns.host_info
+		self.host_info_behavior = 'drop'
+
+		# Ignore polars read errors when parsing a file -- recommended to keep this as true
 		self.ignore_polars_read_errors = True
-		self.indicator_column = "collection"
+
+		# Indicator column when merging dataframes
+		self.indicator_column = 'collection'
+
+		# Write intermediate files to the disk
 		self.intermediate_files = False
-		self.loglevel = logging.INFO # DEBUG = 10, INFO = 20
+
+		# Log level -- logging.DEBUG = 10, logging.INFO = 20, etc
+		self.loglevel = logging.DEBUG
+
+		# If 'platform' and 'layout' columns exist and have type pl.Utf8 (string), remove all samples that aren't
+		# "PAIRED" for 'layout' and "ILLUMINA" for 'platform'
 		self.paired_illumina_only = False
+
+		# Try to (mostly) use polars when normalizing the dataframe
 		self.polars_normalize = True
+
+		# When checking the index, automatically remove rows that have duplicate values in that index
+		# Note that if the dataframe is run-indexed, this will NOT remove duplicate sample_index values by design
 		self.rm_dupes = True
+
+		# Try to remove phages when standardizing taxonomic information
 		self.rm_phages = True
-		self.taxoncore_ruleset = None  # updated by self.prepare_taxoncore_dictionary()
+
+		# Ruleset for standardizing taxonomic information -- updated by self.prepare_taxoncore_dictionary(),
+		# so leave this as None here
+		self.taxoncore_ruleset = None
+
+		# When column equals key, filter out rows that have anything in that key's value list
 		self.unwanted = {
 			"assay_type": ['Tn-Seq', 'ChIP-Seq'],
 			"platform": None

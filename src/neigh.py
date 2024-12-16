@@ -71,6 +71,15 @@ class NeighLib:
 		self.super_print_pl(print_df.select(print_cols), f"{col_a} where {col_b} is pl.Null")
 		if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
 
+	def get_most_common_non_null_and_its_counts(self, polars_df, col, and_its_counts=True):
+		counts = polars_df.select(
+			pl.col(col)
+			.filter(pl.col(col).is_not_null())
+			.value_counts(sort=True) # creates struct[2] column named col, sorted in descending order
+		)
+		counts = counts.unnest(col) # splits col into col and "counts" columns
+		return tuple(counts.row(0))
+
 	def get_null_count_in_column(self, polars_df, column_name, warn=True, error=False):
 		series = polars_df.get_column(column_name)
 		null_count = series.null_count()
@@ -194,11 +203,11 @@ class NeighLib:
 		for column in polars_df.columns:
 			if skip_ids and column not in kolumns.id_columns:
 				if only_these_columns is not None and column in only_these_columns:
-					with pl.Config(fmt_str_lengths=500, tbl_rows=300):
+					with pl.Config(fmt_str_lengths=500, tbl_rows=100):
 						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
 						print(counts)
 				elif only_these_columns is None:
-					with pl.Config(fmt_str_lengths=500, tbl_rows=300):
+					with pl.Config(fmt_str_lengths=500, tbl_rows=100):
 						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
 						print(counts)
 				else:
@@ -220,15 +229,22 @@ class NeighLib:
 		This version is aware of primary_search showing up multiple times and will
 		keep all values for primary_search.
 		"""
-		combined_dict = {}
-		primary_search = set()
+		combined_dict, primary_search, host_info = {}, set(), set()
 		for d in dict_list:
 			if 'k' in d and 'v' in d:
 				if d['k'] == 'primary_search':
 					primary_search.add(d['v'])
+				elif self.cfg.host_info_behavior != 'columns' and d['k'] in kolumns.host_info:
+					host_info.add(f"{d['k']}: {str(d['v']).lstrip('host_').rstrip('_sam').rstrip('sam_s_dpl111')}")
 				else:
 					combined_dict[d['k']] = d['v']
-		combined_dict.update({"primary_search": list(primary_search)}) # convert to a list to avoid the polars column becoming type object
+		if len(primary_search) > 0:
+			combined_dict.update({"primary_search": list(primary_search)}) # convert to a list to avoid the polars column becoming type object
+		if self.cfg.host_info_behavior == 'dictionary' and len(host_info) > 0:
+			combined_dict.update({"host_info": list(host_info)})
+		elif self.cfg.host_info_behavior == 'drop':
+			combined_dict = {k: v for k, v in combined_dict.items() if k not in kolumns.host_info}
+		# self.cfg.host_info_behavior == 'columns' is handled automagically
 		return combined_dict
 
 	def concat_dicts_risky(dict_list: list):
@@ -281,7 +297,7 @@ class NeighLib:
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
-		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=500, fmt_table_cell_list_len=10):
+		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=30, fmt_table_cell_list_len=10):
 			print(polars_df)
 
 	def print_schema(self, polars_df):
@@ -341,27 +357,57 @@ class NeighLib:
 		assert polars_df.select(pl.col(left_col)).dtypes == [pl.List]
 		return polars_df
 
+	def report(self, polars_df):
+		print(f"Dataframe stats:")
+		print(f"  𓃾 {polars_df.shape[1]} metadata columns")
+		if self.is_run_indexed(polars_df):
+			print(f"  𓃾 {polars_df.shape[0]} rows, each row representing 1 run")
+		else:
+			print(f"  𓃾 {polars_df.shape[0]} rows, each row representing 1 sample")
+		print(f"  𓃾 {polars_df.estimated_size(unit='mb')} MB in memory (roughly)")
+
+		# ideally we'd set this with a polars expression, which I think might be parallel and all that jazz, but the tuple return of
+		# get_most_common seems to require handling in a for loop (and I think making it not a tuple, ergo sorting twice, may be worse)
+		column_names, column_types, column_n_null, column_mode_value, column_mode_n = [], [], [], [], []
+		for col in polars_df.columns:
+			column_names.append(col)
+			column_types.append(polars_df.schema[col])
+			column_n_null.append(self.get_null_count_in_column(polars_df, col, warn=False))
+			mode, count = self.get_most_common_non_null_and_its_counts(polars_df, col)
+			column_mode_value.append(mode)
+			column_mode_n.append(count)
+		bar = pl.DataFrame({
+			"column": column_names,
+			"type": column_types,
+			"n null": column_n_null,
+			"% null": [round((n / polars_df.shape[0]) * 100, 3) for n in column_n_null],
+			"mode": column_mode_value,
+			"n mode": column_mode_n,
+		}, strict=False)
+		self.super_print_pl(bar, "per-column stats")
+
+
 	def postmerge_fallback_or_null(self, polars_df, left_col, right_col, fallback=None, dont_crash_please=0):
 		if dont_crash_please >= 3:
 			self.logging.error(f"We keep getting polars.exceptions.ComputeError trying to merge {left_col} (type {polars_df.schema[left_col]}) and {right_col} (type {polars_df.schema[right_col]})")
 			exit(1)
 		try:
+			if left_col == 'date_collected':
+				print(f'fallback: {fallback}')
+				self.print_value_counts(polars_df, only_these_columns=[left_col, right_col])
 			if fallback == "left":
 				polars_df = polars_df.with_columns([
-					pl.when(polars_df[right_col] == polars_df[left_col]).then(pl.col(right_col)).otherwise(pl.col(left_col)).alias(right_col),
-					pl.when(polars_df[left_col] == polars_df[right_col]).then(pl.col(left_col)).otherwise(pl.col(left_col)).alias(left_col),
+					pl.when((pl.col(right_col) != pl.col(left_col)).and_(pl.col(left_col).is_not_null())).then(pl.col(left_col)).otherwise(pl.col(right_col)).alias(right_col)
 				])
 			elif fallback == "right":
 				polars_df = polars_df.with_columns([
-					pl.when(polars_df[right_col] == polars_df[left_col]).then(pl.col(right_col)).otherwise(pl.col(right_col)).alias(right_col),
-					pl.when(polars_df[left_col] == polars_df[right_col]).then(pl.col(left_col)).otherwise(pl.col(right_col)).alias(left_col),
+					pl.when((pl.col(right_col) != pl.col(left_col)).and_(pl.col(right_col).is_not_null())).then(pl.col(right_col)).otherwise(pl.col(left_col)).alias(left_col)
 				])
 			else:
+				polars_df = self.try_nullfill(polars_df, left_col, right_col)[0]
 				polars_df = polars_df.with_columns([
-					pl.when(polars_df[right_col] == polars_df[left_col]).then(pl.col(right_col)).otherwise(None).alias(right_col),
-					pl.when(polars_df[left_col] == polars_df[right_col]).then(pl.col(left_col)).otherwise(None).alias(left_col),
+					pl.when((pl.col(right_col) != pl.col(left_col)).and_(pl.col(right_col).is_not_null()).and_(pl.col(left_col).is_not_null())).then(pl.col(right_col)).otherwise(None).alias(right_col),
 				])
-			polars_df = self.try_nullfill(polars_df, left_col, right_col)[0]
 			return polars_df.drop(right_col) # nullfill operates on the left column, so we want that one even if fallback on right
 		except pl.exceptions.ComputeError:
 			polars_df = polars_df.with_columns([
@@ -391,6 +437,16 @@ class NeighLib:
 			self.logging.debug(f"\n[{right_columns.index(right_col)}/{len(right_columns)}] Trying to merge {right_col}...")
 			base_col, nullfilled = right_col.replace("_right", ""), False
 			self.check_base_and_right_in_df(polars_df, base_col, right_col)
+			if polars_df.schema[base_col] is not pl.List and polars_df.schema[right_col] is not pl.List and polars_df.schema[base_col] != polars_df.schema[right_col]:
+				try:
+					polars_df = polars_df.with_columns(pl.col(right_col).cast(polars_df.schema[base_col]).alias(right_col))
+					self.logging.info(f"Cast right column to {polars_df.schema[base_col]}")
+				except Exception:
+					polars_df = polars_df.with_columns([
+						pl.col(base_col).cast(pl.Utf8).alias(base_col),
+						pl.col(right_col).cast(pl.Utf8).alias(right_col)
+					])
+					self.logging.info("Cast both columns to pl.Utf8")
 			polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col)
 			try:
 				# TODO: this breaks in situations like when we add Brites before Bos, since Brites has three run accessions with no sample_index,
@@ -885,7 +941,6 @@ class NeighLib:
 		nulls = self.get_null_count_in_column(polars_df, index_column, warn=False, error=False)
 		if nulls > 0:
 			self.logging.error(f"Found {nulls} null value(s) in index column {index_column}:")
-			print(polars_df.with_columns(pl.when(pl.col(col_b).is_null())))
 			raise ValueError
 		
 		# if applicable, make sure there's no nonsense in our index columns -- also, we're checking run AND sample columns if both are present,

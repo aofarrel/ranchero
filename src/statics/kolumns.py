@@ -19,7 +19,7 @@ equivalence = {
 		'bytes': ['bytes', 'Bytes'],
 		'center_name': ['center_name', 'Center Name', 'center_name_insdc', 'insdc_center_name_sam'],
 		'country': ['country'],
-		'date_collected': ['date_collected', 'date_of_collection_sam', 'date_isolation', 'Collection_Date', 'collection_date_sam', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam', 'collectiondateym_sam'],
+		'date_collected': ['date_collected', 'date_collection', 'collection_date_sam', 'date_of_collection_sam', 'date_isolation', 'Collection_Date', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam', 'collectiondateym_sam'],
 		'date_collected_year': ['date_collected_year', 'collection_year_sam', 'year_isolated_sam'],
 		'date_collected_month': ['date_collected_month', 'collection_month_sam'],
 		'date_collected_day': ['date_collected_day', 'samplingday_sam'],
@@ -28,10 +28,9 @@ equivalence = {
 		'geoloc_name': ['geoloc_name', 'geo_loc_name_country', 'geo_loc_name_country_calc', 'geoloc_country_calc', 'geo_loc_name_country_continent', 'geographic_location_sam_s_dpl93', 'geo_loc_name_country_continent_calc', 'geo_loc_name_sam', 'geographical_location_sam', 'geo_loc_name_sam_s_dpl209', 'isolation_country_sam', 'country_sam', 'geographic_location__region_and_locality__sam', 'geographic_location__country_and_or_sea__region__sam', 'geographic_location__countryand_orsea_region__sam', 'geographic_location__country_and_or_sea__sam', 'region_sam', 'geoloc_country_or_sea', 'geoloc_country_or_sea_region', 'isolation_site_sam', 'geo_loc_name_run', 'geographic_location__country_and_or_sea__run'], # doi_location_sam and geo_accession_exp should be lowest priority
 		'host': ['host', 'host_sciname', 'host_sam', 'host_taxid_sam', 'specific_host_sam', 'host_common', 'host_common_name_sam', 'host_run', 'host_scientific_name_sam', 'host_taxon_id_sam', 'host_common_name_run', 'host_scientific_name_run'],
 		'host_disease': ['host_disease', 'disease', 'disease_sam', 'host_disease_sam'],
-		#'host_info': ['host_info', 'host_disease_stat_sam', 'host_life_stage_sam', 'pathogenicity_sam', 'passaged_in_sam', 'patient_year_of_arrival_to_israel_sam', 'passage_species_sam', 'patient_country_of_birth_sam', 'subsrc_note_sam_s_dpl392', 'host_status_sam', 'patient_year_of_birth_sam', 'patientid_sam', 'patient_finished_treatment_sam', 'patient_has_hiv_sam', 'patient_sex_sam', 'patient_number_sam_s_dpl111', 'age_sam', 'host_disease_outcome_sam', 'host_disease_stage_sam', 'host_sex_sam', 'pulmonary_disord_sam', 'host_age_sam', 'host_health_state_sam', 'host_subject_id_sam', 'host_description_sam', 'age_at_death_sam', 'age_at_death_units_sam', 'age_atdeath_weeks_sam'],
-		'host_scienname': ['host_scienname'],
 		'host_confidence': ['host_confidence'],
 		'host_commonname': ['host_commonname', 'host_streetname'],
+		'host_scienname': ['host_scienname'],
 		'instrument': ['instrument', 'Instrument'],
 		'isolation_source': ['isolation_source', 'sample_type_sam_ss_dpl131', 'sample_source', 'tissue_sam_ss_dpl145', 'env_medium_sam', 'host_tissue_sampled_sam_s_dpl239', 'isolation_source_sam', 'isolation_type_sam', 'isolation_source_sam_ss_dpl261', 'isolation_source_host_associated_sam_s_dpl264', 'specimen_sam', 'culture_collection_sam_ss_dpl468', 'host_body_product_sam', 'bio_material_sam', 'tissue_source_sam', 'subsource_note_sam', 'env_biome_sam', 'env_feature_sam', 'env_material_sam', 'source_name_sam', 'isolation_source_host_associated_sam_s_dpl263', 'isolate_sam_ss_dpl100', 'plant_product_sam', 'isolation_source_run', 'sample_type_run_s_dpl517', 'isolate_run', 'sample_type_exp'],
 		'latlon': ['latlon', 'lat_lon_sam_s_dpl34', 'lat_lon', 'latitude_and_longitude_sam', 'lat_lon_run'],
@@ -64,6 +63,11 @@ columns_to_drop_after_rancheroize = [item for value in equivalence.values() for 
 special_taxonomic_handling = {key: value for key, value in equivalence.items() if key in ['genotype', 'lineage', 'organism', 'strain']}
 all_taxoncore_columns = sum(special_taxonomic_handling.values(), [])
 
+# Special handling for host information columns, depending on config settings
+host_info = ['host_info', 'host_disease_stat_sam', 'host_life_stage_sam', 'pathogenicity_sam', 'passaged_in_sam', 'patient_year_of_arrival_to_israel_sam', 'passage_species_sam', 
+'patient_country_of_birth_sam', 'subsrc_note_sam_s_dpl392', 'host_status_sam', 'patient_year_of_birth_sam', 'patient_finished_treatment_sam', 'host_disease_stage_sam',
+'patient_has_hiv_sam', 'patient_sex_sam', 'age_sam', 'host_disease_outcome_sam', 'host_sex_sam', 'pulmonary_disord_sam', 'host_age_sam', 'host_health_state_sam', 
+'host_subject_id_sam', 'host_description_sam', 'age_at_death_sam', 'age_at_death_units_sam', 'age_atdeath_weeks_sam']
 
 # Sometimes we end up with list columns thanks to merges, or when going from run-to-sample, or because the original data was in list format.
 # Nested lists will be flattened automatically. But how should we deal with these flat list columns? Default behavior: list_to_set_uniq
@@ -86,6 +90,8 @@ list_to_set_uniq = [
 	'center_name_insdc', 
 	'datastore_filetype', 
 	'datastore_provider',
+	'isolation_source',
+	'host_info',
 	'pheno_source',
 	'primary_search',
 	'run_index',
@@ -98,7 +104,7 @@ list_to_list_silent = [
 	'assay_type',
 	'avgspotlen',
 	'collection',
-        'geo_loc_name_sam',
+	'geo_loc_name_sam',
 	'geoloc_country_calc',
 	'geoloc_country_or_sea', 
 	'geoloc_name', 
@@ -121,9 +127,11 @@ list_fallback_or_null = [
 	'host_commonname',
 	'host_confidence',
 	'host_scienname',
+	'lineage',
 	'mycobact_type',
 	'platform',
-	'region'
+	'region',
+	'strain'
 ]
 
 # In: pl.List() of any type
@@ -138,9 +146,12 @@ list_to_null = [
 	'coscolla_percent_not_covered',
 	'coscolla_sublineage',
 	'date_collected',
+	'date_collected_day',
+	'date_collected_month',
+	'date_collected_year',
 	'date_sequenced',
 	'latlon',
-	'napier_lineage',
+	'mbytes_sum',
 	'pheno_AMIKACIN',
 	'pheno_BEDAQUILINE',
 	'pheno_CAPREOMYCIN',

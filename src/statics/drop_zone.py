@@ -4,6 +4,11 @@ datastore = ['datastore_filetype', 'datastore_region']
 mildly_problematic = ["MB", "mb", "mB", 'BioSampleModel', 'biosamplemodel_sam', 'sample_description_sam', 'library_type_run', 'run_file_version', 'host_disease_sam', 'avgspotlen', 'mybytes', 'library_name', 'sequencing_protocol_exp', 'author', 'continent']
 
 sample_ids_that_are_not_uuids = [
+	# patient ID stuff
+	'patientid_sam',
+	'patient_number_sam_s_dpl111',
+
+	# everything else
 	'run_id_run',
 	'filename2_sam',
 	'uniqueidentifier_sam',

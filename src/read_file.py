@@ -342,7 +342,7 @@ class FileReader():
 				exit(1)
 		return polars_df
 
-	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search=True):
+	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search_and_host_info=True):
 		"""
 		Uses NeighLib.concat_dicts to turn the weird format of the attributes column into flat dictionaries,
 		then do some JSON normalization to output a polars dataframe.
@@ -365,7 +365,7 @@ class FileReader():
 		* verbose (set)
 		"""
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
-		if keep_all_primary_search:  # TODO: benchmark these two options
+		if keep_all_primary_search_and_host_info:  # TODO: benchmark these two options
 			if self.logging.getEffectiveLevel() == 10:
 				self.logging.info("Concatenating dictionaries with Pandas...")
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts_with_shared_keys)
