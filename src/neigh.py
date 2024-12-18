@@ -69,7 +69,7 @@ class NeighLib:
 		print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
 		print_cols = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
 		self.super_print_pl(print_df.select(print_cols), f"{col_a} where {col_b} is pl.Null")
-		if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
+		if valuecounts: self.print_value_counts(print_cols, only_these_columns=col_a)
 
 	def get_most_common_non_null_and_its_counts(self, polars_df, col, and_its_counts=True):
 		counts = polars_df.select(
@@ -880,9 +880,9 @@ class NeighLib:
 
 		Unless manual_index_column is not none, this function will use kolumns.equivalence to figure out what your index column(s) are.
 		"""
-		rm_dupes = self._sentinal_handler(_cfg_rm_dupes)
-		force_NCBI_runs = self._sentinal_handler(_cfg_force_SRR_ERR_DRR_run_index)
-		force_BioSamples = self._sentinal_handler(_cfg_force_SAMN_SAME_SAMD_sample_index)
+		rm_dupes = self._sentinal_handler(rm_dupes)
+		force_NCBI_runs = self._sentinal_handler(force_NCBI_runs)
+		force_BioSamples = self._sentinal_handler(force_BioSamples)
 		apparent_index_column = self.get_index_column(polars_df)
 		
 		if force_str_index:
@@ -923,6 +923,16 @@ class NeighLib:
 				raise ValueError
 			else:
 				raise ValueError # who knows what happened in get_index_column()?
+
+		# drop any nulls in the index column -- these needs to be before checking for duplicates or it breaks
+		nulls = self.get_null_count_in_column(polars_df, index_column, warn=False, error=False)
+		if nulls > 0:
+			self.logging.warning(f"Dropped {nulls} row(s) with null value(s) in index column {index_column}")
+			polars_df = polars_df.filter(pl.col(index_column).is_not_null())
+			nulls = self.get_null_count_in_column(polars_df, index_column, warn=False, error=False)
+			if nulls > 0:
+				self.logging.error(f"Failed to remove null values from index column {index_column}")
+				raise ValueError
 		
 		# at this point index_column can only be a string
 		self.logging.debug(f"Index column appears to be {index_column}")
@@ -938,10 +948,6 @@ class NeighLib:
 			else:
 				self.logging.error(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- not removing as per cfg perferences")
 				raise ValueError
-		nulls = self.get_null_count_in_column(polars_df, index_column, warn=False, error=False)
-		if nulls > 0:
-			self.logging.error(f"Found {nulls} null value(s) in index column {index_column}:")
-			raise ValueError
 		
 		# if applicable, make sure there's no nonsense in our index columns -- also, we're checking run AND sample columns if both are present,
 		# to prevent issues if we do a run-to-sample conversion later

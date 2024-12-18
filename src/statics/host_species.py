@@ -154,7 +154,7 @@ species = {
 	'Mustela sp.': ['Mustela sp.', 2, "ferret"],
 	'Mustela sp. ferret': ['Mustela sp.', 2, "ferret"],
 	'Mustela erminea': ['Mustela erminea', 3, "stoat"],
-	'Mycobacterium tuberculosis': [None, 0, None],
+	'Mycobacterium tuberculosis': [None, None, None],
 	'Morone saxatilis': ['Morone saxatilis', 3, "striped bass"],
 	
 	'NAN': [None, None, None],

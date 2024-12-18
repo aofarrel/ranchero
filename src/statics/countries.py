@@ -1,20 +1,22 @@
 # Used to standardize the names of countries into their three-letter ISO 3166 codes
 # Notes:
 # * Some older country names are used for compatiability with older data (eg: East Timor vs Timor-Leste)
-# * This should only be used for complete string matching, not substring matching, thanks to situations
-#   such as "Korea" or "Congo" representing more than one country
 # * Exact match doesn't need regex flags at it uses pl.when(pl.col(match_column) == f"(?i){key}")
 # * Fuzzy match uses pl.when(pl.col(match_column).str.contains(f"(?i){key}")) 
 
 exact_match_problematic_substrings = {
+	'Samoa': 'WSM',                    # prevent match with ASM
+	'Europe': None,                    # unhelpful
 	'hospital': None,                  # unhelpful
-	'Mali': 'MLI',                     # prevent match with SoMALIa
+	'Korea': 'KOR',                    # prevent match with North Korea
+	'Mali': 'MLI',                     # prevent match with Somalia
 	'Niger': 'NER',                    # prevent match with Nigeria
 	'patient': None,                   # unhelpful
-	'Republic of the Congo': 'COD',    # prevent match with COG
-	'The Congo': 'COG',                # prevent match with COD
+	'Republic of the Congo': 'COG',    # prevent match with COD
+	'The Congo': None,                 # ambigious
 	'United States': 'USA',            # prevent match with VIR/UMI
-	'South Africa': 'ZAF'              # prevent match with the general region
+	'USA': 'USA',                      # idk guys there's probably a fake match somewhere
+	#'South Africa': 'ZAF'             # prevent match with the general region --> overkill
 }
 
 exact_match_shorthands = {
@@ -32,21 +34,24 @@ exact_match_common_typos = {
 	'Marocco': 'MAR'
 }
 
-exact_match_ofarrells_wrath = {
-	# Look, CIV, I have an apostrophe in my name too. I get it.
-	# Fuzzy match *should* be okay here, but let's not risk it.
-	"Cote D Ivoire": 'CIV',
-	"Cote d''Ivoire": 'CIV',
-	"Cote d'Ivoire": 'CIV',
-	"Côte d'Ivoire": 'CIV',
-	"Cote d\'Ivoire": 'CIV',
-	"Republic of Côte d'Ivoire": 'CIV',
-	"Cote d_Ivoire": 'CIV',
-	"Ivory Coast": 'CIV',
-	"IVORY_COAST": 'CIV'
-}
+# The apostrophes have won. I'm just going to substring match on Ivory and Ivoire
+#exact_match_ofarrells_wrath = {
+#	#
+#	#      apostrophes
+#	#   CIV    🤝     IRL
+#	#
+#	"Cote D Ivoire": 'CIV',
+#	"Cote d''Ivoire": 'CIV',
+#	"Cote d'Ivoire": 'CIV',  # inconsistent matching, TODO check if polars bug or skill issue on my part
+#	"Cote d\'Ivoire": 'CIV', # this doesn't seem to help
+#	"Côte d'Ivoire": 'CIV',  # with o circumflex (ASCII 212)
+#	"Republic of Côte d'Ivoire": 'CIV',
+#	"Cote d_Ivoire": 'CIV',
+#	"Ivory Coast": 'CIV',
+#	"IVORY_COAST": 'CIV'
+#}
 
-exact_match = {**exact_match_problematic_substrings, **exact_match_shorthands, **exact_match_common_typos, **exact_match_ofarrells_wrath}
+exact_match = {**exact_match_problematic_substrings, **exact_match_shorthands, **exact_match_common_typos}
 
 substring_match = {
 	'Afghanistan': 'AFG',
@@ -63,10 +68,10 @@ substring_match = {
 	'Belgium': 'BEL',
 	'Benin': 'BEN',
 	'Bhutan': 'BTN',
+	'Blood - human': None,  # SAMN02585006
 	'Bosnia and Herzegovina': 'BIH',
 	'Botswana': 'BWA',
 	'Brazil': 'BRA',
-	'Britain': 'GBR',
 	'Britain': 'GBR', # substring matches Great Britain, Kingdom of Great Britain, etc
 	'British Virgin Islands': 'VGB',
 	'Bulgaria': 'BGR',
@@ -121,11 +126,14 @@ substring_match = {
 	'Ireland': 'IRL',
 	'Israel': 'ISR',
 	'Italy': 'ITA',
+	'Ivoire': 'CIV', # workaround for O'Farrell's wrath
+	'Ivory': 'CIV', # workaround for O'Farrell's wrath
 	'Jamaica': 'JAM',
 	'Japan': 'JPN',
 	'Kazakhstan': 'KAZ',
 	'Kenya': 'KEN',
-	'Korea': 'KOR',
+	'Kiribati': 'KIR',
+	'Kosovo': 'XKX', # unofficial but widely used
 	'Kuwait': 'KWT',
 	'Kyrgyzstan': 'KGZ',
 	'Laos': 'LAO',
@@ -140,6 +148,7 @@ substring_match = {
 	'Malaysia': 'MYS',
 	'Malta': 'MLT',
 	'Martinique': 'MTQ',
+	'Mauritania': 'MRT',
 	'Mayotte': 'MYT',
 	'Mexico': 'MEX',
 	'Moldova': 'MDA',
@@ -180,6 +189,7 @@ substring_match = {
 	'Slovakia': 'SLK',
 	'Slovenia': 'SVN',
 	'Somalia': 'SOM',
+	'South Africa': 'ZAF', # beware region matches
 	'South Korea': 'KOR',
 	'Spain': 'ESP',
 	'Sri Lanka': 'LKA',
@@ -212,6 +222,7 @@ substring_match = {
 	'Venezuela': 'VEN',
 	'Viet Nam': 'VNM',
 	'Vietnam': 'VNM',
+	'Western Samoa': 'WSM',
 	'Yemen': 'YEM',
 	'Zambia': 'ZMB',
 	'Zimbabwe': 'ZWE',

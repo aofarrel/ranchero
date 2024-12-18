@@ -1,18 +1,15 @@
 from .config import RancheroConfig
 from .neigh import NeighLib
 Configuration = RancheroConfig()  # creates a default config
-
 _NeighLib = NeighLib(Configuration)
 logger = Configuration.logger
-
 from .analyze import *
 from .merge import *
-from .read_file import FileReader
-from .standardize import ProfessionalsHaveStandards
-
-_FileReader = FileReader(Configuration)
 _Merger = Merger(Configuration)
+from .standardize import ProfessionalsHaveStandards
 _Standardizer = ProfessionalsHaveStandards(Configuration)
+from .read_file import FileReader
+_FileReader = FileReader(Configuration)
 
 
 # exposed classes of global instances

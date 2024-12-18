@@ -40,7 +40,7 @@ equivalence = {
 		'libraryselection': ['libraryselection', 'LibrarySelection'],
 		'librarysource': ['librarysource', 'LibrarySource'],
 		'lineage': ['lineage', 'lineage_sam', 'linege_sam', 'mtb_lineage_sam', 'subspecf_gen_lin_sam', 'literature_lineage', 'note_sam'],
-		'mycobact_type': ['mycobact_type'],
+		'clade': ['clade'],
 		'organism': ['organism', 'sub_species_sam', 'organism_sciname', 'organism_common', 'organism_sam', 'tax_id_sam_ss_dpl29', 'subspecies_sam', 'Organism', 'scientific_name_sam', 'species_sam', 'common_name_sam', 'type_material_sam', 'mycobacterium_type_result_result_sam', 'phenotype_sam', 'scientific_name_run', 'common_name_run'],
 		'platform': ['platform', 'Platform'], # platform_sam and platform_run seem to be something else
 		'primary_search': ['primary_search'],
@@ -128,7 +128,7 @@ list_fallback_or_null = [
 	'host_confidence',
 	'host_scienname',
 	'lineage',
-	'mycobact_type',
+	'clade',
 	'platform',
 	'region',
 	'strain'

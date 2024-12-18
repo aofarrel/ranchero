@@ -7,23 +7,25 @@ from collections import OrderedDict # dictionaries are ordered in Python 3.7+, b
 from src.statics import kolumns, null_values
 from .config import RancheroConfig
 from . import _NeighLib as NeighLib
+from . import _Standardizer as Standardizer
 
 # my crummy implementation of https://peps.python.org/pep-0661/
 globals().update({f"_cfg_{name}": object() for name in [
-    "auto_cast_types", "auto_parse_dates", "auto_rancheroize", 
-    "check_index", "ignore_polars_read_errors", "indicator_column",
-    "intermediate_files", "rm_dupes", "rm_not_pared_illumina"
+	"auto_cast_types", "auto_parse_dates", "auto_rancheroize", "auto_standardize",
+	"check_index", "ignore_polars_read_errors", "indicator_column",
+	"intermediate_files", "rm_dupes", "rm_not_pared_illumina"
 ]})
 _SENTINEL_TO_CONFIG = {
-    _cfg_rm_dupes: "rm_dupes",
-    _cfg_auto_cast_types: "auto_cast_types",
-    _cfg_auto_parse_dates: "auto_parse_dates",
-    _cfg_auto_rancheroize: "auto_rancheroize",
-    _cfg_check_index: "check_index",
-    _cfg_ignore_polars_read_errors: "ignore_polars_read_errors",
-    _cfg_intermediate_files: "intermediate_files",
-    _cfg_indicator_column: "indicator_column",
-    _cfg_rm_not_pared_illumina: "rm_not_pared_illumina",
+	_cfg_rm_dupes: "rm_dupes",
+	_cfg_auto_cast_types: "auto_cast_types",
+	_cfg_auto_parse_dates: "auto_parse_dates",
+	_cfg_auto_rancheroize: "auto_rancheroize",
+	_cfg_auto_standardize: "auto_standardize",
+	_cfg_check_index: "check_index",
+	_cfg_ignore_polars_read_errors: "ignore_polars_read_errors",
+	_cfg_intermediate_files: "intermediate_files",
+	_cfg_indicator_column: "indicator_column",
+	_cfg_rm_not_pared_illumina: "rm_not_pared_illumina",
 }
 
 class FileReader():
@@ -69,7 +71,6 @@ class FileReader():
 				dict_list.append(clean_row)
 		return dict_list
 
-
 	def polars_from_ncbi_run_selector(self, csv, drop_columns=list(), check_index=_cfg_check_index, auto_rancheroize=_cfg_auto_rancheroize):
 		"""
 		1. Read CSV
@@ -77,18 +78,24 @@ class FileReader():
 		3. Check index (optional)
 		4. Rancheroize (optional)
 		"""
-		check_index = self._sentinal_handler(_cfg_check_index)
-		auto_rancheroize = self._sentinal_handler(_cfg_auto_rancheroize)
+		check_index = self._sentinal_handler(check_index)
+		auto_rancheroize = self._sentinal_handler(auto_rancheroize)
+		auto_standardize = self._sentinal_handler(auto_standardize)
 		
 		polars_df = pl.read_csv(csv)
 		polars_df = polars_df.drop(drop_columns)
 		if check_index: NeighLib.check_index(polars_df)
-		if auto_rancheroize: polars_df = NeighLib.rancheroize_polars(polars_df)		
+		if auto_rancheroize: 
+			polars_df = NeighLib.rancheroize_polars(polars_df)
+			if auto_standardize:
+				polars_df = Standardizer.standardize_everything(polars_df)	
 		return polars_df
 
 	def polars_from_tsv(self, tsv, delimiter='\t', drop_columns=list(), explode_upon=None,
+		glob=True,
 		auto_parse_dates=_cfg_auto_parse_dates,
 		auto_rancheroize=_cfg_auto_rancheroize,
+		auto_standardize=_cfg_auto_standardize,
 		check_index=_cfg_check_index, 
 		ignore_polars_read_errors=_cfg_ignore_polars_read_errors, 
 		null_values=null_values.nulls_CSV):
@@ -99,17 +106,21 @@ class FileReader():
 		4. Check index (optional)
 		5. Rancheroize (optional)
 		"""
-		auto_rancheroize = self._sentinal_handler(_cfg_auto_rancheroize)
-		auto_parse_dates = self._sentinal_handler(_cfg_auto_parse_dates)
-		check_index = self._sentinal_handler(_cfg_check_index)
-		ignore_polars_read_errors = self._sentinal_handler(_cfg_ignore_polars_read_errors)
+		auto_rancheroize = self._sentinal_handler(auto_rancheroize)
+		auto_parse_dates = self._sentinal_handler(auto_parse_dates)
+		check_index = self._sentinal_handler(check_index)
+		auto_standardize = self._sentinal_handler(auto_standardize)
+		ignore_polars_read_errors = self._sentinal_handler(ignore_polars_read_errors)
 
-		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, ignore_errors=ignore_polars_read_errors)
+		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, ignore_errors=ignore_polars_read_errors, glob=glob)
 		polars_df = polars_df.drop(drop_columns)
 		if explode_upon != None:
 			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), delimiter=explode_upon, drop_new_non_unique=check_index)
 		if check_index: NeighLib.check_index(polars_df)
-		if auto_rancheroize: polars_df = NeighLib.rancheroize_polars(polars_df)
+		if auto_rancheroize: 
+			polars_df = NeighLib.rancheroize_polars(polars_df)
+			if auto_standardize:
+				polars_df = Standardizer.standardize_everything(polars_df)
 		return polars_df
 
 	def fix_bigquery_file(self, bq_file):

@@ -69,8 +69,11 @@ class RancheroConfig:
 		# Automatically parse dates when reading a file
 		self.auto_parse_dates = True
 
-		# Automatically rancheroize dataframes
+		# Automatically rancheroize dataframes upon file read
 		self.auto_rancheroize = True
+
+		# Automatically standardize dataframes upon file read (dataframe must be rancheroized)
+		self.auto_standardize = True
 
 		# When doing things that might modify the index, check it for integrity/lack of duplicates
 		self.check_index = True
