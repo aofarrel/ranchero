@@ -47,7 +47,23 @@ class NeighLib:
 	def get_number_of_x_in_column(self, polars_df, x, column):
 		return len(polars_df.filter(pl.col(column) == x))
 
-	def print_a_where_b_is_foo(self, polars_df, col_a, col_b, foo, alsoprint=None, valuecounts=False):
+	def print_a_where_b_is_in_list(self, polars_df, col_a, col_b, list_to_match: list, alsoprint=None, valuecounts=False, header=None):
+		header = header if header is not None else f"{col_a} where {col_b} in {list_to_match}"
+		print_columns = set(self.get_valid_id_columns(print_df) + [col_a, col_b])
+		print_columns = list(set(print_columns +  get_valid_columns_list_from_arbitrary_list(alsoprint))) if alsoprint is not None else list(print_columns)
+		
+		if col_a not in polars_df.columns or col_b not in polars_df.columns:
+			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but at least one of those columns aren't in the dataframe!")
+			return
+		if polars_df.schema[col_b] == pl.Utf8:
+			print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_in(list_to_match)).then(pl.col(col_a)).otherwise(None).alias(col_a)).drop_nulls(subset=col_a)
+			self.super_print_pl(print_df.select(print_cols), header)
+			if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
+		else:
+			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but either {col_b} isn't a string so we can't match on it properly")
+
+	def print_a_where_b_is_foo(self, polars_df, col_a, col_b, foo, alsoprint=None, valuecounts=False, header=None):
+		header = header if header is not None else f"{col_a} where {col_b} is {foo}"
 		if col_a not in polars_df.columns or col_b not in polars_df.columns:
 			self.logging.warning(f"Tried to print column {col_a} where column {col_b} equals {foo}, but at least one of those columns aren't in the dataframe!")
 			return
@@ -56,10 +72,10 @@ class NeighLib:
 		print_df = polars_df.with_columns(pl.when(pl.col(col_b) == foo).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
 		valid_ids = self.get_valid_id_columns(polars_df)
 		if col_a in valid_ids or col_b in valid_ids:  # this check avoids polars.exceptions.DuplicateError
-			print_cols = + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else [f"{col_a}_filtered", col_b]
+			print_cols = [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else [f"{col_a}_filtered", col_b]
 		else:
 			print_cols = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
-		self.super_print_pl(print_df.select(print_cols), f"{col_a} where {col_b} is {foo}")
+		self.super_print_pl(print_df.select(print_cols), header)
 		if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
 
 	def print_a_where_b_is_null(self, polars_df, col_a, col_b, alsoprint=None, valuecounts=False):

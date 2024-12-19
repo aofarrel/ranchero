@@ -144,7 +144,15 @@ class ProfessionalsHaveStandards():
 		"""ONLY RUN THIS AFTER ALL METADATA PROCESSING"""
 		return polars_df.drop(kolumn for kolumn in kolumns.columns_to_drop_after_rancheroize if kolumn in polars_df.columns)
 
-	def simple_dictionary_match(self, polars_df, match_column: str, write_column: str, key: str, value, substrings=False, overwrite=False):
+	def dictionary_match(self, polars_df, match_column, write_column, key, value, substrings=False, overwrite_if_other_col=False):
+		if polars_df.schema[match_column] == pl.List:
+			return self.dictionary_match_on_list(polars_df, match_column, write_column, key, value, substrings, overwrite_if_other_col)
+		elif polars_df.schema[match_column] == pl.Utf8:
+			return self.dictionary_match_on_str(polars_df, match_column, write_column, key, value, substrings, overwrite_if_other_col)
+		else:
+			raise ValueError
+
+	def dictionary_match_on_str(self, polars_df, match_column: str, write_column: str, key: str, value, substrings=False, overwrite=False):
 		"""
 		Replace a pl.Utf8 column's values with the values in a dictionary per its key-value pairs.
 		Case-insensitive. If substrings, will match substrings (ex: "US Virgin Islands" matches "US")
@@ -204,9 +212,9 @@ class ProfessionalsHaveStandards():
 	def standardize_host_disease(self, polars_df):
 		assert 'host_disease' in polars_df.columns
 		for host_disease, simplified_host_disease in sample_sources.host_disease_exact_match.items():
-			polars_df = self.simple_dictionary_match(polars_df, match_column='host_disease', write_column='host_disease', key=host_disease, value=simplified_host_disease, substrings=True)
+			polars_df = self.dictionary_match(polars_df, match_column='host_disease', write_column='host_disease', key=host_disease, value=simplified_host_disease, substrings=True)
 		for host_disease, simplified_host_disease in sample_sources.host_disease.items():
-			polars_df = self.simple_dictionary_match(polars_df, match_column='host_disease', write_column='host_disease', key=host_disease, value=simplified_host_disease, substrings=False)
+			polars_df = self.dictionary_match(polars_df, match_column='host_disease', write_column='host_disease', key=host_disease, value=simplified_host_disease, substrings=False)
 		return polars_df
 
 	def standardize_sample_source_as_list(self, polars_df, write_hosts=True, write_lineages=True):
@@ -345,9 +353,9 @@ class ProfessionalsHaveStandards():
 		assert 'isolation_source' in polars_df.columns
 		assert polars_df.schema['isolation_source'] == pl.Utf8
 		for sample_source, simplified_sample_source in sample_sources.sample_source_exact_match.items():
-			polars_df = self.simple_dictionary_match(polars_df, 'isolation_source', 'isolation_source', sample_source, simplified_sample_source, substrings=True)
+			polars_df = self.dictionary_match(polars_df, 'isolation_source', 'isolation_source', sample_source, simplified_sample_source, substrings=True)
 		for sample_source, simplified_sample_source in sample_sources.sample_source.items():
-			polars_df = self.simple_dictionary_match(polars_df, 'isolation_source', 'isolation_source', sample_source, simplified_sample_source, substrings=False)
+			polars_df = self.dictionary_match(polars_df, 'isolation_source', 'isolation_source', sample_source, simplified_sample_source, substrings=False)
 		return polars_df
 	
 	def standarize_hosts(self, polars_df, eager=True):
@@ -644,13 +652,8 @@ class ProfessionalsHaveStandards():
 		# Is there a better way of doing this? Tried a few things but so far this one seems the most reliable.
 		if self.cfg.taxoncore_ruleset is None:
 			raise ValueError("A taxoncore ruleset failed to initialize, so we cannot use function taxoncore_iterate_rules!")
-		for idx, (when, strain, lineage, organism, bacterial_group, comment) in enumerate(entry.values() for entry in self.cfg.taxoncore_ruleset):
-			progress = (idx + 1) / len(self.cfg.taxoncore_ruleset)
-			bar_length = 40
-			filled_length = int(bar_length * progress)
-			bar = '🐄' * filled_length + '-' * (bar_length - filled_length)
-			sys.stdout.write(f'\rProcessing taxonomy: |{bar}| {int(progress * 100)}%')
-			sys.stdout.flush()
+		
+		for when, strain, lineage, organism, bacterial_group, comment in tqdm((entry.values() for entry in self.cfg.taxoncore_ruleset), desc="Processing taxonomy", total=len(self.cfg.taxoncore_ruleset),  ascii='➖🌱🐄', bar_format='{desc:<5.5}{percentage:3.0f}%|{bar:10}{r_bar}'):
 			if strain is pl.Null and lineage is pl.Null:
 				polars_df = self.taxoncore_GO(polars_df, when, i_group=bacterial_group, i_organism=organism)
 			elif strain is pl.Null:
@@ -729,27 +732,38 @@ class ProfessionalsHaveStandards():
 			return polars_df.filter(pl.col(column).str.contains_any(["phage"]))
 	
 	def standardize_countries(self, polars_df):
+		# We expect to be starting out with at least one of the following:
+		# * country (type str)
+		# * geoloc_name (type list)
+		# If only country exists, ISO that list. Whatever doesn't get ISO'd gets moved to 'continent' if it matches a continent, otherwise will be moved to 'region' (no overwrite).
+		# Region and continent keep type str the entire time.
+		# If only geoloc_name exists, go through the list pulling out countries by ISO matching, then continents. Anything remaining move to region.
+		# If both exist, simply ISO convert country column and rename geoloc_name as region.
+
+		#####
+		print("---- Start of function")
+		NeighLib.print_a_where_b_is_in_list(polars_df, col_a='geoloc_name', col_b='run_index', list_to_match=['ERR841442', 'ERR5908244', 'SRR12380906'], alsoprint=['country'])
+		#####
+		
 		if 'geoloc_name' not in polars_df.columns:
 			self.logging.debug("This looks partially standardized already, or was never rancheroized, given the lack of geoloc_name")
 			if 'country' in polars_df.columns:
 				self.logging.debug("I did find a country column though...")
 				for nation, ISO3166 in countries.substring_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=True)
+					polars_df = self.dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=True)
 				for nation, ISO3166 in countries.exact_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
+					polars_df = self.dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
 			elif 'region' in polars_df.columns:
 				for region, ISO3166 in regions.regions_to_countries.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False)
+					polars_df = self.dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False)
 				for nation, ISO3166 in countries.substring_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=True)
+					polars_df = self.dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=True)
 				for nation, ISO3166 in countries.exact_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False)
+					polars_df = self.dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False)
 			else:
 				self.logging.warning("""Tried to standardize countries, but 'geoloc_name', as well as 'country 'and/or 'region', are missing from the dataframe's columns.
 					Most likely, you need to rancheroize this dataframe to standardize its columns.""")
 			return polars_df
-
-		# TODO: if polars_df.schema['geoloc_name'] == pl.Utf8, do a simpler version
 
 		elif polars_df.schema['geoloc_name'] == pl.List(pl.Utf8):
 			self.logging.debug("Handling geoloc_name...")
@@ -763,6 +777,10 @@ class ProfessionalsHaveStandards():
 					.list.first().str.split(":")
 				).alias("country_colon_region")
 			])
+			#####
+			print("---- After creation of country:region")
+			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='geoloc_name', col_b='run_index', list_to_match=['ERR841442', 'ERR5908244', 'SRR12380906'], alsoprint=['country', 'country_colon_region'])
+			#####
 			polars_df = polars_df.with_columns([
 				pl.when(pl.col("country_colon_region").list.len() > 1)
 				.then(
@@ -786,15 +804,26 @@ class ProfessionalsHaveStandards():
 				.otherwise(None)
 				.alias("all_geoloc_names")
 			])
+
+			#####
+			print("---- Split country:region to new country and region, joined what's left as all_geoloc_names")
+			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='geoloc_name', col_b='run_index', list_to_match=['ERR841442', 'ERR5908244', 'SRR12380906'], alsoprint=['country', 'country_colon_region', 'all_geoloc_names', 'new_country', 'new_region'])
+			#####
+
 			polars_df = NeighLib.nullify(polars_df, only_these_columns=['all_geoloc_names']) # deal with those join()ed nulls that became empty strings
 			for nation, ISO3166 in countries.substring_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='new_country', write_column='new_country', key=nation, value=ISO3166, substrings=True, overwrite=True)
+				polars_df = self.dictionary_match(polars_df, match_column='new_country', write_column='new_country', key=nation, value=ISO3166, substrings=True, overwrite=True)
 			for nation, ISO3166 in countries.exact_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='new_country', write_column='new_country', key=nation, value=ISO3166, substrings=False, overwrite=True)
+				polars_df = self.dictionary_match(polars_df, match_column='new_country', write_column='new_country', key=nation, value=ISO3166, substrings=False, overwrite=True)
 			for nation, ISO3166 in countries.substring_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='all_geoloc_names', write_column='all_geoloc_names', key=nation, value=ISO3166, substrings=True)
+				polars_df = self.dictionary_match(polars_df, match_column='all_geoloc_names', write_column='all_geoloc_names', key=nation, value=ISO3166, substrings=True)
 			for nation, ISO3166 in countries.exact_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='all_geoloc_names', write_column='all_geoloc_names', key=nation, value=ISO3166, substrings=False)
+				polars_df = self.dictionary_match(polars_df, match_column='all_geoloc_names', write_column='all_geoloc_names', key=nation, value=ISO3166, substrings=False)
+
+			#####
+			print("---- Matching on new_country column (but not country)")
+			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='geoloc_name', col_b='run_index', list_to_match=['ERR841442', 'ERR5908244', 'SRR12380906'], alsoprint=['country', 'country_colon_region', 'all_geoloc_names', 'new_country', 'new_region'])
+			#####
 
 			# all_geoloc_names values that are three bytes in size got ISO3166'd --> move to country column
 			# all_geoloc_names values didn't get ISO3166'd --> move to region column
@@ -806,6 +835,11 @@ class ProfessionalsHaveStandards():
 				pl.when((pl.col('all_geoloc_names').str.len_bytes() != 3))
 				.then(pl.col('all_geoloc_names')).alias("temp_probably_region"),
 			])
+
+			#####
+			print("---- Find probably country and region")
+			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='geoloc_name', col_b='run_index', list_to_match=['ERR841442', 'ERR5908244', 'SRR12380906'], alsoprint=['country', 'country_colon_region', 'all_geoloc_names', 'new_country', 'new_region', 'temp_probably_country', 'temp_probably_region'])
+			#####
 
 			if 'country' not in polars_df.columns:
 				polars_df = polars_df.with_columns(pl.coalesce(["new_country", "temp_probably_country"]).alias("country"))
@@ -821,24 +855,29 @@ class ProfessionalsHaveStandards():
 				polars_df = polars_df.drop("region")
 				polars_df = polars_df.with_columns(pl.col("aaaa_region").alias("region"))
 
-			polars_df = polars_df.drop(['country_colon_region', 'new_region', 'new_country', 'all_geoloc_names', 'temp_probably_country', 'temp_probably_region', 'geoloc_name'])
+			#####
+			print("---- Coalesced into country and region")
+			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='geoloc_name', col_b='run_index', list_to_match=['ERR841442', 'ERR5908244', 'SRR12380906'], alsoprint=['country', 'country_colon_region', 'all_geoloc_names', 'new_country', 'new_region', 'temp_probably_country', 'temp_probably_region'])
+			#####
+
+			polars_df = polars_df.drop(['country_colon_region', 'new_region', 'aaaa_country', 'new_country', 'all_geoloc_names', 'temp_probably_country', 'temp_probably_region', 'geoloc_name'])
 
 			# do this here I guess
 			for nation, ISO3166 in countries.substring_match.items():
-				polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=True)
+				polars_df = self.dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=True)
 			for nation, ISO3166 in countries.exact_match.items():
-				polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
+				polars_df = self.dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
 
 			# manually deal with entries that have values for region but not country
 			for region, ISO3166 in regions.regions_to_countries.items():
-				polars_df = self.simple_dictionary_match(polars_df, match_column="region", write_column="country", key=region, value=ISO3166, substrings=False, overwrite=True)
+				polars_df = self.dictionary_match(polars_df, match_column="region", write_column="country", key=region, value=ISO3166, substrings=False, overwrite=True)
 			for nation, ISO3166 in countries.substring_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=False)
+					polars_df = self.dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=False)
 			for nation, ISO3166 in countries.exact_match.items():
-				polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
+				polars_df = self.dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
 			return polars_df
 		else:
-			# this is extremely cringe
+			# This is extremely cringe -- ideally we'd switch to a more effecient search instead of casting to use a list search
 			return self.standardize_countries(polars_df.with_columns(pl.col("geoloc_name").cast(pl.List(pl.String))))
 
 		self.validate_col_country(polars_df)
