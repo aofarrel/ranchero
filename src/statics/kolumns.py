@@ -18,14 +18,15 @@ equivalence = {
 		'BioProject': ['BioProject', 'bioproject', 'Bioproject'],
 		'bytes': ['bytes', 'Bytes'],
 		'center_name': ['center_name', 'Center Name', 'center_name_insdc', 'insdc_center_name_sam'],
-		'country': ['country'],
+		'continent': ['continent'],
+		'country': ['country', 'geo_loc_name_country', 'geo_loc_name_country_calc', 'geoloc_country_calc', 'isolation_country_sam', 'country_sam', 'geographic_location__country_and_or_sea__sam', 'geoloc_country_or_sea'],
 		'date_collected': ['date_collected', 'date_collection', 'collection_date_sam', 'date_of_collection_sam', 'date_isolation', 'Collection_Date', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam', 'collectiondateym_sam'],
 		'date_collected_year': ['date_collected_year', 'collection_year_sam', 'year_isolated_sam'],
 		'date_collected_month': ['date_collected_month', 'collection_month_sam'],
 		'date_collected_day': ['date_collected_day', 'samplingday_sam'],
 		'date_sequenced': ['run_file_create_date', 'run_date_run'],
 		'genotype': ['genotype', 'genotype_sam_ss_dpl92', 'genotype_variation_sam', 'spoligotype_sam',  'mlva___spoligotype_sam', 'vntr_sam', 'serotype_sam', 'serovar_sam', 'orgmod_note_sam_s_dpl305', 'atpe_mutation_sam', 'rv0678_mutation_sam', 'mutant_sam', 'subtype_sam', 'pathotype_sam', 'subgroup_sam', 'arrayexpress_species_sam'],
-		'geoloc_name': ['geoloc_name', 'geo_loc_name_country', 'geo_loc_name_country_calc', 'geoloc_country_calc', 'geo_loc_name_country_continent', 'geographic_location_sam_s_dpl93', 'geo_loc_name_country_continent_calc', 'geo_loc_name_sam', 'geographical_location_sam', 'geo_loc_name_sam_s_dpl209', 'isolation_country_sam', 'country_sam', 'geographic_location__region_and_locality__sam', 'geographic_location__country_and_or_sea__region__sam', 'geographic_location__countryand_orsea_region__sam', 'geographic_location__country_and_or_sea__sam', 'region_sam', 'geoloc_country_or_sea', 'geoloc_country_or_sea_region', 'isolation_site_sam', 'geo_loc_name_run', 'geographic_location__country_and_or_sea__run'], # doi_location_sam and geo_accession_exp should be lowest priority
+		'geoloc_name': ['geo_loc_name_country_continent', 'geographic_location_sam_s_dpl93', 'geo_loc_name_country_continent_calc', 'geo_loc_name_sam', 'geographical_location_sam', 'geo_loc_name_sam_s_dpl209', 'geographic_location__region_and_locality__sam', 'geographic_location__country_and_or_sea__region__sam', 'geographic_location__countryand_orsea_region__sam', 'region_sam', 'geoloc_country_or_sea_region', 'isolation_site_sam', 'geo_loc_name_run', 'geographic_location__country_and_or_sea__run'], # doi_location_sam and geo_accession_exp should be lowest priority
 		'host': ['host', 'host_sciname', 'host_sam', 'host_taxid_sam', 'specific_host_sam', 'host_common', 'host_common_name_sam', 'host_run', 'host_scientific_name_sam', 'host_taxon_id_sam', 'host_common_name_run', 'host_scientific_name_run'],
 		'host_disease': ['host_disease', 'disease', 'disease_sam', 'host_disease_sam'],
 		'host_confidence': ['host_confidence'],
@@ -88,6 +89,7 @@ list_to_set_uniq = [
 	'BioSampleModel',
 	'center_name', 
 	'center_name_insdc', 
+	'country_1' # intermediate column used in metadata standardization
 	'datastore_filetype', 
 	'datastore_provider',
 	'isolation_source',

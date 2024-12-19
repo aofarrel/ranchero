@@ -16,6 +16,7 @@ exact_match_problematic_substrings = {
 	'The Congo': None,                 # ambigious
 	'United States': 'USA',            # prevent match with VIR/UMI
 	'USA': 'USA',                      # idk guys there's probably a fake match somewhere
+	'USA: Texas': 'USA'                # TODO: handle this as a region so as not to mess with Texas
 	#'South Africa': 'ZAF'             # prevent match with the general region --> overkill
 }
 
@@ -84,6 +85,7 @@ substring_match = {
 	'Central African Republic': 'CAF',
 	'Chile': 'CHL',
 	'China': 'CHN',
+	'Costa Rica': 'CRI',
 	'Colombia': 'COL',
 	'Comoros': 'COM',
 	'Croatia': 'HRV',
@@ -147,6 +149,7 @@ substring_match = {
 	'Malawi': 'MWI',
 	'Malaysia': 'MYS',
 	'Malta': 'MLT',
+	'Marshall Islands': 'MHL',
 	'Martinique': 'MTQ',
 	'Mauritania': 'MRT',
 	'Mayotte': 'MYT',

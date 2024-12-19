@@ -1,5 +1,14 @@
 # For translating regions back in to countries.
 
+continents = {
+	"Africa": "Africa",
+	"Asia": "Asia",
+	"Europe": "Europe",
+	"North America": "North America",
+	"Oceania": "Oceania",
+	"South America": "South America"
+}
+
 regions_to_countries = {
 	"Chwezi Clinic": "ZAF",
 	"Durban Chest Clinic": "ZAF",
@@ -20,6 +29,9 @@ regions_to_countries = {
 	
 	"Africa; South Africa": "ZAF",
 	"South Africa; Africa": "ZAF",
+
+	"Dublin": "IRD",
+	"Taipei": "TWN"
 }
 
 # Unusued due to ambiguity:

@@ -57,7 +57,7 @@ def inject_metadata(tba6):
 	bovis_time = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB18668 - good.tsv")
 	host_overrides = Ranchero.injector_from_tsv("./inputs/overrides/host_overrides.tsv")
 	norway = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB12184 - good.tsv", drop_columns=["literature_lineage"])
-	PRJNA575883p1 = Ranchero.injector_from_tsv("./inputs/overrides/PRJNA575883p1.tsv")
+	PRJNA575883p1 = Ranchero.injector_from_tsv("./inputs/overrides/PRJNA575883p1 no host disease.tsv")
 	PRJNA575883p2 = Ranchero.injector_from_tsv("./inputs/overrides/PRJNA575883p2.tsv")
 	imrl = Ranchero.injector_from_tsv("./inputs/overrides/IMRL/IMRL.csv")
 

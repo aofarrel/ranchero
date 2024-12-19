@@ -95,6 +95,8 @@ class NeighLib:
 		Turns stuff like "not collected" and "n/a" into pl.Null values, per null_values.py
 		"""
 		all_cols = only_these_columns if only_these_columns is not None else polars_df.columns
+		if type(all_cols) == str: # idk man im tired
+			all_cols = [all_cols]
 		if skip_ids:
 			string_cols = [col for col in all_cols if polars_df.schema[col] == pl.Utf8 and col not in kolumns.id_columns]
 			list_cols = [col for col in all_cols if polars_df.schema[col] == pl.List(pl.Utf8) and col not in kolumns.id_columns]

@@ -3,6 +3,7 @@ import csv
 import json
 import logging
 import polars as pl
+import tqdm
 
 class RancheroConfig:
 
