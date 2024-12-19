@@ -2,6 +2,7 @@ import sys
 from src.statics import host_species, sample_sources, kolumns, countries, regions
 from .config import RancheroConfig
 import polars as pl
+from tqdm import tqdm
 from collections import OrderedDict # dictionaries are ordered in Python 3.7+, but OrderedDict has a better popitem() function we need
 from . import _NeighLib as NeighLib
 
@@ -152,7 +153,7 @@ class ProfessionalsHaveStandards():
 		if substrings:
 			#self.logging.debug(f"Checking {match_column}: \"\\b(?i){key}\\b\"-->\"{value}\"")
 			polars_df = polars_df.with_columns([
-				pl.when((pl.col(match_column) == f"(?i){key}")
+				pl.when((pl.col(match_column).str.contains(f"(?i){key}"))
 				.and_((pl.lit(overwrite) == True).or_(pl.col(write_column).is_null())))
 				.then(pl.lit(value))
 				.otherwise(pl.col(write_column))
@@ -161,7 +162,7 @@ class ProfessionalsHaveStandards():
 		else:
 			#self.logging.debug(f"Checking {match_column}: \"(?i){key}\"-->\"{value}\"")
 			polars_df = polars_df.with_columns([
-				pl.when((pl.col(match_column).str.contains(f"(?i){key}"))
+				pl.when((pl.col(match_column).str.to_lowercase() == key.lower())
 				.and_((pl.lit(overwrite) == True).or_(pl.col(write_column).is_null())))
 				.then(pl.lit(value))
 				.otherwise(pl.col(write_column))
@@ -733,9 +734,9 @@ class ProfessionalsHaveStandards():
 			if 'country' in polars_df.columns:
 				self.logging.debug("I did find a country column though...")
 				for nation, ISO3166 in countries.substring_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=True)
+					polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=True)
 				for nation, ISO3166 in countries.exact_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=False)
+					polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
 			elif 'region' in polars_df.columns:
 				for region, ISO3166 in regions.regions_to_countries.items():
 					polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False)
@@ -787,9 +788,9 @@ class ProfessionalsHaveStandards():
 			])
 			polars_df = NeighLib.nullify(polars_df, only_these_columns=['all_geoloc_names']) # deal with those join()ed nulls that became empty strings
 			for nation, ISO3166 in countries.substring_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='new_country', write_column='new_country', key=nation, value=ISO3166, substrings=True)
+					polars_df = self.simple_dictionary_match(polars_df, match_column='new_country', write_column='new_country', key=nation, value=ISO3166, substrings=True, overwrite=True)
 			for nation, ISO3166 in countries.exact_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='new_country', write_column='new_country', key=nation, value=ISO3166, substrings=False)
+					polars_df = self.simple_dictionary_match(polars_df, match_column='new_country', write_column='new_country', key=nation, value=ISO3166, substrings=False, overwrite=True)
 			for nation, ISO3166 in countries.substring_match.items():
 					polars_df = self.simple_dictionary_match(polars_df, match_column='all_geoloc_names', write_column='all_geoloc_names', key=nation, value=ISO3166, substrings=True)
 			for nation, ISO3166 in countries.exact_match.items():
@@ -822,13 +823,19 @@ class ProfessionalsHaveStandards():
 
 			polars_df = polars_df.drop(['country_colon_region', 'new_region', 'new_country', 'all_geoloc_names', 'temp_probably_country', 'temp_probably_region', 'geoloc_name'])
 
+			# do this here I guess
+			for nation, ISO3166 in countries.substring_match.items():
+				polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=True)
+			for nation, ISO3166 in countries.exact_match.items():
+				polars_df = self.simple_dictionary_match(polars_df, match_column='country', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
+
 			# manually deal with entries that have values for region but not country
 			for region, ISO3166 in regions.regions_to_countries.items():
-				polars_df = self.simple_dictionary_match(polars_df, match_column="region", write_column="country", key=region, value=ISO3166, substrings=False)
+				polars_df = self.simple_dictionary_match(polars_df, match_column="region", write_column="country", key=region, value=ISO3166, substrings=False, overwrite=True)
 			for nation, ISO3166 in countries.substring_match.items():
-					polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=True)
+					polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=True, overwrite=False)
 			for nation, ISO3166 in countries.exact_match.items():
-				polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False)
+				polars_df = self.simple_dictionary_match(polars_df, match_column='region', write_column='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
 			return polars_df
 		else:
 			# this is extremely cringe

@@ -4,7 +4,7 @@
 # * Exact match doesn't need regex flags at it uses pl.when(pl.col(match_column) == f"(?i){key}")
 # * Fuzzy match uses pl.when(pl.col(match_column).str.contains(f"(?i){key}")) 
 
-exact_match_problematic_substrings = {
+exact_match = {
 	'Samoa': 'WSM',                    # prevent match with ASM
 	'Europe': None,                    # unhelpful
 	'hospital': None,                  # unhelpful
@@ -16,20 +16,17 @@ exact_match_problematic_substrings = {
 	'The Congo': None,                 # ambigious
 	'United States': 'USA',            # prevent match with VIR/UMI
 	'USA': 'USA',                      # idk guys there's probably a fake match somewhere
-	'USA: Texas': 'USA'                # TODO: handle this as a region so as not to mess with Texas
-	#'South Africa': 'ZAF'             # prevent match with the general region --> overkill
-}
+	'USA: Texas': 'USA',               # TODO: handle this as a region so as not to mess with Texas
 
-exact_match_shorthands = {
+	# common shorthands
 	'DPRK': 'PRK',
 	'GB': 'GBR',
 	'IRE': 'IRL',
 	'PRC': 'CHN',
 	'UK': 'GBR',
-	'US': 'USA'
-}
+	'US': 'USA', 
 
-exact_match_common_typos = {
+	# common typos
 	'Argentia': 'ARG',
 	'Ethopia': 'ETH',
 	'Marocco': 'MAR'
@@ -51,8 +48,6 @@ exact_match_common_typos = {
 #	"Ivory Coast": 'CIV',
 #	"IVORY_COAST": 'CIV'
 #}
-
-exact_match = {**exact_match_problematic_substrings, **exact_match_shorthands, **exact_match_common_typos}
 
 substring_match = {
 	'Afghanistan': 'AFG',
@@ -99,6 +94,7 @@ substring_match = {
 	'Ecuador': 'ECU',
 	'Egypt': 'EGY',
 	'El Salvador': 'SLV',
+	'Equatorial Guinea': 'GNQ',
 	'Eritrea': 'ERI',
 	'Estonia': 'EST',
 	'Eswatini': 'SWZ',
@@ -107,6 +103,7 @@ substring_match = {
 	'France': 'FRA',
 	'Gabon': 'GAB',
 	'Gambia': 'GMB',
+	'The Gambia': 'GMB',
 	'Georgia': 'GEO',
 	'Germany': 'DEU',
 	'Ghana': 'GHA',

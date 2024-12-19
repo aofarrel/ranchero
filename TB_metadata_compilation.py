@@ -39,8 +39,6 @@ def inital_file_parse():
 	# move to demo.py
 	#print(Ranchero.unique_bioproject_per_center_name(tba6))
 	Ranchero.print_a_where_b_is_null(tba6, 'region', 'country')
-	if Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, 'Ivory Coast', 'country') > 0:
-		exit(1)
 	#Ranchero.print_a_where_b_is_foo(tba6, 'country', 'BioProject', 'PRJEB9680', valuecounts=True)
 	#Ranchero.NeighLib.print_value_counts(tba6, ['country'])
 
@@ -75,8 +73,6 @@ def inject_metadata(tba6):
 	tba6 = Ranchero.inject_metadata(tba6, imrl, overwrite=True)
 
 	Ranchero.NeighLib.print_value_counts(tba6, ['country', 'region'])
-	if Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, 'Ivory Coast', 'country') > 0:
-		exit(1)
 
 	print(f"{_b_}Injected metadata in {time.time() - start:.4f} seconds{_bb_}")
 	null = Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, None, 'country')
@@ -84,6 +80,9 @@ def inject_metadata(tba6):
 	print(f"{_b_}After injecting, we have {null} samples with no value for country{_bb_}")
 	print(f"Nulls in sample_index: {Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, None, 'sample_index')}")
 	Ranchero.NeighLib.report(tba6)
+
+	if Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, 'Ivory Coast', 'country') > 0:
+		exit(1)
 
 
 	start = time.time()
