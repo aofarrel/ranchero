@@ -13,6 +13,7 @@ exact_match = {
 	'Niger': 'NER',                    # prevent match with Nigeria
 	'patient': None,                   # unhelpful
 	'Republic of the Congo': 'COG',    # prevent match with COD
+	'Republic of Congo': 'COG',        # prevent match with COD
 	'The Congo': None,                 # ambigious
 	'United States': 'USA',            # prevent match with VIR/UMI
 	'USA': 'USA',                      # idk guys there's probably a fake match somewhere
@@ -30,6 +31,15 @@ exact_match = {
 	'Argentia': 'ARG',
 	'Ethopia': 'ETH',
 	'Marocco': 'MAR'
+}
+
+countries_to_continents = {
+	# not exhaustive
+	'MDA': 'Europe',
+	'IRL': 'Europe',
+	'CHN': 'Asia',
+	'IND': 'Asia',
+	'USA': 'North America',
 }
 
 # The apostrophes have won. I'm just going to substring match on Ivory and Ivoire
@@ -184,6 +194,7 @@ substring_match = {
 	'Saudi Arabia': 'SAU',
 	'Senegal': 'SEN',
 	'Serbia': 'SRB',
+	'SierraLeone': 'SLE',
 	'Sierra Leone': 'SLE',
 	'Singapore': 'SGP',
 	'Slovakia': 'SLK',

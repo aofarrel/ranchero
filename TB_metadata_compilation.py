@@ -7,6 +7,7 @@ _bb_ = "\033[0m"
 print(f"Module import time: {time.time() - start:.4f}")
 slim = False
 start_from_scratch = True
+standardize = True
 inject = True
 do_run_index_merges = True
 sample_merges = True
@@ -21,13 +22,19 @@ def inital_file_parse():
 	tba6 = tba6.drop(['center_name', 'insdc_center_name_sam']) # these are a pain in the neck to standardize and not necessary for the tree
 	print(f"Dropped non-TB-related columns in {time.time() - start:.4f} seconds")
 
+	start = time.time()
+	Ranchero.to_tsv(tba6, "tba6_no_nonsense.tsv")
+	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
+	Ranchero.NeighLib.report(tba6)
+	return tba6
+
+def initial_standardize(tba6):
 	# initial rancheroize
 	start, tba6 = time.time(), Ranchero.rancheroize(tba6)
 	print(f"Rancheroized in {time.time() - start:.4f} seconds")
 
 	start, tba6 = time.time(), Ranchero.standardize_everything(tba6)
 	print(f"Have {Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, None, 'date_collected')} nulls for date_collected")
-	Ranchero.NeighLib.print_value_counts(tba6, ['date_collected'])
 	print(f"Standardized in {time.time() - start:.4f} seconds")
 	print(f"Have {Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, None, 'date_collected')} nulls for date_collected")
 
@@ -35,7 +42,6 @@ def inital_file_parse():
 	print(f"Removed columns with few values in {time.time() - start:.4f}s seconds") # should be done last
 
 	print(tba6.estimated_size(unit='mb'))
-
 	# move to demo.py
 	#print(Ranchero.unique_bioproject_per_center_name(tba6))
 	Ranchero.print_a_where_b_is_null(tba6, 'region', 'country')
@@ -43,13 +49,14 @@ def inital_file_parse():
 	#Ranchero.NeighLib.print_value_counts(tba6, ['country'])
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, "tba6_no_nonsense.tsv")
+	Ranchero.to_tsv(tba6, "tba6_standardized.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
 	Ranchero.NeighLib.report(tba6)
+
 	return tba6
 
 def inject_metadata(tba6):
-	Ranchero.NeighLib.print_value_counts(tba6, ['country', 'region'])
+	assert 'geoloc_info' not in tba6.columns
 
 	bioproject_injector = Ranchero.injector_from_tsv("./inputs/literature_shorthands_ACTUALLY_LEGIT - injector.tsv")
 	bovis_time = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB18668 - good.tsv")
@@ -79,6 +86,7 @@ def inject_metadata(tba6):
 	
 	print(f"{_b_}After injecting, we have {null} samples with no value for country{_bb_}")
 	print(f"Nulls in sample_index: {Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, None, 'sample_index')}")
+	assert 'geoloc_info' not in tba6.columns
 	Ranchero.NeighLib.report(tba6)
 
 	if Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, 'Ivory Coast', 'country') > 0:
@@ -94,6 +102,7 @@ def inject_metadata(tba6):
 
 def run_merges(tba6):
 	merged = tba6
+	assert 'geoloc_info' not in merged.columns
 
 	# Bos
 	#bos = Ranchero.from_tsv("./inputs/publications/Bos_2015/ancient.tsv")
@@ -109,6 +118,16 @@ def run_merges(tba6):
 		drop_columns=['country']) # several incorrect countries
 	merged = Ranchero.merge_dataframes(merged, brites, merge_upon="run_index", left_name="tba6", right_name="Brites",
 		drop_exclusive_right=True) # we have to do this or else run-to-sample breaks
+
+	assert 'geoloc_info' not in merged.columns
+
+	# Cancino-Muñoz
+	print(f"{_b_}Processing Cancino-Muñoz{_bb_}")
+	cancinomunoz = Ranchero.from_tsv("./inputs/publications/run_indexed/Cancino-Muñoz_2022/cancino-munoz_2022.tsv")
+	assert 'geoloc_info' not in cancinomunoz.columns
+	assert 'geoloc_info' not in merged.columns
+	merged = Ranchero.merge_dataframes(merged, cancinomunoz, merge_upon="run_index", left_name="tba6", right_name="Cancino-Muñoz",
+		drop_exclusive_right=True)
 
 	# Coll
 	print(f"{_b_}Processing Coll{_bb_}")
@@ -348,8 +367,14 @@ else:
 	start, tba6 = time.time(), Ranchero.from_tsv("tba6_no_nonsense.tsv")
 	print(f"Imported tba6 file without extremely irrelevant columns in {time.time() - start:.4f} seconds")
 
+if standardize:
+	tba6_standardized = initial_standardize(tba6)
+else:
+	start, tba6_standardized = time.time(), Ranchero.from_tsv("tba6_standardized.tsv")
+	print(f"Imported standardized tba6 file in {time.time() - start:.4f} seconds")
+
 if inject:
-	tba6_injected = inject_metadata(tba6)
+	tba6_injected = inject_metadata(tba6_standardized)
 else:
 	start, tba6_injected = time.time(), Ranchero.from_tsv("tba6_injected.tsv")
 	print(f"Imported tba6 file with injections in {time.time() - start:.4f} seconds")
@@ -375,7 +400,7 @@ if slim:
 
 
 merged = merged_samps
-merged = merged.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_name'], strict=False)
+merged = merged.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info'], strict=False)
 merged = Ranchero.hella_flat(merged)
 Ranchero.print_schema(merged)
 Ranchero.NeighLib.print_value_counts(merged, ['libraryselection'])
@@ -384,7 +409,7 @@ Ranchero.NeighLib.print_value_counts(merged, ['date_collected'])
 Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
 Ranchero.NeighLib.print_value_counts(merged, ['country', 'region'])
 Ranchero.NeighLib.report(merged)
-Ranchero.to_tsv(merged, "./ranchero_rc8.tsv")
+Ranchero.to_tsv(merged, "./ranchero_rc9.tsv")
 
 
 

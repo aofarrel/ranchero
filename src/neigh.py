@@ -49,15 +49,15 @@ class NeighLib:
 
 	def print_a_where_b_is_in_list(self, polars_df, col_a, col_b, list_to_match: list, alsoprint=None, valuecounts=False, header=None):
 		header = header if header is not None else f"{col_a} where {col_b} in {list_to_match}"
-		print_columns = set(self.get_valid_id_columns(print_df) + [col_a, col_b])
-		print_columns = list(set(print_columns +  get_valid_columns_list_from_arbitrary_list(alsoprint))) if alsoprint is not None else list(print_columns)
+		print_columns = set(self.get_valid_id_columns(polars_df) + [col_a, col_b])
+		print_columns = list(print_columns.union(self.valid_cols(polars_df, alsoprint))) if alsoprint is not None else list(print_columns)
 		
 		if col_a not in polars_df.columns or col_b not in polars_df.columns:
 			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but at least one of those columns aren't in the dataframe!")
 			return
 		if polars_df.schema[col_b] == pl.Utf8:
 			print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_in(list_to_match)).then(pl.col(col_a)).otherwise(None).alias(col_a)).drop_nulls(subset=col_a)
-			self.super_print_pl(print_df.select(print_cols), header)
+			self.super_print_pl(print_df.select(print_columns), header)
 			if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
 		else:
 			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but either {col_b} isn't a string so we can't match on it properly")
@@ -72,10 +72,10 @@ class NeighLib:
 		print_df = polars_df.with_columns(pl.when(pl.col(col_b) == foo).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
 		valid_ids = self.get_valid_id_columns(polars_df)
 		if col_a in valid_ids or col_b in valid_ids:  # this check avoids polars.exceptions.DuplicateError
-			print_cols = [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else [f"{col_a}_filtered", col_b]
+			print_columns = [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else [f"{col_a}_filtered", col_b]
 		else:
-			print_cols = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
-		self.super_print_pl(print_df.select(print_cols), header)
+			print_columns = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
+		self.super_print_pl(print_df.select(print_columns), header)
 		if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
 
 	def print_a_where_b_is_null(self, polars_df, col_a, col_b, alsoprint=None, valuecounts=False):
@@ -83,9 +83,9 @@ class NeighLib:
 			self.logging.warning(f"Tried to print column {col_a} where column {col_b} equals {foo}, but at least one of those columns aren't in the dataframe!")
 			return
 		print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
-		print_cols = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
-		self.super_print_pl(print_df.select(print_cols), f"{col_a} where {col_b} is pl.Null")
-		if valuecounts: self.print_value_counts(print_cols, only_these_columns=col_a)
+		print_columns = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
+		self.super_print_pl(print_df.select(print_columns), f"{col_a} where {col_b} is pl.Null")
+		if valuecounts: self.print_value_counts(print_columns, only_these_columns=col_a)
 
 	def get_most_common_non_null_and_its_counts(self, polars_df, col, and_its_counts=True):
 		counts = polars_df.select(
@@ -194,8 +194,7 @@ class NeighLib:
 		if column not in polars_df.columns:
 			self.logging.warning(f"Tried to print where {column} is not null, but that column isn't even in the dataframe!")
 		else:
-			cols_of_interest.append(column)
-			cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
+			cols_to_print = list(set(cols_of_interest + [column]).intersection(polars_df.columns))
 			with pl.Config(tbl_cols=-1, tbl_rows=250, fmt_str_lengths=200, fmt_table_cell_list_len=10):
 				print(polars_df.filter(pl.col(column).is_not_null()).select(cols_to_print))
 
@@ -233,7 +232,7 @@ class NeighLib:
 			else:
 				continue
 
-	def get_valid_columns_list_from_arbitrary_list(self, polars_df, desired_columns: list):
+	def valid_cols(self, polars_df, desired_columns: list):
 		return [col for col in desired_columns if col in polars_df.columns]
 
 	def concat_dicts_with_shared_keys(self, dict_list: list):
@@ -613,9 +612,9 @@ class NeighLib:
 		)
 
 	def get_valid_id_columns(self, polars_df):
-		return self.get_valid_columns_list_from_arbitrary_list(polars_df, kolumns.id_columns)
+		return self.valid_cols(polars_df, kolumns.id_columns)
 	
-	def rancheroize_polars(self, polars_df, drop_non_mycobact_columns=True, nullify=True, flatten=True, disallow_right=True, check_index=True):
+	def rancheroize_polars(self, polars_df, drop_non_mycobact_columns=True, nullify=True, flatten=True, disallow_right=True, check_index=True, norename=False):
 		self.logging.debug(f"Dataframe shape before rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
 		polars_df = self.drop_known_unwanted_columns(polars_df)
 		self.get_null_count_in_column(polars_df, self.get_index_column(polars_df), warn=True, error=True)
@@ -639,30 +638,31 @@ class NeighLib:
 				else:
 					self.logging.debug(f"Likely date column {column} has pl.Date type")
 
-		for key, value in kolumns.equivalence.items():
-			merge_these_columns = [v_col for v_col in value if v_col in polars_df.columns and v_col not in sum(kolumns.special_taxonomic_handling.values(), [])]
-			if len(merge_these_columns) > 0:
-				self.logging.debug(f"Discovered {key} in column via:")
-				for some_column in merge_these_columns:
-					self.logging.debug(f"  * {some_column}: {polars_df.schema[some_column]}")
+		if not norename:
+			for key, value in kolumns.equivalence.items():
+				merge_these_columns = [v_col for v_col in value if v_col in polars_df.columns and v_col not in sum(kolumns.special_taxonomic_handling.values(), [])]
+				if len(merge_these_columns) > 0:
+					self.logging.debug(f"Discovered {key} in column via:")
+					for some_column in merge_these_columns:
+						self.logging.debug(f"  * {some_column}: {polars_df.schema[some_column]}")
 
-				if len(merge_these_columns) > 1:
-					#polars_df = polars_df.with_columns(pl.implode(merge_these_columns)) # this gets sigkilled; don't bother!
-					if key in drop_zone.silly_columns:
-						polars_df = polars_df.drop(col)
-					elif key in kolumns.list_fallback_or_null or key in kolumns.list_to_null:
-						self.logging.info(f"  Coalescing these columns into {key}: {merge_these_columns}")
-						polars_df = polars_df.with_columns(pl.coalesce(merge_these_columns).alias("TEMPTEMPTEMP"))
-						polars_df = polars_df.drop(merge_these_columns)
-						polars_df = polars_df.rename({"TEMPTEMPTEMP": key})
-					#don't add kolumns.list_to_float_sum here, that's not what it's made for and it'll cause errors
+					if len(merge_these_columns) > 1:
+						#polars_df = polars_df.with_columns(pl.implode(merge_these_columns)) # this gets sigkilled; don't bother!
+						if key in drop_zone.silly_columns:
+							polars_df = polars_df.drop(col)
+						elif key in kolumns.list_fallback_or_null or key in kolumns.list_to_null:
+							self.logging.info(f"  Coalescing these columns into {key}: {merge_these_columns}")
+							polars_df = polars_df.with_columns(pl.coalesce(merge_these_columns).alias("TEMPTEMPTEMP"))
+							polars_df = polars_df.drop(merge_these_columns)
+							polars_df = polars_df.rename({"TEMPTEMPTEMP": key})
+						#don't add kolumns.list_to_float_sum here, that's not what it's made for and it'll cause errors
+						else:
+							self.logging.info(f"  Merging these columns: {merge_these_columns}")
+							polars_df = self.iteratively_merge_these_columns(polars_df, merge_these_columns, equivalence_key=key)
 					else:
-						self.logging.info(f"  Merging these columns: {merge_these_columns}")
-						polars_df = self.iteratively_merge_these_columns(polars_df, merge_these_columns, equivalence_key=key)
-				else:
-					self.logging.debug(f"  Renamed {merge_these_columns[0]} to {key}")
-					polars_df = polars_df.rename({merge_these_columns[0]: key})
-				assert key in polars_df.columns
+						self.logging.debug(f"  Renamed {merge_these_columns[0]} to {key}")
+						polars_df = polars_df.rename({merge_these_columns[0]: key})
+					assert key in polars_df.columns
 		
 		# do not flatten list cols again, at least not yet. use the equivalence columns for standardization.
 		self.logging.debug("Checking index...")

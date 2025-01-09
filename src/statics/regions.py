@@ -44,6 +44,31 @@ regions_to_countries = {
 	'China': 'CHN',
 }
 
+# substring match
+regions_to_smaller_regions = {
+	"Cote d'Ivoire: Zoukougbeu": "Zoukougbeu",
+	"Cote d'Ivoire: Kongouanou": "Kongouanou",
+	"Capetown_": "Capetown",
+	"Beijing-": "Beijing",
+	"HARWARDEN": "Harwarden",
+	"AMBERLEYHILLS": "Amberley Hills",
+	"MOLESWORTH": "Molesworth",
+	"NORTHOTAGO": "Northotago",
+	"SAN JUAN CAPISTRANO": "San Juan Capistrano",
+	"SanJuan Capistrano": "San Juan Capistrano",
+	"Chiang rai": "Chiang Rai",
+	"JOHNSON CITY": "Johnson City",
+	"LAKETEKAPO": "Laketekapo",
+	"RANGATAIKI": "Rangataiki",
+	"PITTSBURGH": "Pittsburgh",
+	"Durban Site_": "Durban",
+	"Port Elizabeth_": "Port Elizabeth",
+	"The former Yugoslav Republic of Macedonia: Kocani": "Kocani",
+	"The former Yugoslav Republic of Macedonia: Vesala, Tetovo": "Vesala, Tetovo",
+	"Veracurz": "Veracruz", # 99% sure this is a typo
+
+}
+
 # Unusued due to ambiguity:
 # Catherine Booth: CAN/ZAF
 # Goodwins Clinic: any number of places
