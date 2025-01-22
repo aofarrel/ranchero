@@ -33,6 +33,7 @@ nulls_CSV = [
 ]
 
 # 2) Anywhere-in-string matching, case insensitive, no regex
+# WARNING: This may cause unexpected behavior!
 nulls_pl_contains_any = [
 	'missing',
 	'n/a',

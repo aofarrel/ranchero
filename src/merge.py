@@ -157,7 +157,11 @@ class Merger:
 				if not NeighLib.is_run_indexed(df):
 					self.logging.warning(f"Merging upon {merge_upon}, which looks like a run accession, but {name} dataframe appears to not be indexed by run accession")
 			if len(df.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
-				print(df.filter(pl.col(merge_upon).is_null()))
+				print("Dataframe has null values for the merge column:")
+				if merge_upon != "sample_index" and "sample_index" in df.columns:
+					print(df.filter(pl.col(merge_upon).is_null()).select(["sample_index", merge_upon]))
+				else:
+					print(df.filter(pl.col(merge_upon).is_null()))
 				raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
 
 		# right/left-hand dataframe's index's values (SRR16156818, SRR12380906, etc) ONLY -- all other columns excluded
@@ -198,17 +202,17 @@ class Merger:
 		else:
 			self.logging.info(f"--> Exclusive to {right_name}: {len(exclusive_right_values)}")
 			if len(exclusive_right_values) > 0:
-				self.logging.debug(f"Some of the exclusive right values: {exclusive_right_values}")
+				self.logging.debug(f"--> Some of the exclusive right values: {exclusive_right_values}")
 
 		# TODO: this is here just so we have better testing of list merges, but later it's probably better to just
 		# put something like this at the end by concat_list()ing pl.lit() the name into the column
 		# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
 		if indicator is not None:
 			if indicator not in left.columns:
-				self.logging.debug("No indicator column in left")
+				self.logging.debug("--> No indicator column in left")
 				left = left.with_columns(pl.lit(left_name).alias(indicator))
 			else:
-				self.logging.debug("Already an indicator in left")
+				self.logging.debug("--> Already an indicator in left")
 				
 			right = right.with_columns(pl.lit(right_name).alias(indicator))
 			n_cols_right = right.shape[1]
@@ -230,10 +234,7 @@ class Merger:
 				merged_dataframe = left.join(right, merge_upon, how="outer_coalesce").unique()
 
 		else:
-			if set(left.columns) == set(right.columns):
-				self.logging.debug("Set of left and right columns match")
-			else:
-				self.logging.debug("Set of left and right columns don't match (this is fine and dandy)")
+			self.logging.info(f"--> Shared columns: {', '.join(thing for thing in shared_columns)}")
 
 			yargh = list(left.columns)
 			yargh.remove(merge_upon)
@@ -312,11 +313,11 @@ class Merger:
 			The columns that were merged were:{''.join(thing for thing in merged_columns)}""")
 			merged_dataframe = really_merged_no_dupes
 
-		self.logging.info("Checking merged dataframe for unexpected rows...")
+		self.logging.debug("Checking merged dataframe for unexpected rows...")
 		merged_dataframe.drop_nulls()
 		self.check_if_unexpected_rows(merged_dataframe, merge_upon=merge_upon, 
 			intersection_values=intersection_values, exclusive_left_values=exclusive_left_values, exclusive_right_values=exclusive_right_values, 
 			n_rows_left=n_rows_left, n_rows_right=n_rows_right, right_name=right_name, right_name_in_this_column=indicator)
-		self.logging.info("Checking merged dataframe's index...")
+		self.logging.debug("Checking merged dataframe's index...")
 		NeighLib.check_index(merged_dataframe)
 		return merged_dataframe

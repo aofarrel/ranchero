@@ -1,7 +1,7 @@
 ########## drop zone ##############
 tb_but_not_used = ['mycobacteriaceae_family_sam', 'mycobacterium_genus_sam']
 datastore = ['datastore_filetype', 'datastore_region']
-mildly_problematic = ["MB", "mb", "mB", 'BioSampleModel', 'biosamplemodel_sam', 'sample_description_sam', 'library_type_run', 'run_file_version', 'host_disease_sam', 'avgspotlen', 'mybytes', 'library_name', 'sequencing_protocol_exp', 'author', 'continent']
+mildly_problematic = ["MB", "mb", "mB", 'BioSampleModel', 'biosamplemodel_sam', 'sample_description_sam', 'library_type_run', 'run_file_version', 'avgspotlen', 'mybytes', 'library_name', 'sequencing_protocol_exp', 'author']
 
 sample_ids_that_are_not_uuids = [
 	# patient ID stuff

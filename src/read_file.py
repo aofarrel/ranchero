@@ -113,13 +113,17 @@ class FileReader():
 		ignore_polars_read_errors = self._sentinal_handler(ignore_polars_read_errors)
 
 		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, ignore_errors=ignore_polars_read_errors, glob=glob)
-		polars_df = polars_df.drop(drop_columns)
+		if len(drop_columns) != 0:
+			polars_df = polars_df.drop(drop_columns)
+			self.logging.info(f"Dropped {drop_columns}")
 		if explode_upon != None:
 			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), delimiter=explode_upon, drop_new_non_unique=check_index)
 		if check_index: NeighLib.check_index(polars_df)
 		if auto_rancheroize: 
+			self.logging.info("Rancheroizing dataframe from TSV...")
 			polars_df = NeighLib.rancheroize_polars(polars_df)
 			if auto_standardize:
+				self.logging.info("Standardizing dataframe from TSV...")
 				polars_df = Standardizer.standardize_everything(polars_df)
 		return polars_df
 
