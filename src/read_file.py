@@ -273,10 +273,6 @@ class FileReader():
 		self.logging.debug(f"Will become a list (but might be flattened later): {listmakers}")
 		self.logging.debug(f"Already a list: {listexisters}")
 
-		#for already_list_col in listexisters:
-		#	self.logging.debug(f"Examples of already-a-list columns: {already_list_col}:")
-		#	self.logging.debug(polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']))
-
 		grouped_df_ = (
 			polars_df
 			.group_by(sample_index)
@@ -288,6 +284,10 @@ class FileReader():
 				]
 			])
 		)
+
+		NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
+		NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
+
 		return grouped_df_
 
 
