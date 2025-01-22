@@ -18,7 +18,6 @@ equivalence = {
 		'BioProject': ['BioProject', 'bioproject', 'Bioproject'],
 		'bytes': ['bytes', 'Bytes'],
 		'center_name': ['center_name', 'Center Name', 'center_name_insdc', 'insdc_center_name_sam'],
-		'clade': ['clade'],
 		'continent': ['continent'],
 		'country': ['country'],
 		'date_collected': ['date_collected', 'date_collection', 'collection_date_sam', 'date_of_collection_sam', 'date_isolation', 'Collection_Date', 'sample_collection_date_sam_s_dpl127', 'collection_date_orig_sam', 'collection_date_run', 'date_coll', 'date', 'colection_date_sam', 'collectiondateym_sam'],
@@ -42,6 +41,7 @@ equivalence = {
 		'libraryselection': ['libraryselection', 'LibrarySelection'],
 		'librarysource': ['librarysource', 'LibrarySource'],
 		'lineage': ['lineage', 'lineage_sam', 'linege_sam', 'mtb_lineage_sam', 'subspecf_gen_lin_sam', 'literature_lineage', 'note_sam'],
+		'clade': ['clade'],
 		'organism': ['organism', 'sub_species_sam', 'organism_sciname', 'organism_common', 'organism_sam', 'tax_id_sam_ss_dpl29', 'subspecies_sam', 'Organism', 'scientific_name_sam', 'species_sam', 'common_name_sam', 'type_material_sam', 'mycobacterium_type_result_result_sam', 'phenotype_sam', 'scientific_name_run', 'common_name_run'],
 		'platform': ['platform', 'Platform'], # platform_sam and platform_run seem to be something else
 		'primary_search': ['primary_search'],
@@ -61,7 +61,7 @@ columns_to_keep_after_rancheroize = equivalence.keys()
 columns_to_drop_after_rancheroize = [item for value in equivalence.values() for item in value[1:]]
 
 # Special handling for taxoninomic columns -- don't add them to any of the list-to-x stuff below.
-special_taxonomic_handling = {key: value for key, value in equivalence.items() if key in ['clade', 'genotype', 'lineage', 'organism', 'strain']}
+special_taxonomic_handling = {key: value for key, value in equivalence.items() if key in ['genotype', 'lineage', 'organism', 'strain']}
 all_taxoncore_columns = sum(special_taxonomic_handling.values(), [])
 
 # Special handling for host information columns, depending on config settings
@@ -75,7 +75,7 @@ host_info = ['host_info', 'host_disease_stat_sam', 'host_life_stage_sam', 'patho
 
 # In: pl.List() of floats or integers
 # Out: Float
-list_to_float_sum = ['bytes', 'bases', 'mbases', 'mbytes', 'mbytes_sum']
+list_to_float_sum = ['bytes', 'bases', 'mbases', 'mbytes']
 
 # In: pl.List() of pl.Utf8
 # Out: pl.Utf8
@@ -89,32 +89,32 @@ list_to_set_uniq = [
 	'BioSampleModel',
 	'center_name', 
 	'center_name_insdc', 
-	'collection', # typical indicator column
-	'country_1', # intermediate column used in metadata standardization
+	'country_1' # intermediate column used in metadata standardization
 	'datastore_filetype', 
 	'datastore_provider',
 	'isolation_source',
-	'instrument',
 	'host_info',
 	'pheno_source',
 	'primary_search',
-	'region_as_list',
 	'run_index',
 	'sra_study',
-	'libraryselection',
-	'librarylayout',
-	'librarysource',
-	'platform',
 	'SRX_id'
 ]
 
 # Unchanged
 list_to_list_silent = [
+	'assay_type',
 	'avgspotlen',
+	'collection',
 	'geo_loc_name_sam',
 	'geoloc_country_calc',
 	'geoloc_country_or_sea', 
-	'geoloc_info'
+	'geoloc_info', 
+	'instrument',
+	'librarylayout',
+	'libraryselection',
+	'librarysource',
+	'platform',
 ]
 
 # Throw an error (error can be made non-fatal in which case it will fallback on left or right per function settings)
@@ -123,15 +123,17 @@ list_throw_error = ["BioSample", "sample_index"]
 # In: pl.List() of any type
 # Out: Inner type if flattening existing list, falling back on left or right if merge
 list_fallback_or_null = [
+	'country',
 	'host_disease',
 	'host',
 	'host_commonname',
 	'host_confidence',
 	'host_scienname',
-	'country',
-	'continent',
+	'lineage',
+	'clade',
 	'platform',
 	'region',
+	'strain'
 ]
 
 # In: pl.List() of any type
@@ -151,6 +153,7 @@ list_to_null = [
 	'date_collected_year',
 	'date_sequenced',
 	'latlon',
+	'mbytes_sum',
 	'pheno_AMIKACIN',
 	'pheno_BEDAQUILINE',
 	'pheno_CAPREOMYCIN',
@@ -172,6 +175,7 @@ list_to_null = [
 	'pheno_RIFAMPICIN',
 	'pheno_STREPTOMYCIN',
 	'release_date',
+	'SRX_id', 
 	'sra_study'
 ]
 
