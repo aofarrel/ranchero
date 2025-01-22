@@ -173,19 +173,19 @@ sample_source = {
 	'lung': 'lung',
 
 	# lymph node
-	'lymph node': 'Lymph node',
-	'Lymph Node Biopsy': 'Lymph node',
+	'lymph node': 'lymph node',
+	'Lymph Node Biopsy': 'lymph node',
 
 	# lymph nodes
-	'Tissue: Lymph nodes': 'Lymph nodes',
-	'Tissue: lymph nodes': 'Lymph nodes',
-	'lymph nodes': 'Lymph nodes',
+	'Tissue: Lymph nodes': 'lymph nodes',
+	'Tissue: lymph nodes': 'lymph nodes',
+	'lymph nodes': 'lymph nodes',
 
-	'Cervical lymphnode biopsy': 'Lymph node (cervical)',
-	'Cervical lymph node': 'Lymph node (cervical)',
-	'Lung lymph node': 'Lymph node (lung)',
-	'Head lymph node': 'Lymph node (head)',
-	'Pectoral lymph nodes': 'Lymph node (pectoral)',
+	'Cervical lymphnode biopsy': 'lymph node (cervical)',
+	'Cervical lymph node': 'lymph node (cervical)',
+	'Lung lymph node': 'lymph node (lung)',
+	'Head lymph node': 'lymph node (head)',
+	'Pectoral lymph nodes': 'lymph node (pectoral)',
 	
 	'clinical: sputum': 'sputum',
 	'Human patient sputum': 'sputum',
@@ -235,10 +235,22 @@ sample_source = {
 	'Sputum9': 'sputum',
 	'AFB sputum smear': 'sputum (AFB smear)',
 
-
 	'pleural fluid': 'pleural fluid',
 	'pleuralFluid': 'pleural fluid',
 
 	'Pulmonary Sample': 'pulmonary',
 	'PULMONARY': 'pulmonary',
 }
+
+
+if_this_and_that_then = [
+	['(?i)culture', '(?i)sputum', 'culture from sputum'],
+	['(?i)culture', '(?i)feces', 'culture from feces'],
+	['(?i)culture', '(?i)feces', 'culture from feces'],
+	['(?i)scrapate', '(?i)granuloma', 'scrapate of granuloma'],
+	['(?i)biopsy', '(?i)skin', 'biopsy from skin'],
+
+]
+
+
+
