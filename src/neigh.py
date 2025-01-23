@@ -94,7 +94,18 @@ class NeighLib:
 			.value_counts(sort=True) # creates struct[2] column named col, sorted in descending order
 		)
 		counts = counts.unnest(col) # splits col into col and "counts" columns
-		return tuple(counts.row(0))
+		try:
+			return tuple(counts.row(0))
+		except Exception:
+			self.logging.warning(f"Could not calculate mode for {col} -- is it full of nulls?")
+			return ('ERROR', 'N/A')
+
+	def get_a_where_b_is_null(self, polars_df, col_a, col_b):
+		if col_a not in polars_df.columns or col_b not in polars_df.columns:
+			self.logging.warning(f"Tried to get column {col_a} where column {col_b} is pl.Null, but at least one of those columns aren't in the dataframe!")
+			return
+		get_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
+		return get_df
 
 	def get_null_count_in_column(self, polars_df, column_name, warn=True, error=False):
 		series = polars_df.get_column(column_name)
@@ -119,6 +130,9 @@ class NeighLib:
 		else:
 			string_cols = [col for col in all_cols if polars_df.schema[col] == pl.Utf8]
 			list_cols = [col for col in all_cols if polars_df.schema[col] == pl.List(pl.Utf8)]
+
+		self.logging.debug(f"Will be nullifying weird values in these string cols: {string_cols}")
+		self.logging.debug(f"Will be nullifying weird values in these list cols: {list_cols}")
 
 		# use contains_any() for the majority of checks, as it is much faster than iterating through a list + contains()
 		# the downside of contains_any() is that it doesn't allow for regex
@@ -457,7 +471,7 @@ class NeighLib:
 			if polars_df.schema[base_col] is not pl.List and polars_df.schema[right_col] is not pl.List and polars_df.schema[base_col] != polars_df.schema[right_col]:
 				try:
 					polars_df = polars_df.with_columns(pl.col(right_col).cast(polars_df.schema[base_col]).alias(right_col))
-					self.logging.info(f"Cast right column to {polars_df.schema[base_col]}")
+					self.logging.info(f"Cast right column {right_col} to {polars_df.schema[base_col]}")
 				except Exception:
 					polars_df = polars_df.with_columns([
 						pl.col(base_col).cast(pl.Utf8).alias(base_col),
@@ -523,6 +537,7 @@ class NeighLib:
 					polars_df = self.cast_to_list(polars_df, base_col)
 					polars_df = self.cast_to_list(polars_df, right_col)
 				polars_df = self.concat_columns_list(polars_df, base_col, right_col, True)
+				self.logging.debug("Rows with more than one value:")
 				self.logging.debug(self.get_rows_where_list_col_more_than_one_value(polars_df, base_col).select([self.get_index_column(polars_df), base_col]))
 
 			assert base_col in polars_df.columns
@@ -617,9 +632,11 @@ class NeighLib:
 	def rancheroize_polars(self, polars_df, drop_non_mycobact_columns=True, nullify=True, flatten=True, disallow_right=True, check_index=True, norename=False):
 		self.logging.debug(f"Dataframe shape before rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
 		polars_df = self.drop_known_unwanted_columns(polars_df)
+		self.logging.debug(f"Dataframe shape after dropping known unwanted columns: {polars_df.shape[0]}x{polars_df.shape[1]}")
 		self.get_null_count_in_column(polars_df, self.get_index_column(polars_df), warn=True, error=True)
 		if drop_non_mycobact_columns:
 			polars_df = self.drop_non_tb_columns(polars_df)
+			self.logging.debug(f"Dataframe shape after dropping known not-TB columns: {polars_df.shape[0]}x{polars_df.shape[1]}")
 		if nullify:
 			polars_df = self.drop_null_columns(self.nullify(polars_df))
 			self.get_null_count_in_column(polars_df, self.get_index_column(polars_df), warn=True, error=True)

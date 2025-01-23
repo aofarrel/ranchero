@@ -606,28 +606,37 @@ class ProfessionalsHaveStandards():
 		return polars_df
 
 	def unmask_badgers(self, polars_df):
-		"""
-		TODO: this doesn't add a confidence score
-		"""
 		if 'anonymised_badger_id_sam' in polars_df.columns:
 			polars_df = polars_df.with_columns([
 				pl.when((pl.col('anonymised_badger_id_sam').is_not_null()) & (pl.col('host_commonname').is_null()))
 				.then(pl.lit('badger'))
 				.otherwise(pl.col('host_commonname'))
-				.alias('host_commonname')
+				.alias('host_commonname'),
+
+				pl.when((pl.col('anonymised_badger_id_sam').is_not_null()) & (pl.col('host_confidence').is_null()))
+				.then(pl.lit(2))
+				.otherwise(pl.col('host_confidence'))
+				.alias('host_confidence'),
+
+				pl.when((pl.col('anonymised_badger_id_sam').is_not_null()) & (pl.col('host_scienname').is_null()))
+				.then(pl.lit('Meles meles'))
+				.otherwise(pl.col('host_scienname'))
+				.alias('host_scienname')
 			])
 		return polars_df.drop('anonymised_badger_id_sam')
 
 	def unmask_mice(self, polars_df):
-		"""
-		TODO: this doesn't add a confidence score
-		"""
 		if 'mouse_strain_sam' in polars_df.columns:
 			polars_df = polars_df.with_columns([
 				pl.when((pl.col('mouse_strain_sam').is_not_null()) & (pl.col('host_commonname').is_null()))
 				.then(pl.lit('mouse'))
 				.otherwise(pl.col('host_commonname'))
 				.alias('host_commonname'),
+
+				pl.when((pl.col('mouse_strain_sam').is_not_null()) & (pl.col('host_confidence').is_null()))
+				.then(pl.lit(3))
+				.otherwise(pl.col('host_confidence'))
+				.alias('host_confidence'),
 
 				pl.when((pl.col('mouse_strain_sam').is_not_null()) & (pl.col('host_scienname').is_null()))
 				.then(pl.lit('Mus musculus'))
@@ -1045,7 +1054,7 @@ class ProfessionalsHaveStandards():
 			raise ValueError
 		if self.logging.getEffectiveLevel() == 10:
 			self.logging.debug("---- After absolutely everything ----")
-			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='region', col_b='run_index', list_to_match=['ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['country', 'continent'])
+			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='country', col_b='run_index', list_to_match=['ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
 
 	def standardize_TB_lineages(self,
 		drop_non_standarized=True,

@@ -86,8 +86,10 @@ class FileReader():
 		polars_df = polars_df.drop(drop_columns)
 		if check_index: NeighLib.check_index(polars_df)
 		if auto_rancheroize: 
+			self.logging.info("Rancheroizing dataframe from NBCI run selector...")
 			polars_df = NeighLib.rancheroize_polars(polars_df)
 			if auto_standardize:
+				self.logging.info("Standardizing dataframe from NCBI run selector...")
 				polars_df = Standardizer.standardize_everything(polars_df)	
 		return polars_df
 
