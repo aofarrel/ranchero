@@ -153,6 +153,7 @@ submitter = [
 	'ong_twee_hee_rick_sam',
 	'richard_avoi_sam',
 	'valentine_gantul_sam',
+	'ranjan_kumar_nanda_sam',
 	'zainal_arifin_mustapha_sam'
 ]
 

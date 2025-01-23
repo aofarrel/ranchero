@@ -69,36 +69,39 @@ host_disease = {
 }
 
 sample_sources_nonspecific  = [
+	'1',
+	'Biological Sample',
+	'bovine',
+	'dairy cow',
+	'DNA from M. tuberculosis',
 	'DNA',
-	'Mycobacterium tuberculosis',
-	'tuberculosis',
+	'Genomic DNA',
 	'H37Rv', # standardize_sample_source_as_list() will put this in taxoncore first, standardize_sample_source_as_string() will not
 	'Homo sapiens',
 	'human',
+	'M. tuberculosis',
+	'MTB isolates',
 	'Mtb',
 	'MTBC',
-	'1',
-	'bovine',
+	'Mycobacterium tuberculosis',
+	'Mycobacterial Culture',
 	'nan',
-	'Genomic DNA',
-	'dairy cow',
-	'Viet Nam',
-	'to wear a mask',
-	'Yes',
 	'other',
 	'Specimen',
-	'Biological Sample',
-	'DNA from M. tuberculosis'
+	'to wear a mask',
+	'tuberculosis',
+	'Viet Nam',
+	'Yes',
 ]
 
 sample_source_exact_match = {
 	'bronchial': 'bronchial (unspecified)',
 	'Clinical': 'clinical (unspecified)',
-	'laboratory': 'laboratory-obtained strain',
-	'tissue': 'tissue (unspecified)',
 	'Culture': 'culture',
-	'Sputum': 'sputum',
 	'Hospitol': 'hospital',
+	'laboratory': 'laboratory-obtained strain',
+	'Sputum': 'sputum',
+	'tissue': 'tissue (unspecified)',
 }
 
 sample_source = {
@@ -246,7 +249,8 @@ sample_source = {
 if_this_and_that_then = [
 	['(?i)culture', '(?i)sputum', 'culture from sputum'],
 	['(?i)culture', '(?i)feces', 'culture from feces'],
-	['(?i)culture', '(?i)feces', 'culture from feces'],
+	['(?i)culture', '(?i)liver', 'culture from liver'],
+	['(?i)culture', '(?i)eye', 'culture from eye'],
 	['(?i)scrapate', '(?i)granuloma', 'scrapate of granuloma'],
 	['(?i)biopsy', '(?i)skin', 'biopsy from skin'],
 
