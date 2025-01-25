@@ -8,6 +8,7 @@ print(f"Module import time: {time.time() - start:.4f}")
 start_from_scratch = True
 inject = True
 do_run_index_merges = True
+sample_merges = True
 
 module_start = time.time()
 
@@ -41,14 +42,13 @@ def check_stuff(polars_df, name=None):
 		print("primary_search not in polars_df")
 
 	# location
-	"""
 	assert 'geoloc_info' not in polars_df.columns
 	assert 'geoloc_name' not in polars_df.columns
 	#Ranchero.NeighLib.print_a_where_b_is_in_list(polars_df, col_a='country', col_b='run_index', list_to_match=['ERR046972', 'ERR2884698', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
-	if len(Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'country', 'continent')) > 0:
-		print("Found countries without continents")
-		Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'country', 'continent')
-		exit(1)
+	#if len(Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'country', 'continent')) > 0:
+	#	print("Found countries without continents")
+	#	Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'country', 'continent')
+	#	exit(1)
 	if 'country' in polars_df.columns:
 		if Ranchero._NeighLib.get_count_of_x_in_column_y(polars_df, 'Ivory Coast', 'country') > 0:
 			print("Found non-ISO Ivory Coast in country column")
@@ -59,7 +59,6 @@ def check_stuff(polars_df, name=None):
 		print(f"{null_continent} nulls in continent")
 		print(f"{null_country} nulls in country")
 		print(f"{null_region} nulls in region")
-	"""
 	
 	# host
 	if 'host_commonname' in polars_df.columns:
@@ -84,6 +83,7 @@ def check_stuff(polars_df, name=None):
 			exit(1)
 	else:
 		print('clade not in polars_df')
+
 	
 	if 'organism' in polars_df.columns:
 		assert polars_df.schema['organism'] is not Ranchero.pl.List
@@ -94,7 +94,8 @@ def check_stuff(polars_df, name=None):
 			Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'clade', 'organism')
 			exit(1)
 	else:
-		print('clade not in polars_df')
+		print('organism not in polars_df')
+	"""
 
 	if 'lineage' in polars_df.columns:
 		assert polars_df.schema['lineage'] is not Ranchero.pl.List
@@ -105,7 +106,6 @@ def check_stuff(polars_df, name=None):
 		assert polars_df.schema['strain'] is not Ranchero.pl.List
 		null_strain = Ranchero.NeighLib.get_count_of_x_in_column_y(polars_df, None, 'strain')
 		print(f"{null_strain} nulls in strain")
-	"""
 	
 	# date
 	if 'date_sequenced' in polars_df.columns:
@@ -122,7 +122,6 @@ def check_stuff(polars_df, name=None):
 
 	Ranchero.NeighLib.report(polars_df)
 	print(f"{_b_}...Done checking...{_bb_}")
-	
 
 def inital_file_parse():
 	#we don't immediately rancheroize as this is faster (probably)
@@ -136,33 +135,37 @@ def inital_file_parse():
 	start = time.time()
 	Ranchero.to_tsv(tba6, "tba6_no_nonsense.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
+	check_stuff(tba6, "no nonsense")
 
 	# initial rancheroize
 	start, tba6 = time.time(), Ranchero.rancheroize(tba6)
 	print(f"Rancheroized in {time.time() - start:.4f} seconds")
+	# do not check_stuff() here! standardize first!
 
 	start, tba6 = time.time(), Ranchero.standardize_everything(tba6)
 	print(f"Standardized in {time.time() - start:.4f} seconds")
+	check_stuff(tba6, "post standardize")
 
 	start, tba6 = time.time(), Ranchero.drop_lowcount_columns(tba6)
 	print(f"Removed columns with few values in {time.time() - start:.4f}s seconds") # should be done last
 
 	# move to demo.py
 	#print(Ranchero.unique_bioproject_per_center_name(tba6))
-	#Ranchero.print_a_where_b_is_foo(tba6, 'region', 'country', 'CIV', valuecounts=True)
+	#Ranchero.print_a_where_b_is_foo(tba6, 'country', 'BioProject', 'PRJEB9680', valuecounts=True)
 	#Ranchero.NeighLib.print_value_counts(tba6, ['country'])
-
-	check_stuff(tba6)
-	Ranchero.NeighLib.report(tba6)
 
 	start = time.time()
 	Ranchero.to_tsv(tba6, "tba6_standardized.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
-	check_stuff(tba6, "tba6 in memory")
-	print("Reading disk:")
+
+	print("Dataframe in memory:")
+	check_stuff(tba6, 'tba6_standardized in memory')
+
+	print("Dataframe on disk:")
 	what_we_just_wrote = Ranchero.from_tsv("tba6_standardized.tsv", auto_standardize=False)
-	check_stuff(what_we_just_wrote, "tba6 on disk")
+	check_stuff(what_we_just_wrote, 'tba6_standardized on disk')
 	what_we_just_wrote = None
+
 	gc.collect()
 	return tba6
 
@@ -170,10 +173,11 @@ def inject_metadata(tba6):
 	check_stuff(tba6)
 	# DEBUG DEBUG DEBUG
 	#tba6 = Ranchero.add_column_with_this_value(tba6, "collection", "") # THIS MIGHT BE THE CAUSE FOR THE SLOWDOWN
-	#tba6 = Ranchero.add_column_with_this_value(tba6, "collection", None) # POSSIBLE WORKAROUND
+	tba6 = Ranchero.add_column_with_this_value(tba6, "collection", None) # POSSIBLE WORKAROUND
 	# FOR NOW WE ARE BLOCKING THE BIOPROJECT INJECTOR
 
-	#bioproject_injector = Ranchero.injector_from_tsv("./inputs/overrides/injector_with_shorthands.tsv")
+	print(f"{_b_}Creating injectors{_bb_}")
+	bioproject_injector = Ranchero.injector_from_tsv("./inputs/overrides/injector_with_shorthands.tsv")
 	bovis_time = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB18668 - good.tsv")
 	host_overrides = Ranchero.injector_from_tsv("./inputs/overrides/host_overrides.tsv")
 	norway = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB12184 - good.tsv", drop_columns=["literature_lineage"])
@@ -206,16 +210,26 @@ def inject_metadata(tba6):
 	start = time.time()
 	Ranchero.to_tsv(tba6, "tba6_injected.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
+	check_stuff(tba6, "tba6 after injectors in memory")
+
+	print("Dataframe in memory:")
+	check_stuff(tba6, 'time in memory')
+	
+	print("Dataframe on disk:")
+	what_we_just_wrote = Ranchero.from_tsv("tba6_injected.tsv", auto_standardize=False)
+	check_stuff(what_we_just_wrote, 'tba6_injected on disk')
+	what_we_just_wrote = None
+
+	gc.collect()
 	return tba6
+
 
 def run_merges(tba6):
 	merged = tba6
 	tba6 = None # avoid copy-paste mistakes
 	check_stuff(merged, 'tba6 at top of run_merges()')
 
-	# Do SRX stuff first!
-
-	# Merker 2018 SRX stuff
+	# do SRX stuff first!
 	print(f"{_b_}Processing Merker 2018's SRX fields{_bb_}")
 	menardo_2018_srx = Ranchero.from_tsv("./inputs/publications/sample_indexed/Menardo_2018/mendaro_2018_srx.csv", delimiter=',', check_index=False, auto_standardize=False, auto_rancheroize=False)
 	merged = Ranchero.merge_dataframes(merged, menardo_2018_srx, merge_upon="SRX_id", right_name="Menardo_2018", indicator="collection")
@@ -258,11 +272,13 @@ def run_merges(tba6):
 	coll = Ranchero.from_tsv("./inputs/publications/run_indexed/Coll_2018/coll_processed.tsv", auto_standardize=True)
 	coll = Ranchero.add_column_with_this_value(coll, "pheno_source", "Coll_2018")
 	merged = Ranchero.merge_dataframes(merged, coll, merge_upon="run_index", left_name="tba6", right_name="Coll_2018", drop_exclusive_right=True)
+	check_stuff(merged)
 
 	# Coscolla
 	print(f"{_b_}Processing Coscolla{_bb_}")
 	coscolla = Ranchero.from_tsv("./inputs/publications/run_indexed/Coscolla_2021/coscolla_sans_weird.tsv", explode_upon=";", auto_standardize=True)
 	merged = Ranchero.merge_dataframes(merged, coscolla, merge_upon="run_index", left_name="tba6", right_name="Coscolla_2021", drop_exclusive_right=True)
+	check_stuff(merged)
 
 	# CRyPTIC Reuse Table (NOT WALKER 2022)
 	print(f"{_b_}Processing CRyPTIC reuse table{_bb_}")
@@ -272,24 +288,21 @@ def run_merges(tba6):
 		"INH_PHENOTYPE_QUALITY","KAN_PHENOTYPE_QUALITY","LEV_PHENOTYPE_QUALITY","LZD_PHENOTYPE_QUALITY","MXF_PHENOTYPE_QUALITY","RIF_PHENOTYPE_QUALITY",
 		"RFB_PHENOTYPE_QUALITY","ENA_SAMPLE","VCF","REGENOTYPED_VCF"], auto_standardize=True)
 	CRyPTIC = Ranchero.add_column_with_this_value(CRyPTIC, "pheno_source", "CRyPTIC_reuse_table") #PMC9363010
-	merged = Ranchero.merge_dataframes(merged, CRyPTIC, merge_upon="run_index", left_name="tba6", right_name="CRyPTIC_reuse_table", drop_exclusive_right=True)
-
+	merged = Ranchero.merge_dataframes(merged, CRyPTIC, merge_upon="run_index", left_name="tba6", right_name="CRyPTIC", drop_exclusive_right=True)
 	check_stuff(merged)
 
 	# Merker (two of them...)
 	print(f"{_b_}Processing the run-indexed part of Merker 2022{_bb_}")
 	merker = Ranchero.from_tsv("./inputs/publications/run_indexed/Merker_2022 (run)/Merker_clean_run_indeces.tsv", auto_standardize=True)
-	merker = Ranchero.add_column_with_this_value(merker, "pheno_source", "Merker_202_") #PMC9426364
+	merker = Ranchero.add_column_with_this_value(merker, "pheno_source", "Merker_2022") #PMC9426364
 	merged = Ranchero.merge_dataframes(merged, merker, merge_upon="run_index", left_name="tba6", right_name="Merker_2022", drop_exclusive_right=True)
-	# DONT FORGET THE OTHER MERKER PAPER, AND ALSO THE SAMPLE-INDEXED PART
-
 	check_stuff(merged)
+	# DONT FORGET THE OTHER MERKER PAPER, AND ALSO THE SAMPLE-INDEXED PART
 
 	# Napier
 	print(f"{_b_}Processing Napier{_bb_}")
 	napier = Ranchero.from_tsv("./inputs/publications/run_indexed/Napier_2020/napier_samples_github_sans_weird_no_US.csv", delimiter=",", explode_upon="_", auto_standardize=True)
 	merged = Ranchero.merge_dataframes(merged, napier, merge_upon="run_index", right_name="Napier_2020", drop_exclusive_right=True)
-
 	check_stuff(merged)
 
 	# Nimmo
@@ -302,14 +315,12 @@ def run_merges(tba6):
 	nimmo_L4 = Ranchero.standardize_everything(nimmo_L4) # AFTER adding lineage column
 	merged = Ranchero.merge_dataframes(merged, nimmo_L2, merge_upon="run_index", right_name="Nimmo_2024", drop_exclusive_right=True, fallback_on_left=True)
 	merged = Ranchero.merge_dataframes(merged, nimmo_L4, merge_upon="run_index", right_name="Nimmo_2024", drop_exclusive_right=True, fallback_on_left=True)
-
 	check_stuff(merged)
 	
 	# Stucki
 	print(f"{_b_}Processing Stucki{_bb_}")
 	stucki = Ranchero.from_tsv("./inputs/publications/run_indexed/Stucki_2016 (run)/Stucki_2016 - cleaned - by run.tsv", auto_standardize=True)
 	merged = Ranchero.merge_dataframes(merged, stucki, merge_upon="run_index", right_name="Stucki_2016", drop_exclusive_right=True)
-
 	check_stuff(merged)
 
 	# Walker (CRyPTIC cross-study pheno table, NOT THE REUSE TABLE!!)
@@ -318,7 +329,6 @@ def run_merges(tba6):
 	walker = Ranchero.add_column_with_this_value(walker, "pheno_source", "Walker_2022") #PMC7612554
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, walker, merge_upon="run_index", right_name="Walker_2022", indicator="collection", fallback_on_left=True, escalate_warnings=False)
 	print(f"Merged with run-based Walker in {time.time() - start:.4f} seconds")
-
 	check_stuff(merged)
 
 	# the Nextstrain tree
@@ -328,16 +338,21 @@ def run_merges(tba6):
 		drop_columns=["date_collected", 'Pyrazinamide','Capreomycin','Ethambutol','Rifampicin','Isoniazid','Ethionamide','Streptomycin','Pyrazinamide','Fluoroquinolones','Kanamycin','Amikacin','nextstrain_drug_resistance'])
 	merged = Ranchero.merge_dataframes(merged, nextstrain, merge_upon="run_index", right_name="nextstrain_global_tree", drop_exclusive_right=True)
 	print(f"Merged with Nextstrain tree in {time.time() - start:.4f} seconds")
-	
 	check_stuff(merged)
 
 	print(f"{_b_}Finishing up run-based stuff...{_bb_}")
 	merged = Ranchero.standardize_everything(merged) # TODO: this loses about 200 lineages!!!
 	check_stuff(merged)
+	#merged = Ranchero.rancheroize(merged)
+	#check_stuff(merged)
 
 	start = time.time()
 	Ranchero.to_tsv(merged, "./merged_by_run.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
+
+	print(merged.estimated_size(unit='mb'))
+
+	gc.collect()
 	return merged
 
 def sample_index_merges(merged_runs):
@@ -349,19 +364,45 @@ def sample_index_merges(merged_runs):
 	print(f"{_b_}Preparing to swap index{_bb_}")
 	start = time.time()
 	merged_flat = Ranchero.hella_flat(merged)
+	print(f"Flattened everything in {time.time() - start:.4f} seconds")
+	check_stuff(merged_flat)
+
 	merged_by_sample = Ranchero.run_index_to_sample_index(merged_flat)
 	#Ranchero.to_tsv(merged_by_sample, "./merged_per_sample_not_flat.tsv")
 	merged_by_sample = Ranchero.hella_flat(merged_by_sample)
 	print(f"{_b_}Converted run indeces to sample indeces in {time.time() - start:.4f} seconds{_bb_}")
 	Ranchero.to_tsv(merged_by_sample, "./merged_per_sample.tsv")
-	
+
+	print(merged_by_sample.estimated_size(unit='mb'))
+	merged = merged_by_sample
+	gc.collect()
+
+	"""
+	# Merker (sample side of 2022)
+	print(f"{_b_}Processing Merker's sample-indexed stuff{_bb_}")
+	merker_samples = Ranchero.from_tsv("./inputs/publications/sample_indexed/Merker_2022 [XRS]/Merker_cleaned_XRS_id.tsv", auto_rancheroize=False, glob=False, check_index=False)
+	merker_ids = Ranchero.from_tsv("./inputs/publications/sample_indexed/Merker_2022 [XRS]/ERS-to-SAME-incomplete.txt", auto_rancheroize=False, glob=False, check_index=False)
+	merker_samples = Ranchero.NeighLib.add_column_of_just_this_value(merker_samples, "pheno_source", "Merker_2022_PMC9426364")
+	merker_sample_fixed = Ranchero.merge_dataframes(merker_samples, merker_ids, merge_upon="XRS_id")
+	merker_sample_fixed = Ranchero.standardize_everything(merker_sample_fixed)
+	merged = Ranchero.merge_dataframes(merged, merker_sample_fixed, merge_upon="sample_index", right_name="Merker_2022", indicator="collection")
+
 	Ranchero.NeighLib.print_value_counts(merged_by_sample, ['clade', 'organism', 'lineage', 'strain'])
 	check_stuff(merged_by_sample)
+
+	# Shuaib
+	# keeps breaking!!
+	#print(f"{_b_}Processing Shuaib{_bb_}")
+	#shuaib_xrs = Ranchero.from_tsv("./inputs/publications/sample_indexed/Shuaib_2022 (PMC9222951)/shuaib_2022_XRS.tsv", auto_rancheroize=False, glob=False, check_index=False)
+	#print(shuaib_xrs)
+	#merged = Ranchero.standardize_countries(Ranchero.merge_dataframes(merged, shuaib_xrs, merge_upon="XRS_id", right_name="Shuaib_2022_partial", indicator="collection"))
+	"""
 
 	# atypical
 	#print(f"{_b_}Processing atypical samples{_bb_}")
 	#atypical = Ranchero.from_tsv("./inputs/atypical.tSV")
 	#merged = Ranchero.merge_dataframes(merged, atypical, merge_upon="sample_index", left_name="tba6", right_name="atypical_genotypes", drop_exclusive_right=False)
+	
 
 	# Andres
 	print(f"{_b_}Processing Andres{_bb_}")
@@ -369,7 +410,6 @@ def sample_index_merges(merged_runs):
 	Andres_pheno = Ranchero.add_column_with_this_value(Andres_pheno, "pheno_source", "Andres_2019") # PMC6355586
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, Andres_pheno, merge_upon="sample_index", right_name="Andres_2019", indicator="collection")
 	print(f"Merged with Andres in {time.time() - start:.4f} seconds")
-
 	check_stuff(merged)
 
 	# Bateson
@@ -393,23 +433,12 @@ def sample_index_merges(merged_runs):
 	merged = Ranchero.merge_dataframes(merged, menardo_2018, merge_upon="sample_index", right_name="Menardo_2018", indicator="collection")
 	merged = Ranchero.merge_dataframes(merged, menardo_2021, merge_upon="sample_index", right_name="Menardo_2021", indicator="collection", escalate_warnings=False)
 	print(f"Merged with menardos in {time.time() - start:.4f} seconds")
-
-	check_stuff(merged)
-
-	# Merker (sample side of 2022)
-	print(f"{_b_}Processing Merker's sample-indexed stuff{_bb_}")
-	merker_samples = Ranchero.from_tsv("./inputs/publications/sample_indexed/Merker_2022 [XRS]/Merker_cleaned_XRS_id.tsv", auto_rancheroize=False, glob=False, check_index=False)
-	merker_ids = Ranchero.from_tsv("./inputs/publications/sample_indexed/Merker_2022 [XRS]/ERS-to-SAME-incomplete.txt", auto_rancheroize=False, glob=False, check_index=False)
-	merker_samples = Ranchero.add_column_with_this_value(merker_samples, "pheno_source", "Merker_2022") #PMC9426364
-	merker_sample_fixed = Ranchero.merge_dataframes(merker_samples, merker_ids, merge_upon="XRS_id")
-	merker_sample_fixed = Ranchero.standardize_everything(merker_sample_fixed)
-	merged = Ranchero.merge_dataframes(merged, merker_sample_fixed, merge_upon="sample_index", right_name="Merker_2022", indicator="collection")
-
 	check_stuff(merged)
 
 	print(f"{_b_}Processing CSISP ref set{_bb_}")
 	ref_set_CSISP = Ranchero.from_tsv("./inputs/publications/sample_indexed/ref_set_CSISP.tsv", auto_rancheroize=False, glob=False, check_index=False)
 	merged = Ranchero.merge_dataframes(merged, ref_set_CSISP, merge_upon="sample_index", right_name="ref_set_CSISP", indicator="collection")
+	check_stuff(merged)
 
 	# standford data
 	print(f"{_b_}Processing Standford{_bb_}")
@@ -428,9 +457,8 @@ def sample_index_merges(merged_runs):
 	start, merged = time.time(), Ranchero.cleanup_dates(merged)
 	print(f"Cleaned up dates so far in {time.time() - start:.4f} seconds")
 
-	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
 	Ranchero.NeighLib.print_value_counts(merged, ['country', 'region'])
-	check_stuff(merged)
+
 
 	#PRJEB9680 = Ranchero.from_tsv"./inputs/PRJEB9680 superset.tsv")
 	#start = time.time()
@@ -490,9 +518,9 @@ def sample_index_merges(merged_runs):
 
 	# this will take a while, but will fix missing clade columns since we added some taxoncore information over time,
 	# and will fix goofy mistakes I missed (hopefully)
-	print(f"{_b_}One last standardization pass{_bb_}")
-	merged = Ranchero.standardize_everything(merged, skip_sample_source=True)
-	print(f"Re-standardized in {time.time() - start:.4f} seconds")
+	#print(f"{_b_}One last standardization pass{_bb_}")
+	#merged = Ranchero.standardize_everything(merged, skip_sample_source=True)
+	#print(f"Re-standardized in {time.time() - start:.4f} seconds")
 
 	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
 	check_stuff(merged)
