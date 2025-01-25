@@ -276,7 +276,6 @@ class Merger:
 									how="outer",
 								)
 								.with_columns(
-									# drop_nulls because concat_list() propagates them
 									concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls()
 								)
 								.drop([left_column, f"{left_column}_right", f"{merge_upon}_right"])

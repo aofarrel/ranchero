@@ -78,16 +78,9 @@ class NeighLib:
 		self.super_print_pl(print_df.select(print_columns), header)
 		if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
 
-	def get_a_where_b_is_null(self, polars_df, col_a, col_b):
-		if col_a not in polars_df.columns or col_b not in polars_df.columns:
-			self.logging.warning(f"Tried to get column {col_a} where column {col_b} is pl.Null, but at least one of those columns aren't in the dataframe!")
-			return
-		get_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
-		return get_df
-
 	def print_a_where_b_is_null(self, polars_df, col_a, col_b, alsoprint=None, valuecounts=False):
 		if col_a not in polars_df.columns or col_b not in polars_df.columns:
-			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is pl.Null, but at least one of those columns aren't in the dataframe!")
+			self.logging.warning(f"Tried to print column {col_a} where column {col_b} equals {foo}, but at least one of those columns aren't in the dataframe!")
 			return
 		print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
 		print_columns = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
@@ -106,6 +99,13 @@ class NeighLib:
 		except Exception:
 			self.logging.warning(f"Could not calculate mode for {col} -- is it full of nulls?")
 			return ('ERROR', 'N/A')
+
+	def get_a_where_b_is_null(self, polars_df, col_a, col_b):
+		if col_a not in polars_df.columns or col_b not in polars_df.columns:
+			self.logging.warning(f"Tried to get column {col_a} where column {col_b} is pl.Null, but at least one of those columns aren't in the dataframe!")
+			return
+		get_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
+		return get_df
 
 	def get_null_count_in_column(self, polars_df, column_name, warn=True, error=False):
 		series = polars_df.get_column(column_name)
@@ -137,6 +137,7 @@ class NeighLib:
 		# use contains_any() for the majority of checks, as it is much faster than iterating through a list + contains()
 		# the downside of contains_any() is that it doesn't allow for regex
 		# in either case, we do string columns first, then list columns
+		##traceback.print_stack()
 		self.logging.debug("Nullifying with contains_any()")
 		polars_df = polars_df.with_columns([
 			pl.when(pl.col(col).str.contains_any(null_values.nulls_pl_contains_any, ascii_case_insensitive=True))
@@ -152,6 +153,7 @@ class NeighLib:
 		self.logging.debug("Nullifying with contains()")
 		contains_list = null_values.nulls_pl_contains if no_match_NA else null_values.nulls_pl_contains_plus_NA
 		for null_value in contains_list:
+			#self.logging.debug(f"-->Nullifying {null_value}...")
 			polars_df = polars_df.with_columns([
 				pl.when(pl.col(col).str.contains(null_value))
 				.then(None)
@@ -500,7 +502,7 @@ class NeighLib:
 			
 			elif base_col in kolumns.list_fallback_or_null:
 				if escalate_warnings:
-					self.logging.error(f"[kolumns.list_fallback_or_null] {base_col} --> Fatal error due to escalate_warnings=True")
+					self.logging.error(f"[list_fallback_or_null] {base_col} --> Fatal error due to escalate_warnings=True")
 					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col, index_column]), f"conflicts")
 					exit(1)
 				else:
