@@ -104,7 +104,7 @@ class RancheroConfig:
 		self.intermediate_files = False
 
 		# Log level -- logging.DEBUG = 10, logging.INFO = 20, etc
-		self.loglevel = logging.INFO
+		self.loglevel = logging.DEBUG
 
 		# If 'platform' and 'layout' columns exist and have type pl.Utf8 (string), remove all samples that aren't
 		# "PAIRED" for 'layout' and "ILLUMINA" for 'platform'
