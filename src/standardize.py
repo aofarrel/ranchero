@@ -32,7 +32,8 @@ class ProfessionalsHaveStandards():
 		else:
 			return arg
 
-	def standardize_everything(self, polars_df, add_expected_nulls=True, assume_organism="Mycobacterium tuberculosis", assume_clade="tuberculosis", skip_sample_source=False):
+	def standardize_everything(self, polars_df, add_expected_nulls=True, assume_organism="Mycobacterium tuberculosis", assume_clade="tuberculosis", skip_sample_source=False, force_strings=True,
+		organism_fallback=None, clade_fallback=None):
 		if any(column in polars_df.columns for column in ['geoloc_info', 'country', 'region']):
 			self.logging.info("Standardizing countries...")
 			polars_df = self.standardize_countries(polars_df)
@@ -48,7 +49,7 @@ class ProfessionalsHaveStandards():
 		
 		if 'isolation_source' in polars_df.columns and not skip_sample_source:
 			self.logging.info("Standardizing isolation sources...")
-			polars_df = self.standardize_sample_source(polars_df) # must be before taxoncore and host
+			polars_df = self.standardize_sample_source(polars_df) # must be before taxoncore and host, no need to force_strings as its already forced
 		
 		if 'host' in polars_df.columns:
 			self.logging.info("Standardizing host organisms...")
@@ -60,34 +61,40 @@ class ProfessionalsHaveStandards():
 		
 		if any(column in polars_df.columns for column in ['genotype', 'lineage', 'strain', 'organism']):
 			self.logging.info("Standardizing lineage, strain, and mycobacterial scientific names... (this may take a while)")
-			polars_df = self.sort_out_taxoncore_columns(polars_df)
+			polars_df = self.sort_out_taxoncore_columns(polars_df, force_strings=force_strings)
 		elif add_expected_nulls:
 			if 'organism' not in polars_df.columns:
 				polars_df = NeighLib.add_column_of_just_this_value(polars_df, 'organism', assume_organism)
 			if 'clade' not in polars_df.columns:
 				polars_df = NeighLib.add_column_of_just_this_value(polars_df, 'clade', assume_clade)
 
+		if organism_fallback is not None:
+			polars_df = polars_df.with_columns(pl.col('organism').fill_null(organism_fallback))
+		if clade_fallback is not None:
+			polars_df = polars_df.with_columns(pl.col('organism').fill_null(clade_fallback))
+
 		polars_df = self.drop_no_longer_useful_columns(polars_df)
-		polars_df = NeighLib.check_index(polars_df)
+		polars_df = NeighLib.null_lists_of_len_zero(NeighLib.rancheroize_polars(polars_df, nullify=False))
 		return polars_df
 
 	def standardize_sample_source(self, polars_df):
 		if polars_df.schema['isolation_source'] == pl.List:
-			return self.standardize_sample_source_as_list(polars_df)
+			polars_df = self.standardize_sample_source_as_list(polars_df)
+			return polars_df
 		else:
 			return self.standardize_sample_source_as_string(polars_df)
 
 	def inject_metadata(self, polars_df: pl.DataFrame, metadata_dictlist, dataset=None, overwrite=False):
 		"""
 		Modify a Rancheroized polars_df with BioProject-level metadata as controlled by a dictionary. For example:
-		metadata_dictlist=[{"BioProject": "PRJEB15463", "country": "DRC", "region": "Kinshasa"}]
+		metadata_dictlist=[{"BioProject": "PRJEB15463", "country": "COD", "region": "Kinshasa"}]
 
 		Will create these polars expressions if overwrite is False:
-		pl.when(pl.col("BioProject") == "PRJEB15463").and_(pl.col("country").is_null()).then(pl.lit("DRC")).otherwise(pl.col("country")).alias("country"), 
+		pl.when(pl.col("BioProject") == "PRJEB15463").and_(pl.col("country").is_null()).then(pl.lit("COD")).otherwise(pl.col("country")).alias("country"), 
 		pl.when(pl.col("BioProject") == "PRJEB15463").and_(pl.col("region").is_null()).then(pl.lit("Kinshasa")).otherwise(pl.col("region")).alias("region")
 
 		If overwrite=True:
-		pl.when(pl.col("BioProject") == "PRJEB15463").then(pl.lit("DRC")).otherwise(pl.col("country")).alias("country"), 
+		pl.when(pl.col("BioProject") == "PRJEB15463").then(pl.lit("COD")).otherwise(pl.col("country")).alias("country"), 
 		pl.when(pl.col("BioProject") == "PRJEB15463").then(pl.lit("Kinshasa")).otherwise(pl.col("region")).alias("region")
 		"""
 		indicators = []
@@ -102,23 +109,25 @@ class ProfessionalsHaveStandards():
 		for ordered_dictionary in metadata_dictlist:
 			# {"BioProject": "PRJEB15463", "country": "DRC", "region": "Kinshasa"}
 			match = ordered_dictionary.popitem(last=False) # FIFO
-			match_key, match_value = match[0], match[1] # "BioProject", "PRJEB15463"
+			match_column, match_value = match[0], match[1] # "BioProject", "PRJEB15463" (ie, when BioProject is PRJEB15463)
 
-			for key, value in ordered_dictionary.items():
-				self.logging.debug(f"key {key}, value {value}, match_key {match_key}, match_value {match_value}")
+			for write_column, write_value in ordered_dictionary.items():
+				if polars_df.schema[write_column] == pl.List and type(write_value) is not list:
+					write_value = [write_value] # to avoid polars.exceptions.InvalidOperationError
+				#self.logging.debug(f"write_column {write_column} ({polars_df.schema[write_column]}), write_value {write_value} ({type(write_value)}), match_column {match_column} ({type(match_column)}), match_value {match_value} ({type(match_value)})") # extremely verbose
 				if overwrite:
 					polars_expressions = [
-						pl.when(pl.col(match_key) == match_value)
-						.then(pl.lit(value))
-						.otherwise(pl.col(key))
-						.alias(key)
+						pl.when(pl.col(match_column) == match_value)
+						.then(pl.lit(write_value))
+						.otherwise(pl.col(write_column))
+						.alias(write_column)
 					]
 				else:
 					polars_expressions = [
-						pl.when((pl.col(match_key) == match_value).and_(pl.col(key).is_null()))
-						.then(pl.lit(value))
-						.otherwise(pl.col(key))
-						.alias(key)
+						pl.when((pl.col(match_column) == match_value).and_(pl.col(write_column).is_null()))
+						.then(pl.lit(write_value))
+						.otherwise(pl.col(write_column))
+						.alias(write_column)
 					]
 				polars_df = polars_df.with_columns(polars_expressions)
 
@@ -153,6 +162,7 @@ class ProfessionalsHaveStandards():
 		"""
 		Replace a pl.Utf8 or pl.List(pl.Utf8) column's values with the values in a dictionary per its key-value pairs.
 		Case-insensitive. If substrings, will match substrings (ex: "US Virgin Islands" matches "US")
+		If match_col is pl.List, if any element in the list matches, that is considered a match.
 
 		Matched and Written columns are not started over if already existed in case this is being called in a for loop
 		"""
@@ -168,7 +178,8 @@ class ProfessionalsHaveStandards():
 		if substrings and polars_df.schema[match_col] == pl.Utf8:
 			found_a_match = pl.col(match_col).str.contains(f"(?i){key}")
 		elif substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
-			found_a_match = pl.col(match_col).list.contains(f"(?i){key}").any()
+			#found_a_match = pl.col(match_col).list.contains(f"(?i){key}").any() # doesn't properly match substrings
+			found_a_match = pl.col(match_col).list.eval(pl.element().str.contains(f"(?i){key}")).list.any()
 		elif not substrings and polars_df.schema[match_col] == pl.Utf8:
 			found_a_match = pl.col(match_col).str.to_lowercase() == key.lower()
 		elif not substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
@@ -179,9 +190,12 @@ class ProfessionalsHaveStandards():
 	
 		# write_col expression -- true if write column is empty list, empty string, or pl.Null
 		if polars_df.schema[write_col] == pl.List:
-			write_col_is_empty = (pl.col(write_col).is_null()).or_(pl.col(write_col).list.len() < 1)
+			write_col_is_empty = ((pl.col(write_col).is_null()).or_(pl.col(write_col).list.len() < 1))
+			# also make sure we can write to the value to the list column
+			if type(value) is not list:
+				value = [value]
 		elif polars_df.schema[write_col] == pl.Utf8:
-			write_col_is_empty = (pl.col(write_col).is_null()).or_(pl.col(write_col).str.len_bytes() == 0)
+			write_col_is_empty = ((pl.col(write_col).is_null()).or_(pl.col(write_col).str.len_bytes() == 0))
 		else:
 			write_col_is_empty = pl.col(write_col).is_null()
 
@@ -220,9 +234,10 @@ class ProfessionalsHaveStandards():
 
 		if remove_match_from_list and polars_df.schema[match_col] == pl.List(pl.Utf8):
 			if substrings:
-				filter_exp = pl.element.str.contains(key)
+				filter_exp = ~pl.element().str.contains(key)
 			else:
 				filter_exp = pl.element().str.to_lowercase() != key.lower()
+			
 			polars_df = polars_df.with_columns([
 				pl.when(found_a_match)
 				.then(pl.col(match_col).list.eval(pl.element().filter(filter_exp)))
@@ -241,16 +256,17 @@ class ProfessionalsHaveStandards():
 	def standardize_host_disease(self, polars_df):
 		assert 'host_disease' in polars_df.columns
 		for host_disease, simplified_host_disease in sample_sources.host_disease_exact_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=True)
+			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=True, overwrite=True)
 		for host_disease, simplified_host_disease in sample_sources.host_disease.items():
-			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=False)
+			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=False, overwrite=True)
 		return polars_df
 
-	def standardize_sample_source_as_list(self, polars_df, write_hosts=True, write_lineages=True):
+	def standardize_sample_source_as_list(self, polars_df, write_hosts=True, write_lineages=True, write_host_disease=True):
 		assert 'isolation_source' in polars_df.columns
 		assert polars_df.schema['isolation_source'] == pl.List
 
 		if write_lineages:
+			self.logging.info("Extracting taxonomic information from isolation_source...")
 			if 'lineage_sam' in polars_df.columns and polars_df.schema['lineage_sam'] == pl.Utf8:
 				lineage_column, skip_lineage = 'lineage_sam', False
 			elif 'lineage' in polars_df.columns and polars_df.schema['lineage'] == pl.Utf8:
@@ -268,82 +284,101 @@ class ProfessionalsHaveStandards():
 			
 			if not skip_lineage:
 				polars_df = polars_df.with_columns([
-					pl.when(
-						pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)lineage4.6.2.2')).list.any()
-					)
+					pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)lineage4.6.2.2')).list.any())
 					.then(pl.lit('lineage4.6.2.2'))
 					.otherwise(pl.col(lineage_column))
 					.alias(lineage_column)
 				])
 			if not skip_strain:
 				polars_df = polars_df.with_columns([
-					pl.when(
-						pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)H37Rv')).list.any()
-					)
+					pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)H37Rv')).list.any())
 					.then(pl.lit('H37Rv'))
 					.otherwise(pl.col(strain_column))
 					.alias(strain_column)
 				])
 
 		if write_hosts and 'host' in polars_df.columns:
-			human = pl.lit(['Homo sapiens']) if polars_df.schema['host'] == pl.List else pl.lit('Homo sapiens') 
-			mouse = pl.lit(['Mus musculus']) if polars_df.schema['host'] == pl.List else pl.lit('Mus musculus') 
-			cow = pl.lit(['Bos tarus']) if polars_df.schema['host'] == pl.List else pl.lit('Bos tarus') 
+			self.logging.info("Extracting host information from isolation_source...")
+			human = pl.lit(['Homo sapiens']) if polars_df.schema['host'] == pl.List else pl.lit('Homo sapiens') # high-confidence
+			mouse = pl.lit(['Mus musculus']) if polars_df.schema['host'] == pl.List else pl.lit('mouse') # mid-confidence
+			cow = pl.lit(['Bos tarus']) if polars_df.schema['host'] == pl.List else pl.lit('cattle') # mid-confidence 
+			patient = pl.lit(['patient']) if polars_df.schema['host'] == pl.List else pl.lit('patient') # low-confidence human 
+			that_one_tick = pl.lit(['Rhipicephalus microplus']) if polars_df.schema['host'] == pl.List else pl.lit('Rhipicephalus microplus')
+			south_american_sea_lion = pl.lit(['Otaria flavescens']) if polars_df.schema['host'] == pl.List else pl.lit('Otaria flavescens')
+			vet = pl.lit(['veterinary']) if polars_df.schema['host'] == pl.List else pl.lit('veterinary')
+			
 			polars_df = polars_df.with_columns([
-				pl.when(
-					pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)human|sapiens')).list.any()
-				)
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)human|sapiens')).list.any())
 				.then(human)
 				.otherwise(pl.col('host'))
 				.alias('host')
 			])
 			polars_df = polars_df.with_columns([
-				pl.when(
-					pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)mouse|musculus')).list.any()
-				)
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)mouse|musculus')).list.any())
 				.then(mouse)
 				.otherwise(pl.col('host'))
 				.alias('host')
 			])
 			polars_df = polars_df.with_columns([
-				pl.when(
-					pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)cow|taurus')).list.any() # do not match "bovine" as that can be taxoncore
-				)
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)cow|taurus|dairy|beef')).list.any()) # do not match "bovine" as that could be taxoncore
 				.then(cow)
 				.otherwise(pl.col('host'))
 				.alias('host')
 			])
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('Affedcted Herd')).list.any()) # do not match "bovine" as that could be taxoncore
+				.then(cow)
+				.otherwise(pl.col('host'))
+				.alias('host')
+			])
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)patient|children')).list.any())
+				.then(human)
+				.otherwise(pl.col('host'))
+				.alias('host')
+			])
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('Rhipicephalus')).list.any())
+				.then(that_one_tick)
+				.otherwise(pl.col('host'))
+				.alias('host')
+			])
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('Otaria flavescens')).list.any())
+				.then(south_american_sea_lion)
+				.otherwise(pl.col('host'))
+				.alias('host')
+			])
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)vetrinary|veterinary|animal')).list.any())
+				.then(vet)
+				.otherwise(pl.col('host'))
+				.alias('host')
+			])
+			
 
-		# and now, the stuff in the actual sample source column 
-		for unhelpful_value in sample_sources.sample_sources_nonspecific:
+		if write_host_disease:
+			self.logging.info("Extracting host_disease...")
+			for host_disease, simplified_host_disease in sample_sources.host_disease_exact_match.items():
+				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=False, overwrite=False, remove_match_from_list=True)
+
+			# DEBUG
+			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
+
+		# here's where we actually beginning handling the stuff for this actual column!
+		for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			polars_df = polars_df.with_columns(
 				pl.col('isolation_source').list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias('isolation_source')
 			)
 
-		for sample_source, simplified_sample_source in sample_sources.sample_source.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=True)
-		for sample_source, simplified_sample_source in sample_sources.sample_source_exact_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=False)
-
-		for this, that, then in sample_sources.if_this_and_that_then:
-			polars_df = polars_df.with_columns([
-				pl.when(
-					pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any()
-					.and_(
-						pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any()
-					)
-				)
-				.then(pl.lit([then]))
-				.otherwise(pl.col('isolation_source'))
-				.alias('isolation_source')
-			])
-
-
+		# if there's even a whiff of simulation, declare the whole list simulated
+		self.logging.info("Looking for simulated data...")
 		polars_df = polars_df.with_columns([
 			pl.when(
 				pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)simulated')).list.any()
+				.or_(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)in silico')).list.any())
 			)
-			.then(pl.lit(['simulated']))
+			.then(pl.lit(['simulated/in silico']))
 			.otherwise(pl.col('isolation_source'))
 			.alias('isolation_source')
 		])
@@ -352,29 +387,70 @@ class ProfessionalsHaveStandards():
 		polars_df = polars_df.with_columns([
 			pl.when(
 				pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)laboratory strain')).list.any()
-				.or_(
-					pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)lab strain')).list.any()
-				)
+				.or_(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)lab strain')).list.any())
 			)
 			.then(pl.lit(['laboratory strain']))
 			.otherwise(pl.col('isolation_source'))
 			.alias('isolation_source')
 		])
 
-		# do this one last
+		# AFTER we have cleaned up very obvious things, from now on, write to a NEW COLUMN to help avoid accidentally overwriting past iterations (eg "culture from sputum" --> "sputum" or "culture")
+		polars_df = NeighLib.add_column_of_just_this_value(polars_df, 'neo_isolation_source', None)
+
+		for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+			this_and_that = pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any().and_(pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any())
+			polars_df = polars_df.with_columns([
+				pl.when(this_and_that)
+				.then(pl.lit(then))
+				.otherwise(pl.col('neo_isolation_source')) # avoid overwriting previous iterations
+				.alias('neo_isolation_source')
+
+				# this goes from 30 iterations per second to 30 seconds per iteration! yikes!
+				#pl.when(this_and_that)
+				#.then(None)
+				#.otherwise(pl.col('isolation_source'))
+				#.alias('isolation_source')
+			])
+		
+		for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source.items(), desc="Checking for fuzzy matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=False, remove_match_from_list=True)
+		for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source_exact_match.items(), desc="Checking for exact matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
+
+		self.logging.info("Cleaning up...")
+
+		# if it's a culture, then it's a culture. end of story.
 		polars_df = polars_df.with_columns([
-			pl.when(
-				pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)culture')).list.any()
-			)
-			.then(pl.lit(['culture']))
-			.otherwise(pl.col('isolation_source'))
-			.alias('isolation_source')
+			pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)culture')).list.any())
+			.then(pl.lit('culture'))
+			.otherwise(pl.col('neo_isolation_source'))
+			.alias('neo_isolation_source')
+		])
+
+		# very last bit: drop any element of the list that contains a number, as that's likely a sample number. this is done last
+		# to allow sample numbers within actually useful strings to still have their useful string bits extracted
+		polars_df = polars_df.with_columns([
+			pl.col('isolation_source').list.eval(
+				pl.element().filter(~pl.element().str.contains(r'\d'))
+			).alias('isolation_source')
 		])
 		
-		self.logging.info(f"The isolation_source column has type list. We will be .join()ing them into strings.") # done AFTER most standardization
+		# turn remaining isolation_source into string and merge into neo_isolation_source
 		polars_df = polars_df.with_columns(
-			pl.col("isolation_source").list.join(", ").alias("isolation_source")
+			pl.when(pl.col('neo_isolation_source').is_null().and_(pl.col('isolation_source').is_not_null().and_(pl.col('isolation_source').list.len() > 0)))
+			.then(pl.lit("As reported: ") + pl.col('isolation_source').list.join(", "))
+			.otherwise(pl.col('neo_isolation_source'))
+			.alias('neo_isolation_source')
 		)
+
+		polars_df = polars_df.drop(['isolation_source']).rename({'neo_isolation_source': 'isolation_source'})
+		
+		assert polars_df.schema['isolation_source'] != pl.List
+
+		#self.logging.info(f"The isolation_source column has type list. We will be .join()ing them into strings.") # done AFTER most standardization
+		#polars_df = polars_df.with_columns(
+		#	pl.col("isolation_source").list.join(", ").alias("isolation_source")
+		#)
 
 		return polars_df
 
@@ -382,9 +458,9 @@ class ProfessionalsHaveStandards():
 		assert 'isolation_source' in polars_df.columns
 		assert polars_df.schema['isolation_source'] == pl.Utf8
 		for sample_source, simplified_sample_source in sample_sources.sample_source_exact_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=False)
+			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=True)
 		for sample_source, simplified_sample_source in sample_sources.sample_source.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=True)
+			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=True)
 		return polars_df
 	
 	def standarize_hosts(self, polars_df, eager=True):
@@ -414,7 +490,7 @@ class ProfessionalsHaveStandards():
 		
 		for host, (sciname, confidence, streetname) in host_species.species.items():
 			polars_df = polars_df.with_columns([
-				pl.when(pl.col('host').str.contains(host))
+				pl.when(pl.col('host').str.contains(f'(?i){host}'))
 				.then(pl.lit(sciname))
 				.otherwise(
 					pl.when(pl.col('host_scienname').is_not_null())
@@ -422,7 +498,7 @@ class ProfessionalsHaveStandards():
 					.otherwise(None))
 				.alias("host_scienname"),
 				
-				pl.when(pl.col('host').str.contains(host))
+				pl.when(pl.col('host').str.contains(f'(?i){host}'))
 				.then(pl.lit(confidence))
 				.otherwise(
 					pl.when(pl.col('host_confidence').is_not_null())
@@ -430,7 +506,7 @@ class ProfessionalsHaveStandards():
 					.otherwise(None))
 				.alias("host_confidence"),
 				
-				pl.when(pl.col('host').str.contains(host))
+				pl.when(pl.col('host').str.contains(f'(?i){host}'))
 				.then(pl.lit(streetname))
 				.otherwise(
 					pl.when(pl.col('host_commonname').is_not_null())
@@ -684,7 +760,7 @@ class ProfessionalsHaveStandards():
 		if self.cfg.taxoncore_ruleset is None:
 			raise ValueError("A taxoncore ruleset failed to initialize, so we cannot use function taxoncore_iterate_rules!")
 		
-		for when, strain, lineage, organism, bacterial_group, comment in tqdm((entry.values() for entry in self.cfg.taxoncore_ruleset), desc="Taxonomy", total=len(self.cfg.taxoncore_ruleset),  ascii='➖🌱🐄', bar_format='{desc:<10.9}{percentage:3.0f}%|{bar:12}{r_bar}'):
+		for when, strain, lineage, organism, bacterial_group, comment in tqdm((entry.values() for entry in self.cfg.taxoncore_ruleset), desc="Standardizing taxonomy", total=len(self.cfg.taxoncore_ruleset),  ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			if strain is pl.Null and lineage is pl.Null:
 				polars_df = self.taxoncore_GO(polars_df, when, i_group=bacterial_group, i_organism=organism)
 			elif strain is pl.Null:
@@ -696,7 +772,7 @@ class ProfessionalsHaveStandards():
 				polars_df = self.taxoncore_GOLS(polars_df, when,  i_group=bacterial_group, i_organism=organism, i_lineage=lineage, i_strain=strain)
 		return polars_df
 
-	def sort_out_taxoncore_columns(self, polars_df, rm_phages=_cfg_rm_phages):
+	def sort_out_taxoncore_columns(self, polars_df, rm_phages=_cfg_rm_phages, force_strings=True):
 		"""
 		Some columns in polars_df will be in list all_taxoncore_columns. We want to use these taxoncore columns to create three new columns:
 		* i_organism should be of form "Mycobacterium" plus one more word, with no trailing "subsp." or "variant", if a specific organism can be imputed from a taxoncore column, else null
@@ -718,16 +794,15 @@ class ProfessionalsHaveStandards():
 		rm_phages = self._sentinal_handler(rm_phages)
 		if group_column_name not in kolumns.columns_to_keep_after_rancheroize:
 			self.logging.warning(f"Bacterial group column will have name {group_column_name}, but might get removed later. Add {group_column_name} to kolumns.equivalence!")
-		if 'organism' in polars_df.columns and rm_phages:
-			polars_df = self.rm_all_phages(polars_df)
 		merge_these_columns = [col for col in polars_df.columns if col in sum(kolumns.special_taxonomic_handling.values(), [])]
-
 		for col in merge_these_columns:
 			self.logging.debug(f"Incoming taxoncore column {col} is type {polars_df.schema[col]}")
 			if polars_df.schema[col] == pl.List:
 				polars_df = polars_df.with_columns(pl.col(col).list.join(", ").alias(col))
 				self.logging.debug("->Joined into string")
 			#assert polars_df.schema[col] == pl.Utf8
+		if 'organism' in polars_df.columns and rm_phages:
+			polars_df = self.rm_all_phages(polars_df)
 		
 		# taxoncore_list used for most matches,
 		# but to extract lineages with regex we also need a column without lists
@@ -753,7 +828,13 @@ class ProfessionalsHaveStandards():
 		polars_df = polars_df.with_columns(pl.col("i_group").alias(group_column_name))
 		polars_df = polars_df.with_columns([pl.col("i_lineage").alias("lineage"), pl.col("i_organism").alias("organism"), pl.col("i_strain").alias("strain")])
 		polars_df = polars_df.drop(['taxoncore_list', 'taxoncore_str', 'i_group', 'i_lineage', 'i_organism', 'i_strain'])
-		assert 'i_strain' not in polars_df
+		for col in ['clade', 'organism', 'lineage', 'strain']:
+			polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col])
+			if polars_df.schema[col] == pl.List:
+				# DEBUG
+				NeighLib.print_only_where_col_list_is_big(polars_df, col)
+				if force_strings:
+					polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col], force_strings=True)
 
 		return polars_df
 
@@ -853,7 +934,7 @@ class ProfessionalsHaveStandards():
 			self.logging.debug("geoloc_info ✔️ country ✖️")
 			# To handle "country: region" metadata without overwriting the region metadata, first we attempt to extract countries by looking for non-substring matches,
 			# including the countries.substring_match stuff we usually just substring match upon.
-			for nation, ISO3166 in tqdm(united_nations.items(), desc="Countries", ascii='➖🌱🐄', bar_format='{desc:<10.9}{percentage:3.0f}%|{bar:12}{r_bar}'):
+			for nation, ISO3166 in tqdm(united_nations.items(), desc="Standardizing countries", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 				polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
 			for ISO3166, continent in countries.countries_to_continents.items():
 				polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
@@ -924,7 +1005,7 @@ class ProfessionalsHaveStandards():
 		
 		# Strip leading whitespace from likely_country column, as we will be using starts_with() on it soon.
 		polars_df = polars_df.with_columns(pl.col("likely_country").str.strip_chars_start(" "))
-		for nation, ISO3166 in tqdm(united_nations.items(), desc="Regions", ascii='➖🌱🐄', bar_format='{desc:<10.9}{percentage:3.0f}%|{bar:12}{r_bar}'):
+		for nation, ISO3166 in tqdm(united_nations.items(), desc="Standardizing regions", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			polars_df = polars_df.with_columns([
 				pl.when((pl.col('geoloc_info').list.eval(pl.element().str.starts_with(f"{nation}:")).list.sum() == 1)
 				.and_(pl.col('country').is_null()))
@@ -981,7 +1062,7 @@ class ProfessionalsHaveStandards():
 		# in here.
 		# We can only safely use countries.substring_match safely here; continents should be okay too but just to be safe let's not
 		# TODO: Check if later region extraction script manages to pull out "Sinfra" for Ivory Coast samples (see SRR18334007)
-		for nation, ISO3166 in tqdm(countries.substring_match.items(), desc="Finishing up", ascii='➖🌱🐄', bar_format='{desc:<10.9}{percentage:3.0f}%|{bar:12}{r_bar}'):
+		for nation, ISO3166 in tqdm(countries.substring_match.items(), desc="Finishing up", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			null_start = NeighLib.get_count_of_x_in_column_y(polars_df, None, 'country')
 			polars_df = polars_df.with_columns([
 				pl.when((pl.col("geoloc_info").list.eval(pl.element().str.contains(nation)).list.sum() != 0)
@@ -998,11 +1079,13 @@ class ProfessionalsHaveStandards():
 		polars_df = polars_df.with_columns([
 			pl.when((pl.col("geoloc_info").list.len() > 0)
 			.and_(pl.col('region').is_null()))
-			.then(pl.col("geoloc_info"))
+			.then(pl.col("geoloc_info").list.drop_nulls())
 			.otherwise(None)
 			.alias('region_as_list')
 		])
-		polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['region_as_list'])
+		NeighLib.print_only_where_col_not_null(polars_df, 'region_as_list')
+		#polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['region_as_list'])
+		polars_df = NeighLib.stringify_one_list_column(polars_df, 'region_as_list')
 		polars_df = polars_df.with_columns(pl.coalesce(["region", "region_as_list"]).alias("neo_region"))
 		polars_df = polars_df.drop(['region', 'region_as_list', 'geoloc_info'])
 		polars_df = polars_df.rename({'neo_region': 'region'})
@@ -1026,8 +1109,6 @@ class ProfessionalsHaveStandards():
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
 
 		self.validate_col_country(polars_df)
-
-		#NeighLib.print_a_where_b_is_in_list(polars_df, col_a='country', col_b='run_index', list_to_match=['ERR046972', 'ERR2884698', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
 		return polars_df
 		
 
@@ -1044,4 +1125,4 @@ class ProfessionalsHaveStandards():
 			raise ValueError
 		if self.logging.getEffectiveLevel() == 10:
 			self.logging.debug("---- After absolutely everything ----")
-			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='country', col_b='run_index', list_to_match=['ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
+			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='country', col_b='run_index', list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])

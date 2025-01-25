@@ -344,7 +344,7 @@ class FileReader():
 			NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
-		polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index))
+		polars_df = NeighLib.null_lists_of_len_zero(NeighLib.flatten_all_list_cols_as_much_as_possible(self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)))
 		duplicated_samples = polars_df.filter(pl.col(sample_index).is_duplicated())
 		if duplicated_samples.shape[0] > 0:
 			if drop_bad_news:

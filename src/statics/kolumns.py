@@ -79,7 +79,7 @@ list_to_float_sum = ['bytes', 'bases', 'mbases', 'mbytes', 'mbytes_sum']
 
 # In: pl.List() of pl.Utf8
 # Out: pl.Utf8
-list_to_string_join = ['isolate_info', 'isolation_source']
+list_to_string_join = ['isolate_info']
 
 # In: pl.List() of any type
 # Out: pl.List() if any row contains at least two unique values, inner type otherwise

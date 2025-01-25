@@ -101,7 +101,11 @@ class NeighLib:
 			.value_counts(sort=True) # creates struct[2] column named col, sorted in descending order
 		)
 		counts = counts.unnest(col) # splits col into col and "counts" columns
-		return tuple(counts.row(0))
+		try:
+			return tuple(counts.row(0))
+		except Exception:
+			self.logging.warning(f"Could not calculate mode for {col} -- is it full of nulls?")
+			return ('ERROR', 'N/A')
 
 	def get_null_count_in_column(self, polars_df, column_name, warn=True, error=False):
 		series = polars_df.get_column(column_name)
@@ -113,9 +117,21 @@ class NeighLib:
 			raise AssertionError
 		return null_count
 
+	def null_lists_of_len_zero(self, polars_df):
+		"""skips ID columns"""
+		list_cols = [col for col in polars_df.columns if polars_df.schema[col] == pl.List(pl.Utf8) and col not in kolumns.id_columns]
+		for column in list_cols:
+			before = self.get_null_count_in_column(polars_df, column, warn=False)
+			polars_df = polars_df.with_columns(pl.col(column).list.drop_nulls()) # [pl.Null] --> []
+			polars_df = polars_df.with_columns([pl.when(pl.col(column).list.len() > 0).then(pl.col(column))]) # [] --> pl.Null
+			after = self.get_null_count_in_column(polars_df, column, warn=False)
+			self.logging.debug(f"{column}: {before} --> {after} nulls")
+		return polars_df
+
 	def nullify(self, polars_df, only_these_columns=None, no_match_NA=False, skip_ids=True):
 		"""
-		Turns stuff like "not collected" and "n/a" into pl.Null values, per null_values.py
+		Turns stuff like "not collected" and "n/a" into pl.Null values, per null_values.py,
+		and nulls lists that have a length of zero
 		"""
 		all_cols = only_these_columns if only_these_columns is not None else polars_df.columns
 		if type(all_cols) == str: # idk man im tired
@@ -128,15 +144,13 @@ class NeighLib:
 			list_cols = [col for col in all_cols if polars_df.schema[col] == pl.List(pl.Utf8)]
 
 		# first, null list columns of length 0
-		polars_df = polars_df.with_columns([
-			pl.when(pl.col(column).list.len() == 0)
-			.then(None)
-			.otherwise(pl.col(column))
-			.alias(column) for column in list_cols])
+		self.logging.debug("First pass of nulling lists of len zero")
+		polars_df = self.null_lists_of_len_zero(polars_df)
 
 		# use contains_any() for the majority of checks, as it is much faster than iterating through a list + contains()
 		# the downside of contains_any() is that it doesn't allow for regex
 		# in either case, we do string columns first, then list columns
+		self.logging.debug("Checking for null value replacements (this may take a while)")
 		polars_df = polars_df.with_columns([
 			pl.when(pl.col(col).str.contains_any(null_values.nulls_pl_contains_any, ascii_case_insensitive=True))
 			.then(None)
@@ -160,6 +174,11 @@ class NeighLib:
 					pl.element().filter(~pl.element().str.contains(null_value))
 				)
 				for col in list_cols])
+		
+		# do this one more time since we may have dropped some values
+		self.logging.debug("Second pass of nulling lists of len zero")
+		polars_df = self.null_lists_of_len_zero(polars_df)
+		
 		return polars_df
 
 	def print_col_where(self, polars_df, column="source", equals="Coscolla", cols_of_interest=kolumns.id_columns, everything=False):
@@ -306,7 +325,7 @@ class NeighLib:
 		return combined_dict
 	
 	@staticmethod
-	def big_print_polars(polars_df, header, these_columns):
+	def wide_print_polars(polars_df, header, these_columns):
 		assert len(these_columns) >= 3
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
@@ -324,7 +343,7 @@ class NeighLib:
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
-		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=30, fmt_table_cell_list_len=10):
+		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
 			print(polars_df)
 
 	def print_schema(self, polars_df):
@@ -350,9 +369,14 @@ class NeighLib:
 			status = False
 		return polars_df, status
 
-	def cast_to_list(self, polars_df, column):
+	def cast_to_list(self, polars_df, column, allow_nulls=False):
 		if polars_df[column].dtype != pl.List:
-			return polars_df.with_columns(pl.col(column).cast(pl.List(str)))
+			if allow_nulls: # will break concat_list() as it propagates nulls for some reason
+				polars_df = polars_df.with_columns(pl.when(pl.col(column).is_not_null().then(pl.col(column).cast(pl.List(str)))).alias("as_this_list"))
+				polars_df.drop([column]).rename({"as_this_list": column})
+				return polars_df
+			else:
+				return polars_df.with_columns(pl.col(column).cast(pl.List(str)))
 		else:
 			return polars_df
 
@@ -368,18 +392,19 @@ class NeighLib:
 		return 0
 
 	def concat_columns_list(self, polars_df, left_col, right_col, uniq):
+		# TODO: I'm not convinced .list.drop_nulls() is actually helping anything; we still end up with [null] lists.
 		if uniq:
 			polars_df = polars_df.with_columns(
-				pl.when(pl.col(left_col) != pl.col(right_col))             # When a row has different values for base_col and right_col,
-				.then(pl.concat_list([left_col, right_col]).list.unique()) # make a list of base_col and right_col, but keep only uniq values
-				.otherwise(pl.concat_list([left_col]))                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
+				pl.when(pl.col(left_col) != pl.col(right_col))                          # When a row has different values for base_col and right_col,
+				.then(pl.concat_list([left_col, right_col]).list.unique().list.drop_nulls()) # make a list of base_col and right_col, but keep only uniq values
+				.otherwise(pl.concat_list([left_col]).drop_nulls())                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
 				.alias(left_col)
 			).drop(right_col)
 		else:
 			polars_df = polars_df.with_columns(
 				pl.when(pl.col(left_col) != pl.col(right_col))             # When a row has different values for base_col and right_col,
-				.then(pl.concat_list([left_col, right_col]))               # make a list of base_col and right_col,
-				.otherwise(pl.concat_list([left_col]))                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
+				.then(pl.concat_list([left_col, right_col]).drop_nulls())  # make a list of base_col and right_col,
+				.otherwise(pl.concat_list([left_col]).drop_nulls())        # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
 				.alias(left_col)
 			).drop(right_col)
 		assert polars_df.select(pl.col(left_col)).dtypes == [pl.List]
@@ -458,10 +483,12 @@ class NeighLib:
 		index_column = self.get_index_column(polars_df)
 		assert index_column not in right_columns
 		for right_col in right_columns:
-			self.logging.debug(f"\n[{right_columns.index(right_col)}/{len(right_columns)}] Trying to merge {right_col}...")
+			self.logging.debug(f"\n[{right_columns.index(right_col)}/{len(right_columns)}] Trying to merge {right_col} (type: {polars_df.schema[right_col]}...")
 			base_col, nullfilled = right_col.replace("_right", ""), False
 			self.check_base_and_right_in_df(polars_df, base_col, right_col)
-			if polars_df.schema[base_col] is not pl.List and polars_df.schema[right_col] is not pl.List and polars_df.schema[base_col] != polars_df.schema[right_col]:
+			
+			# match data types
+			if polars_df.schema[base_col] != pl.List and polars_df.schema[right_col] != pl.List and polars_df.schema[base_col] != polars_df.schema[right_col]:
 				try:
 					polars_df = polars_df.with_columns(pl.col(right_col).cast(polars_df.schema[base_col]).alias(right_col))
 					self.logging.debug(f"Cast right column {right_col} to {polars_df.schema[base_col]}")
@@ -471,6 +498,33 @@ class NeighLib:
 						pl.col(right_col).cast(pl.Utf8).alias(right_col)
 					])
 					self.logging.debug("Cast both columns to pl.Utf8")
+
+			# singular-singular merge -- this breaks the schema as-is, but maybe we can make the strings into single-element lists? is that even worth it?
+			"""
+			if polars_df.schema[base_col] == pl.Utf8 and polars_df.schema[right_col] == pl.Utf8:
+				self.logging.debug(f"Merging two string columns into {base_col}")
+				polars_df = polars_df.with_columns([
+					pl.when(pl.col(base_col).is_not_null() | pl.col(right_col).is_not_null())
+					.then(
+						pl.when(pl.col(base_col).is_not_null() & pl.col(right_col).is_null())
+						.then(pl.col(base_col))
+						.otherwise(
+							pl.when(pl.col(base_col).is_null()) # and right is not null
+							.then(pl.col(right_col))
+							.otherwise(pl.concat_list([base_col, right_col])) # neither are null
+						) 
+					)
+					# otherwise null, since both are null anyway
+					.alias("silliness"),
+					])
+
+				print(polars_df.select(['silliness', base_col, right_col]))
+				polars_df = polars_df.drop([base_col, right_col]).rename({"silliness": base_col})
+				continue
+			"""
+
+			# in all other cases, try nullfilling
+			#else:
 			polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col)
 			try:
 				# TODO: this breaks in situations like when we add Brites before Bos, since Brites has three run accessions with no sample_index,
@@ -481,7 +535,7 @@ class NeighLib:
 				continue
 			except AssertionError:
 				self.logging.debug(f"Not equal after filling in nulls (or nullfill errored so they're definitely not equal)")
-			
+		
 			# everything past this point in this for loop only fires if the assertion error happened!
 			if base_col in kolumns.special_taxonomic_handling:
 				self.logging.warning(f"[kolumns.special_taxonomic_handling] {base_col} --> Falling back on {base_col if fallback_on_left else right_col}")
@@ -569,7 +623,7 @@ class NeighLib:
 		if recursion_depth != 0:
 			self.logging.debug(f"Intending to merge:\n\t{merge_these_columns}")
 		left_col, right_col = merge_these_columns[0], merge_these_columns[1]
-		#polars_df = self.drop_nulls_from_possible_list_column(self.drop_nulls_from_possible_list_column(polars_df, left_col), right_col)
+		polars_df = self.drop_nulls_from_possible_list_column(self.drop_nulls_from_possible_list_column(polars_df, left_col), right_col)
 		
 		self.logging.debug(f"\n\t\tIteration {recursion_depth}\n\t\tLeft: {left_col}\n\t\tRight: {right_col} (renamed to {left_col}_right)")
 		polars_df = polars_df.rename({right_col: f"{left_col}_right"})
@@ -686,6 +740,7 @@ class NeighLib:
 
 
 		# DEBUG REMOVE
+		"""
 		if 'clade' in polars_df.columns:
 			null_clade = self.get_count_of_x_in_column_y(polars_df, None, 'clade')
 			if null_clade > 0:
@@ -694,6 +749,7 @@ class NeighLib:
 				exit(1)
 		else:
 			print("clade not in polars df at end of rancheroize")
+		"""
 
 
 
@@ -768,7 +824,7 @@ class NeighLib:
 				if self.logging.getEffectiveLevel() == 10:
 					debug_print = self.get_rows_where_list_col_more_than_one_value(polars_df, column)
 					print(f"{arrow}{len(debug_print)} multi-element lists in {column}") if self.logging.getEffectiveLevel() == 10 else None
-					self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(30), f"list cols with more than one value (true len {len(debug_print)})")
+					self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(40), f"list cols with more than one value (true len {len(debug_print)})")
 				return polars_df
 		else:
 			self.logging.debug(f"Tried to coerce {column} into a non-list, but it's already a non-list")
@@ -829,6 +885,11 @@ class NeighLib:
 					for kolumn in kolumns.special_taxonomic_handling:
 						if kolumn in polars_df.columns and polars_df.schema[kolumn] == pl.List:
 							polars_df = polars_df.with_columns(pl.col(kolumn).list.unique())
+							dataframe_height = polars_df.shape[1]
+							polars_df = self.drop_nulls_from_possible_list_column(polars_df, kolumn)
+							current_dataframe_height = polars_df.shape[1]
+							assert dataframe_height == current_dataframe_height
+
 							polars_df = self.coerce_to_not_list_if_possible(polars_df, kolumn, index_column, prefix_arrow=True)
 					if polars_df.schema[col] == pl.List: # since it might not be after coerce_to_not_list_if_possible()
 						long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
@@ -956,7 +1017,7 @@ class NeighLib:
 				what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': '-'})
 		
 		if force_strings:
-			if just_these_columns is not None:
+			if just_these_columns is None:
 				polars_df = self.stringify_all_list_columns(polars_df)
 			else:
 				for column in just_these_columns:
@@ -1124,10 +1185,12 @@ class NeighLib:
 				self.logging.debug(f"unnesting {col}")
 				if col not in self.get_valid_id_columns(polars_df):
 					self.print_only_where_col_list_is_big(polars_df, col)
+
+				polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
 				
-				#polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten().drop_nulls()))
+				polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten().drop_nulls()))
 				#polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten())) # leaves a bunch of hanging nulls
-				polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls())
+				#polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
 
 				if col not in self.get_valid_id_columns(polars_df):
 					self.logging.debug(f"after flatten")
@@ -1140,30 +1203,30 @@ class NeighLib:
 			polars_df = self.flatten_nested_list_cols(polars_df)
 		return(polars_df)
 
-	def stringify_one_list_column(self, polars_df, column):
-		self.logging.info(f"Forcing {column} into a string")
-		assert column in polars_df.columns
-		datatype = polars_df[column].schema
+	def stringify_one_list_column(self, polars_df, column, L_bracket='[', R_bracket=']'):
+		self.logging.debug(f"Forcing column {column} into a string")
+		assert column in polars_df.columns # throws an error because it's a series now?
+		datatype = polars_df.schema[column]
 
 		if datatype == pl.List(pl.String):
 			polars_df = polars_df.with_columns(
-				pl.when(pl.col(col).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
-				.then(pl.col(col).list.eval(pl.element()).list.join(""))
+				pl.when(pl.col(column).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
+				.then(pl.col(column).list.eval(pl.element()).list.join(""))
 				.otherwise(
-					pl.lit("[")
-					+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
-					+ pl.lit("]")
-				).alias(col)
+					pl.lit(L_bracket)
+					+ pl.col(column).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
+					+ pl.lit(R_bracket)
+				).alias(column)
 			)
 			return polars_df
 		
 		# pl.Int doesn't exist and pl.List(int) doesn't seem to work, so we'll take the silly route
 		elif datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64):
 			polars_df = polars_df.with_columns((
-				pl.lit("[")
-				+ pl.col(col).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
-				+ pl.lit("]")
-			).alias(col))
+				pl.lit(L_bracket)
+				+ pl.col(column).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
+				+ pl.lit(R_bracket)
+			).alias(column))
 			return polars_df
 		
 		# This makes assumptions about the structure of the object and may not be universal
@@ -1174,7 +1237,7 @@ class NeighLib:
 			return polars_df
 
 		else:
-			raise ValueError(f"Tried to make {col} into a string column, but we don't know what to do with type {datatype}")
+			raise ValueError(f"Tried to make {column} into a string column, but we don't know what to do with type {datatype}")
 
 	def stringify_all_list_columns(self, polars_df):
 		""" Unnests list/object data (but not the way explode() does it) so it can be writen to CSV format
@@ -1182,7 +1245,7 @@ class NeighLib:
 
 		LIMITATIONS: This may not work as expected on pl.List(pl.Null). You may also see oddities on some pl.Object types.
 		"""
-		self.logging.info(f"Forcing all list columns into strings")
+		self.logging.warning(f"Forcing ALL list columns into strings")
 		for col, datatype in polars_df.schema.items():
 			if datatype == pl.List(pl.String):
 				polars_df = polars_df.with_columns(

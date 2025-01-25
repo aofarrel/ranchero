@@ -208,7 +208,7 @@ class Merger:
 		# put something like this at the end by concat_list()ing pl.lit() the name into the column
 		# ie, right['literature_shorthand'] = "CRyPTIC Antibiotic Study"
 		if indicator is not None:
-			if indicator not in left.columns and left_name != "left":
+			if indicator not in left.columns and left_name != "left": # this wasn't an issue before!! why is it an issue now?!
 				self.logging.debug("--> No indicator column in left")
 				left = left.with_columns(pl.lit(left_name).alias(indicator))
 			else:
@@ -320,4 +320,6 @@ class Merger:
 			n_rows_left=n_rows_left, n_rows_right=n_rows_right, right_name=right_name, right_name_in_this_column=indicator)
 		self.logging.debug("Checking merged dataframe's index...")
 		NeighLib.check_index(merged_dataframe)
+		self.logging.debug("Trying to null newly created empty lists...")
+		merged_dataframe = NeighLib.null_lists_of_len_zero(merged_dataframe)
 		return merged_dataframe
