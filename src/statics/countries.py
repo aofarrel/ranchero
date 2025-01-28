@@ -5,16 +5,21 @@
 # * Fuzzy match uses pl.when(pl.col(match_column).str.contains(f"(?i){key}")) 
 
 exact_match = {
-	'Samoa': 'WSM',                    # prevent match with ASM
-	'Europe': None,                    # unhelpful
-	'hospital': None,                  # unhelpful
+	'Europe': None,
+	'Guinea': 'GIN',                   # prevent match with PNG, GNB, and GNQ
+	'hospital': None,
+	'Ireland': 'IRL',                  # prevent match with Northern Ireland
 	'Korea': 'KOR',                    # prevent match with North Korea
 	'Mali': 'MLI',                     # prevent match with Somalia
+	'Mexico': 'MEX',                   # prevent match with New Mexico
 	'Niger': 'NER',                    # prevent match with Nigeria
-	'patient': None,                   # unhelpful
-	'Republic of the Congo': 'COG',    # prevent match with COD
+	'patient': None,
 	'Republic of Congo': 'COG',        # prevent match with COD
+	'Republic of the Congo': 'COG',    # prevent match with COD
+	'Samoa': 'WSM',                    # prevent match with ASM
+	'Sudan': 'SDN',                    # prevent match with South Sudan
 	'The Congo': None,                 # ambigious
+	'uncalculated': None,
 	'United States': 'USA',            # prevent match with VIR/UMI
 	'USA': 'USA',                      # idk guys there's probably a fake match somewhere
 	'USA: Texas': 'USA',               # TODO: handle this as a region so as not to mess with Texas
@@ -36,14 +41,16 @@ exact_match = {
 
 countries_to_continents = {
 	# not exhaustive
+	'AFG': 'Asia',
 	'ALB': 'Europe',
 	'ARG': 'South America',
-	'AFG': 'Asia',
+	'ARM': 'Asia',
 	'AUS': 'Oceania',
 	'AUT': 'Europe',
 	'AZE': 'Asia', # per NCBI standard
 	'BEL': 'Europe',
 	'BEN': 'Africa',
+	'BFA': 'Africa',
 	'BGD': 'Asia',
 	'BGR': 'Europe',
 	'BIH': 'Europe',
@@ -56,7 +63,6 @@ countries_to_continents = {
 	'CIV': 'Africa',
 	'CMR': 'Africa',
 	'COD': 'Africa',
-	'MAR': 'Africa',
 	'COG': 'Africa',
 	'COL': 'South America',
 	'COM': 'Africa',
@@ -77,41 +83,36 @@ countries_to_continents = {
 	'GBR': 'Europe',
 	'GEO': 'Asia', # per NCBI standard
 	'GHA': 'Africa',
+	'GIN': 'Africa',
 	'GMB': 'Africa',
+	'GNB': 'Africa',
+	'GNQ': 'Africa',
 	'GRC': 'Europe',
 	'GRL': 'North America',
 	'GTM': 'North America',
 	'HKG': 'Asia',
 	'HND': 'North America',
-	'GNQ': 'Oceania',
-	'PHL': 'Asia',
-	'MNG': 'Asia',
-	'BFA': 'Africa',
 	'HRV': 'Europe',
-	'SOM': 'Africa',
-	'SEN': 'Africa',
-	'MRT': 'Africa',
-	'KIR': 'Oceania',
-	'SAU': 'Asia',
-	'NER': 'Africa',
 	'HUN': 'Europe',
 	'IDN': 'Asia',
 	'IND': 'Asia',
 	'IRL': 'Europe',
 	'IRN': 'Asia',
-	'LKA': 'Asia',
 	'ISR': 'Asia',
 	'ITA': 'Europe',
 	'JPN': 'Asia',
 	'KAZ': 'Asia',
 	'KEN': 'Africa',
-	'KHM': 'Asia',
 	'KGZ': 'Asia',
+	'KHM': 'Asia',
+	'KIR': 'Oceania',
 	'KOR': 'Asia',
 	'LBN': 'Asia',
 	'LBR': 'Africa',
+	'LKA': 'Asia',
 	'LTY': 'Europe',
 	'LVA': 'Europe',
+	'MAR': 'Africa',
 	'MDA': 'Europe',
 	'MDG': 'Africa',
 	'MEX': 'North America',
@@ -119,10 +120,13 @@ countries_to_continents = {
 	'MLI': 'Africa',
 	'MMR': 'Asia',
 	'MNE': 'Europe',
+	'MNG': 'Asia',
 	'MOZ': 'Africa',
+	'MRT': 'Africa',
 	'MWI': 'Africa',
 	'MYS': 'Asia',
 	'NAM': 'Africa',
+	'NER': 'Africa',
 	'NGA': 'Africa',
 	'NLD': 'Europe',
 	'NOR': 'Europe',
@@ -132,6 +136,8 @@ countries_to_continents = {
 	'PAK': 'Asia',
 	'PAN': 'North America', # per NCBI standard
 	'PER': 'South America',
+	'PHL': 'Asia',
+	'PAL': 'Asia',
 	'PNG': 'Oceania',
 	'POL': 'Europe',
 	'PRK': 'Asia',
@@ -140,17 +146,21 @@ countries_to_continents = {
 	'ROU': 'Europe',
 	'RUS': 'Europe', # per NCBI standard
 	'RWA': 'Africa',
+	'SAU': 'Asia',
 	'SDN': 'Africa',
+	'SEN': 'Africa',
 	'SGP': 'Asia',
 	'SLE': 'Africa',
 	'SLK': 'Europe',
+	'SOM': 'Africa',
 	'SRB': 'Europe',
 	'SVN': 'Europe',
 	'SWE': 'Europe',
 	'SWZ': 'Africa',
-	'TKM': 'Asia',
+	'SYR': 'Asia',
 	'THA': 'Asia',
 	'TJK': 'Asia',
+	'TKM': 'Asia',
 	'TLS': 'Asia',
 	'TUN': 'Africa',
 	'TWN': 'Asia',
@@ -190,6 +200,7 @@ substring_match = {
 	'Algeria': 'DZA',
 	'Angola': 'AGO',
 	'Argentina': 'ARG',
+	'Armenia': 'ARM',
 	'Aruba': 'ABW',
 	'Australia': 'AUS',
 	'Austria': 'AUT',
@@ -199,7 +210,7 @@ substring_match = {
 	'Belgium': 'BEL',
 	'Benin': 'BEN',
 	'Bhutan': 'BTN',
-	'Blood - human': None,  # SAMN02585006
+	'Blood': None,  # SAMN02585006
 	'Bosnia and Herzegovina': 'BIH',
 	'Botswana': 'BWA',
 	'Brazil': 'BRA',
@@ -207,8 +218,8 @@ substring_match = {
 	'British Virgin Islands': 'VGB',
 	'Bulgaria': 'BGR',
 	'Burkina Faso': 'BFA',
-	'Burundi': 'BDI',
 	'Burma': 'MMR',
+	'Burundi': 'BDI',
 	'Cambodia': 'KHM',
 	'Cameroon': 'CMR',
 	'Canada': 'CAN',
@@ -216,9 +227,9 @@ substring_match = {
 	'Central African Republic': 'CAF',
 	'Chile': 'CHL',
 	'China': 'CHN',
-	'Costa Rica': 'CRI',
 	'Colombia': 'COL',
 	'Comoros': 'COM',
+	'Costa Rica': 'CRI',
 	'Croatia': 'HRV',
 	'Czech Republic': 'CZE',
 	'Czechia': 'CZE',
@@ -239,7 +250,6 @@ substring_match = {
 	'France': 'FRA',
 	'Gabon': 'GAB',
 	'Gambia': 'GMB',
-	'The Gambia': 'GMB',
 	'Georgia': 'GEO',
 	'Germany': 'DEU',
 	'Ghana': 'GHA',
@@ -249,7 +259,7 @@ substring_match = {
 	'Guadeloupe': 'GLP',
 	'Guam': 'GUM',
 	'Guatemala': 'GTM',
-	'Guinea': 'PNG',
+	'Guinea-Bissau': 'GNB',
 	'Haiti': 'HTI',
 	'Honduras': 'HND',
 	'Hong Kong': 'HKG',
@@ -286,7 +296,6 @@ substring_match = {
 	'Martinique': 'MTQ',
 	'Mauritania': 'MRT',
 	'Mayotte': 'MYT',
-	'Mexico': 'MEX',
 	'Moldova': 'MDA',
 	'Mongolia': 'MNG',
 	'Montenegro': 'MNE',
@@ -301,6 +310,7 @@ substring_match = {
 	'Nigeria': 'NGA',
 	'North Korea': 'PRK',
 	'North Macedonia': 'MKD',
+	'Northern Ireland': 'GBR',
 	'Northern Mariana Islands': 'MNP',
 	'Norway': 'NOR',
 	'Oman': 'OMN',
@@ -320,17 +330,16 @@ substring_match = {
 	'Saudi Arabia': 'SAU',
 	'Senegal': 'SEN',
 	'Serbia': 'SRB',
-	'SierraLeone': 'SLE',
 	'Sierra Leone': 'SLE',
+	'SierraLeone': 'SLE',
 	'Singapore': 'SGP',
 	'Slovakia': 'SLK',
 	'Slovenia': 'SVN',
 	'Somalia': 'SOM',
-	'South Africa': 'ZAF', # beware region matches
 	'South Korea': 'KOR',
+	'South Sudan': 'SSD', # Sudan is an exact match
 	'Spain': 'ESP',
 	'Sri Lanka': 'LKA',
-	'Sudan': 'SDN',
 	'Suriname': 'SUR',
 	'Swaziland': 'SWZ',
 	'Sweden': 'SWE',
@@ -340,6 +349,8 @@ substring_match = {
 	'Tajikistan': 'TJK',
 	'Tanzania': 'TZA',
 	'Thailand': 'THA',
+	'The former Yugoslav Republic of Macedonia': 'MKD', # allows pulling region from SRR9614686 and the like
+	'The Gambia': 'GMB',
 	'Timor Leste': 'TLS',
 	'Timor-Leste': 'TLS',
 	'Togo': 'TGO',
@@ -352,8 +363,8 @@ substring_match = {
 	'Ukraine': 'UKR',
 	'United Kingdom': 'GBR',
 	'United States Minor Outlying Islands': 'UMI',
-	'United States Virgin Islands': 'VIR',
 	'United States of America': 'USA',
+	'United States Virgin Islands': 'VIR',
 	'Uruguay': 'URY',
 	'Uzbekistan': 'UZB',
 	'Venezuela': 'VEN',
@@ -363,5 +374,7 @@ substring_match = {
 	'Yemen': 'YEM',
 	'Zambia': 'ZMB',
 	'Zimbabwe': 'ZWE',
-	'uncalculated': None,
+
+	# done last to avoid improper matches to the general continent region of southern africa
+	'South Africa': 'ZAF'
 }

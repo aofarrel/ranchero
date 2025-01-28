@@ -273,10 +273,6 @@ class FileReader():
 		self.logging.debug(f"Will become a list (but might be flattened later): {listmakers}")
 		self.logging.debug(f"Already a list: {listexisters}")
 
-		#for already_list_col in listexisters:
-		#	self.logging.debug(f"Examples of already-a-list columns: {already_list_col}:")
-		#	self.logging.debug(polars_df.filter(pl.col(already_list_col).list.len() > 1).select([already_list_col, 'run_index']))
-
 		grouped_df_ = (
 			polars_df
 			.group_by(sample_index)
@@ -288,6 +284,10 @@ class FileReader():
 				]
 			])
 		)
+
+		NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
+		NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
+
 		return grouped_df_
 
 
@@ -344,7 +344,7 @@ class FileReader():
 			NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
-		polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index))
+		polars_df = NeighLib.null_lists_of_len_zero(NeighLib.flatten_all_list_cols_as_much_as_possible(self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)))
 		duplicated_samples = polars_df.filter(pl.col(sample_index).is_duplicated())
 		if duplicated_samples.shape[0] > 0:
 			if drop_bad_news:

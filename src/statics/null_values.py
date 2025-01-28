@@ -41,6 +41,7 @@ nulls_pl_contains_any = [
     'none',
 	'not abblicable',
 	'not applicable',
+	'Non applicable',
 	'Not available',
 	'not collected',
 	'not determined',

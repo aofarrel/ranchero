@@ -137,6 +137,10 @@ class RancheroConfig:
 			logging.basicConfig(format='%(levelname)s:%(funcName)s:%(message)s', level=self.loglevel)
 		return logger
 
+	#def _setup_tqdm(self):
+	#	""" Sets up a TQDM instance"""
+	#	tqdm.pandas(ascii='➖🌱🐄', bar_format='{desc:<10.9}{percentage:3.0f}%|{bar:12}{r_bar}') # we gotta make it cute!
+
 
 	def __init__(self):
 		""" Creates a fallback configuration if read_config() isn't run"""

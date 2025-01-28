@@ -2,17 +2,19 @@
 # Only merges some extremely obvious ones
 
 host_disease_exact_match = {
-	'TB': 'Unspecified TB',
-	'Tuberculosis': 'Unspecified TB',
-	'tuberculosis': 'Unspecified TB',
-	'DOID:552': 'Pneumonia',
-	'DOID:399': 'Unspecified TB',
-	'DOID:2957': 'Pulmonary TB',
-	'DOID:9861': 'Miliary TB',
-	'DOID:4962': 'Pericardial TB',
-	'DOID:106': 'Pleural TB',
-	'DOID:1639': 'Skeletal TB',
+	'TB': 'unspecified TB',
+	'Tuberculosis': 'unspecified TB',
+	'tuberculosis': 'unspecified TB',
+	'DOID:552': 'pneumonia',
+	'DOID:399': 'unspecified TB',
+	'DOID:2957': 'pulmonary TB',
+	'DOID:9861': 'miliary TB',
+	'DOID:4962': 'pericardial TB',
+	'DOID:106': 'pleural TB',
+	'DOID:1639': 'skeletal TB',
 	'leprosy': 'Leprosy',
+	'extra/intra - pulmonary patient': 'extra/intra-pulmonary TB',
+	'TBM': 'TB meningitis',
 
 	# extrapulmonary is sometimes written as two words, so these need to be exact matches
 	'Pulmonary': 'Pulmonary TB',
@@ -20,46 +22,28 @@ host_disease_exact_match = {
 }
 
 host_disease = {
+	'bovine': 'bovine TB',
+	'Chronic pulmonary tuberculosis': 'pulmonary TB (chronic)',
+	'Diffuse lepromatous leprosy': 'leprosy (Lucio)',
+	'Disseminated': 'disseminated TB',
+	'Extra Pulmonary': 'extrapulmonary TB',
+	'Extrapulmonary': 'extrapulmonary TB',
+	'infiltrative': 'infiltrative TB',
+	'Lepromatous leprosy': 'leprosy (Lepromatous)',
+	'miliary': 'miliary TB',
+	'Mycobacterium tuberculosis infection': 'unspecified TB',
+	'Pericardial': 'pericardial TB',
+	'Pleural': 'pleural TB',
+	'refractory': 'refractory TB',
+	'skeletal': 'skeletal TB',
+	'Spinal': 'spinal TB',
+	'TB infection': 'unspecified TB',
+	'TB meningitis': 'TB meningitis',
 	'tuberculosis DOID:552': 'TB-associated pneumonia',
-	'Mycobacterium tuberculosis': 'Unspecified TB',
-	'Mycobacterium tuberculosis infection': 'Unspecified TB',
-	'Tuberculosis TB': 'Unspecified TB',
-	'TB infection': 'Unspecified TB',
-	'TUBERCULOSIS': 'Unspecified TB',
-	'Tuberculosis (TB)': 'Unspecified TB',
+	'Tuberculous meningitis': 'TB meningitis',
 
-	'bovine tuberculosis': 'Bovine TB',
-	'Bovine Tuberculosis': 'Bovine TB',
-	'Bovine tuberculosis': 'Bovine TB',
-	'bovine': 'Bovine TB',
-
-	'skeletal': 'Skeletal TB',
-	'Pericardial': 'Pericardial TB',
-	'miliary': 'Miliary TB',
-	'Spinal': 'Spinal TB',
-
-	'Chronic pulmonary tuberculosis': 'Pulmonary TB (chronic)',
-
-	'Tuberculosis lung infection': 'Pulmonary TB',
-	'Tuberculosis, Pulmonary': 'Pulmonary TB',
-	'Tuberculosis (pulmonary)': 'Pulmonary TB',
-	'pulmonary infection': 'Pulmonary TB',
-
-	'infiltrative': 'Infiltrative TB',
-
-	'refractory': 'Refractory TB',
-
-	'Extrapulmonary': 'Extrapulmonary TB',
-	'Extra Pulmonary': 'Extrapulmonary TB',
-
-	'Tuberculous meningitis': 'Meningeal TB',
-	'TB meningitis': 'Meningeal TB',
-
-	'Disseminated': 'Disseminated TB',
-
-	'Lepromatous leprosy': 'Leprosy (Lepromatous)',
-	'Diffuse lepromatous leprosy': 'Leprosy (Lucio)',
-
+	# do last to avoid matches to "extra pulmonary" and "lung infection"
+	'pulmonary': 'Pulmonary TB',
 	'Health': None,
 	'host_disease_sam': None,
 	'human': None,
@@ -69,188 +53,214 @@ host_disease = {
 }
 
 sample_sources_nonspecific  = [
+	'1',
+	'?',
+	'Affedcted Herd',
+	'bacteria',
+	'bacterial cell',
+	'Bacterial isolate',
+	'Biological Sample',
+	'Biological sample',
+	'Bureau of Tuberculosis',
+	'DNA from M. tuberculosis',
 	'DNA',
-	'Mycobacterium tuberculosis',
-	'tuberculosis',
+	'Genomic DNA',
 	'H37Rv', # standardize_sample_source_as_list() will put this in taxoncore first, standardize_sample_source_as_string() will not
 	'Homo sapiens',
 	'human',
+	'isolate frome children',
+	'Lima', # location
+	'M. tuberculosis',
+	'MTB isolates',
 	'Mtb',
 	'MTBC',
-	'1',
-	'bovine',
+	'Mycobacterium tuberculosis complex', # I should hope so!
+	'Mycobacterium tuberculosis',
+	'Mycobacteryum tuberculosis', # common typo
+	'na',
 	'nan',
-	'Genomic DNA',
-	'dairy cow',
-	'Viet Nam',
-	'to wear a mask',
-	'Yes',
+	'New Zealand', # location
+	'no date',
+	'no source',
 	'other',
+	'Pakistan', # location
+	'PTB',
+	'Pulmonary tuberculosis',
 	'Specimen',
-	'Biological Sample',
-	'DNA from M. tuberculosis'
+	'TBM',
+	'to wear a mask',
+	'tuberculosis',
+	'veracruz', # location
+	'Viet Nam',
+	'whole organism',
+	'Yes',
 ]
 
 sample_source_exact_match = {
+	'BAL': 'bronchoalveolar lavage',
 	'bronchial': 'bronchial (unspecified)',
 	'Clinical': 'clinical (unspecified)',
+	'Culture': 'culture',
+	'Hospitol': 'hospital', # common typo
 	'laboratory': 'laboratory-obtained strain',
 	'tissue': 'tissue (unspecified)',
-	'Culture': 'culture',
-	'Sputum': 'sputum',
-	'Hospitol': 'hospital',
 }
 
+if_this_and_that_then = [
+	# specific culture type + tissue
+	['(?i)single colony', '(?i)fecal', 'culture (single-colony) from feces'],
+	['(?i)single colony', '(?i)lab', 'culture (single-colony) from lab stock'],
+
+	# generic culture + tissue
+	['(?i)culture', '(?i)sputum', 'culture from sputum'],
+	['(?i)culture', '(?i)\bbronch.*lavage', 'culture from bronchoalveolar lavage'],
+	['(?i)culture', '(?i)cerebrospinal', 'culture from cerebrospinal fluid'],
+	['(?i)culture', '(?i)lung', 'culture from lung tissue'],
+	['(?i)culture', '(?i)pleural fluid', 'culture from pleural fluid'],
+	['(?i)culture', '(?i)feces|fecal', 'culture from feces'],
+	['(?i)culture', '(?i)liver', 'culture from liver'],
+	['(?i)culture', '(?i)eye', 'culture from eye'],
+	
+	# everything else
+	['(?i)scrapate', '(?i)granuloma', 'scrapate of granuloma'],
+	['(?i)biopsy', '(?i)skin', 'biopsy from skin'],
+	['(?i)biopsy', '(?i)intestine', 'biopsy from intestine'],
+	['(?i)biopsy', '(?i)thoracic', 'biopsy from thorax'],
+	['(?i)biopsy', '(?i)pleura', 'biopsy from pleura/pleural effusion'],
+	['(?i)necropsy', '(?i)lung', 'necropsy from lung tissue'],
+	['(?i)necropsy', '(?i)spleen', 'necropsy from spleen'],
+	['(?i)cow', '(?i)feces', 'feces (bovine)'],
+	['(?i)FFPE', '(?i)skin', 'FFPE block (skin)'],
+
+	['(?i)ascit', '(?i)fluid', 'ascitic fluid'],
+]
+
+# These are considered mutually exclusive
 sample_source = {
-	'BAL': 'bronchoalveolar lavage',
-	'Bronchial Lavage': 'bronchoalveolar lavage',
-	'bronchialLavage': 'bronchoalveolar lavage',
-	'brochoalveolar lavage': 'bronchoalveolar lavage',
-	'bronchial aspirate': 'bronchoalveolar lavage',
-	'bronchialLavage': 'bronchoalveolar lavage',
-	'Bronchial Alveolar Lavage': 'bronchoalveolar lavage',
-	'broncho alveolar lavage': 'bronchoalveolar lavage',
-	'broncho-alveolar lavage': 'bronchoalveolar lavage',
-	'broncho-alveolar lavage right middle lobe': 'bronchoalveolar lavage',
-	'bronchoalveolar lavage': 'bronchoalveolar lavage',
-	'bronchoalveolar lavage fluid': 'bronchoalveolar lavage',
-	'broncioal lavage': 'bronchoalveolar lavage',
-	'Bronchio Alveolar Lavage': 'bronchoalveolar lavage',
-	'Broncho alveolar Lavage Fluid (BAL)': 'bronchoalveolar lavage',
-	'Broncho alveolar lavage': 'bronchoalveolar lavage',
-	'Bronchoalveolar lavage BS-2862': 'bronchoalveolar lavage',
-	'Lavage': 'bronchoalveolar lavage',
-	'Respiratory, Lower, Bronchoalveolar Lavage': 'bronchoalveolar lavage',
+	# do this one FIRST
+	'simulated/in silico': 'simulated/in silico', # bring over matches from earlier into the correct column
+	'lawn on agar plate': 'culture (lawn/sweep)',
+	'sweep': 'culture (lawn/sweep)',
+	'single colony': 'culture (single colony)',
+	'single cell': 'single cell',
+	
+	'Archaeological': 'archaeological',
 
+	### The Fluid Zone ###
+
+	# BAL and friends -- BAL is too generic on its own
+	'BRL': 'bronchoalveolar lavage',
+	'BALF': 'bronchoalveolar lavage',
+	'\bbronch.*lavage': 'bronchoalveolar lavage',
+	'bronchialLavage': 'bronchoalveolar lavage',
+	'bronchial aspirate': 'bronchoalveolar aspirate',
 	'bronchial wash': 'bronchial wash',
-	'Bronchial Wash': 'bronchial wash',
-
+	# CSF
 	'cerebrospinal fluid': 'cerebrospinal fluid',
 	'cerebrospinalFluid': 'cerebrospinal fluid',
 	'cerebral spinal fluid': 'cerebrospinal fluid',
 	'CSF': 'cerebrospinal fluid',
-	'CSF sample': 'cerebrospinal fluid',
-	'Cerebospinal fluid': 'cerebrospinal fluid',
+	# gastric
+	'Gastric lavage': 'gastric lavage',
+	'Gastric Aspirate': 'gastric aspirate',
+	'stomach contents': 'gastric (stomach contents)',
+	'gastric juice': 'gastric fluid',
+	'gastric fluid': 'gastric fluid',
+	# snot
+	'mucus': 'mucus',
+	'nasal swab': 'mucus (nasal swab)',
+	# sputum
+	'AFB sputum smear': 'sputum (AFB smear)',
+	'sputum throat swab': 'sputum (throat swab)',
+	'sputum': 'sputum',
+	'Sputa': 'sputum',
+	# pleural
+	'pleural fluid': 'pleural fluid',
+	'pleuralFluid': 'pleural fluid',
+	'thoracentesis': 'pleural fluid',
+	# other
+	'blood': 'blood',
+	'synovial': 'synovial fluid', # joint fluid
 
-	'clinical isolate': 'clinical (unspecified)',
-	'clinical sample': 'clinical (unspecified)',
-	'Human clinical isolate': 'clinical (unspecified)',
-	'Clinical isolates of M. tuberculosis from human patients': 'clinical (unspecified)',
-
-	'clinical strain': 'clinical strain',
-
-	'Mycobacterial Culture': 'culture',
-	'Bacterial culture': 'culture',
-	'bacterial culture': 'culture',
-	'standard culture': 'culture',
-	'Mycobacterial Culture': 'culture',
-	'MTBC Culture Isolate': 'culture',
-	'single culture': 'culture',
-
-	'Sputum culture': 'culture from sputum',
-	'sputum culture': 'culture from sputum',
-	'culture from sputum': 'culture from sputum',
-
+	# organs
+	'bone': 'bone',
 	'homogenized mouse spleen': 'homogenized mouse spleens', # standardize singular/plural
+	'lung': 'lung',
+	'skin': 'skin',
+	'epidermis': 'skin',
 
+	'biofilm': 'biofilm',
+
+	# environemntal -- excludes "farm" as those are all tissue samples
+	'soil': 'environmental (soil)',
+	'river sediment': 'environmental (river sediment)',
+	'air from': 'environmental (air)',
+	'HCU': 'environmental (HCU)', # do BEFORE water
+	'water': 'environmental (water)',
+	
+	# lab stuff
 	'Laboratory experiment': 'laboratory, experimental evolution',
 	'laboratory evolution': 'laboratory, experimental evolution',
-
 	'Laboratory obtained strain': 'laboratory-obtained strain',
 	'laboratory reference strain': 'laboratory reference strain',
 	'Lab strain': 'laboratory-obtained strain',
 	'lab strain': 'laboratory-obtained strain',
 
-	'right lung': 'lung (right)',
-	'left lung': 'lung (left)',
-	'tissue lung': 'lung',
-	'lungs': 'lung',
-	'Lungs': 'lung',
-	'lung sample': 'lung',
-	'Lung samples': 'lung',
-	'Lung tissues': 'lung',
-	'Lung tissue': 'lung',
-	'lung': 'lung',
+	# dead
+	'Morgue': 'necropsy (morgue)',
+	'Abbattoir': 'necropsy (abbattoir)',
+	'slaughterhouse': 'necropsy (abbattoir)',
 
-	# lymph node
-	'lymph node': 'lymph node',
-	'Lymph Node Biopsy': 'lymph node',
+	# owies
+	'abscess': 'abscess',
+	'caseum': 'caseous mass',
+	'CaseousMasses': 'caseous mass',
+	'lesion': 'lesion',
+	'wound': 'wound',
+	'scar': 'scar tissue',
 
-	# lymph nodes
-	'Tissue: Lymph nodes': 'lymph nodes',
-	'Tissue: lymph nodes': 'lymph nodes',
-	'lymph nodes': 'lymph nodes',
-
+	# lymph nodes (specific)
 	'Cervical lymphnode biopsy': 'lymph node (cervical)',
 	'Cervical lymph node': 'lymph node (cervical)',
 	'Lung lymph node': 'lymph node (lung)',
 	'Head lymph node': 'lymph node (head)',
 	'Pectoral lymph nodes': 'lymph node (pectoral)',
-	
-	'clinical: sputum': 'sputum',
-	'Human patient sputum': 'sputum',
-	'human sputum': 'sputum',
-	'Human sputum': 'sputum',
-	'induced sputum': 'sputum',
-	'Induced Sputum': 'sputum',
-	'Induced sputum': 'sputum',
-	'patient sputum': 'sputum',
-	'Respiratory sample (sputum)': 'sputum',
-	'Respiratory, Lower, Sputum-Induced': 'sputum',
-	'Sputa': 'sputum',
-	'sputum_': 'sputum', # sputum_221, etc
-	'Sputum clinical sample': 'sputum',
-	'Sputum collection': 'sputum',
-	'Sputum coughed': 'sputum',
-	'Sputum induced': 'sputum',
-	'sputum patient': 'sputum',
-	'Sputum Sample': 'sputum',
-	'Sputum sample': 'sputum',
-	'sputum sample': 'sputum',
-	'sputum samples': 'sputum',
-	'sputum specimen': 'sputum',
-	'Sputum specimens': 'sputum',
-	'sputum throat swab': 'sputum',
-	'sputum, respiratory sample': 'sputum',
-	'sputum, respiratory sample': 'sputum',
-	'Sputum1': 'sputum',
-	'Sputum10': 'sputum',
-	'Sputum11': 'sputum',
-	'Sputum12': 'sputum',
-	'Sputum13': 'sputum',
-	'Sputum14': 'sputum',
-	'Sputum15': 'sputum',
-	'Sputum16': 'sputum',
-	'Sputum17': 'sputum',
-	'Sputum18': 'sputum',
-	'Sputum19': 'sputum',
-	'Sputum2': 'sputum',
-	'Sputum20': 'sputum',
-	'Sputum3': 'sputum',
-	'Sputum4': 'sputum',
-	'Sputum5': 'sputum',
-	'Sputum6': 'sputum',
-	'Sputum7': 'sputum',
-	'Sputum8': 'sputum',
-	'Sputum9': 'sputum',
-	'AFB sputum smear': 'sputum (AFB smear)',
 
-	'pleural fluid': 'pleural fluid',
-	'pleuralFluid': 'pleural fluid',
+	# lymph nodes (plural)
+	'lymph nodes': 'lymph nodes',
 
-	'Pulmonary Sample': 'pulmonary',
+	# lymph node (singular, do after all other lymphy bits)
+	'lymph node': 'lymph node',
+	'Lymph Node Biopsy': 'lymph node',
+
+	# poop
+	'fecal': 'feces',
+	'stool': 'feces',
+	'feces': 'feces',
+	'animal waste': 'feces',
+
+	# lungscore?
 	'PULMONARY': 'pulmonary',
+
+	# do these last to avoid overwrites
+	'culture': 'culture (unspecified)',
+	'in vitro': 'culture (unspecified)',
+	'in-vitro': 'culture (unspecified)',
+	'clinical strain': 'clinical strain',
+	'clinical isolate': 'clinical (unspecified)',
+	'clinical sample': 'clinical (unspecified)',
+	'Environmental': 'environmental (unspecified)',
+	'clinical': 'clinical (unspecified)',
+	'lawn on agar plate': 'culture (lawn/sweep)',
+	'hospital': 'clinical (unspecified)',
+	'Negative Control': 'negative control',
+	'bacterial suspension': 'culture (unspecified)',
 }
 
-
-if_this_and_that_then = [
-	['(?i)culture', '(?i)sputum', 'culture from sputum'],
-	['(?i)culture', '(?i)feces', 'culture from feces'],
-	['(?i)culture', '(?i)feces', 'culture from feces'],
-	['(?i)scrapate', '(?i)granuloma', 'scrapate of granuloma'],
-	['(?i)biopsy', '(?i)skin', 'biopsy from skin'],
-
-]
+# unlike the above, 
+harsh_matching = {
+	"animal": "a"
+}
 
 
 
