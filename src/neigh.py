@@ -44,39 +44,10 @@ class NeighLib:
 		else:
 			return arg
 
+	# --------- GET FUNCTIONS --------- #
+
 	def get_number_of_x_in_column(self, polars_df, x, column):
 		return len(polars_df.filter(pl.col(column) == x))
-
-	def print_a_where_b_is_in_list(self, polars_df, col_a, col_b, list_to_match: list, alsoprint=None, valuecounts=False, header=None):
-		header = header if header is not None else f"{col_a} where {col_b} in {list_to_match}"
-		print_columns = set(self.get_valid_id_columns(polars_df) + [col_a, col_b])
-		print_columns = list(print_columns.union(self.valid_cols(polars_df, alsoprint))) if alsoprint is not None else list(print_columns)
-		
-		if col_a not in polars_df.columns or col_b not in polars_df.columns:
-			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but at least one of those columns aren't in the dataframe!")
-			return
-		if polars_df.schema[col_b] == pl.Utf8:
-			print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_in(list_to_match)).then(pl.col(col_a)).otherwise(None).alias(col_a)).drop_nulls(subset=col_a)
-			self.super_print_pl(print_df.select(print_columns), header)
-			if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
-		else:
-			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but either {col_b} isn't a string so we can't match on it properly")
-
-	def print_a_where_b_is_foo(self, polars_df, col_a, col_b, foo, alsoprint=None, valuecounts=False, header=None):
-		header = header if header is not None else f"{col_a} where {col_b} is {foo}"
-		if col_a not in polars_df.columns or col_b not in polars_df.columns:
-			self.logging.warning(f"Tried to print column {col_a} where column {col_b} equals {foo}, but at least one of those columns aren't in the dataframe!")
-			return
-		if type(foo) == str:
-			assert polars_df.schema[col_b] == pl.Utf8
-		print_df = polars_df.with_columns(pl.when(pl.col(col_b) == foo).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
-		valid_ids = self.get_valid_id_columns(polars_df)
-		if col_a in valid_ids or col_b in valid_ids:  # this check avoids polars.exceptions.DuplicateError
-			print_columns = [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else [f"{col_a}_filtered", col_b]
-		else:
-			print_columns = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
-		self.super_print_pl(print_df.select(print_columns), header)
-		if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
 
 	def get_a_where_b_is_null(self, polars_df, col_a, col_b):
 		if col_a not in polars_df.columns or col_b not in polars_df.columns:
@@ -84,15 +55,6 @@ class NeighLib:
 			return
 		get_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
 		return get_df
-
-	def print_a_where_b_is_null(self, polars_df, col_a, col_b, alsoprint=None, valuecounts=False):
-		if col_a not in polars_df.columns or col_b not in polars_df.columns:
-			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is pl.Null, but at least one of those columns aren't in the dataframe!")
-			return
-		print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
-		print_columns = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
-		self.super_print_pl(print_df.select(print_columns), f"{col_a} where {col_b} is pl.Null")
-		if valuecounts: self.print_value_counts(print_columns, only_these_columns=col_a)
 
 	def get_most_common_non_null_and_its_counts(self, polars_df, col, and_its_counts=True):
 		counts = polars_df.select(
@@ -116,6 +78,244 @@ class NeighLib:
 			self.logging.error(f"Found {null_count} nulls in column {column_name}")
 			raise AssertionError
 		return null_count
+
+	def get_count_of_x_in_column_y(self, polars_df, x, column_y):
+		if x is not None:
+			return polars_df.select((pl.col(column_y) == x).sum()).item()
+		else:
+			return polars_df.select((pl.col(column_y).is_null()).sum()).item()
+
+	def get_valid_id_columns(self, polars_df):
+		return self.valid_cols(polars_df, kolumns.id_columns)
+
+	def get_rows_where_list_col_more_than_one_value(self, polars_df, list_col):
+		""" Assumes https://github.com/pola-rs/polars/issues/19987 has been fixed, and that you have already
+		run drop_nulls() if you wanted to.
+		A partial workaround for older versions of polars: 
+		no_nulls = polars_df.filter(pl.col(list_col).list.first.is_not_null())
+		"""
+		assert polars_df.schema[list_col] == pl.List
+		return polars_df.filter(pl.col(list_col).list.len() > 1)
+
+	def get_paired_illumina(self, polars_df, inverse=False):
+		rows_before = polars_df.shape[0]
+		if 'librarysource' in polars_df.columns and 'platform' in polars_df.columns:
+			if polars_df.schema['platform'] == pl.Utf8 and polars_df.schema['librarylayout'] == pl.Utf8:
+				if not inverse:
+					self.logging.info("Filtering data to include only PE Illumina reads")
+					polars_df = polars_df.filter(
+						(pl.col('platform') == 'ILLUMINA') & 
+						(pl.col('librarylayout') == 'PAIRED')
+					)
+					self.logging.info(f"Excluded {rows_before-polars_df.shape[0]} rows of non-paired/non-Illumina data")
+				else:
+					self.logging.info("Filtering data to exclude PE Illumina reads")
+					polars_df = polars_df.filter(
+						(pl.col('platform') != 'ILLUMINA') & 
+						(pl.col('librarylayout') != 'PAIRED')
+					)
+					self.logging.info(f"Excluded {rows_before-polars_df.shape[0]} rows of PE Illumina data")
+			else:
+				self.logging.warning("Failed to filter out non-PE Illumina as platform and/or librarylayout columns aren't type string")
+		else:
+			self.logging.warning("Failed to filter out non-PE Illumina as platform and/or librarylayout columns aren't present")
+		return polars_df
+
+	def get_index_column(self, polars_df, quiet=False):
+		"""
+		Does NOT check for duplicates in the index column(s)
+		"""
+		sample_indeces = kolumns.equivalence['sample_index']
+		sample_matches = [col for col in sample_indeces if col in polars_df.columns]
+		run_indeces = kolumns.equivalence['run_index']
+		run_matches = [col for col in run_indeces if col in polars_df.columns]
+
+		# more than one sample index, arbitrary number of run indeces
+		if len(sample_matches) > 1:
+			if not quiet:
+				raise ValueError(f"Tried to find dataframe index, but there's multiple possible sample indeces: {sample_matches}")
+			else:
+				return [2, sample_matches]
+	
+		# one sample index, arbitrary number of run indeces
+		elif len(sample_matches) == 1:
+			if len(run_matches) > 1:
+				if not quiet:
+					raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces (may indicate failed run->sample conversion):  {run_matches}")
+				else:
+					return [3, run_matches]
+			
+			elif len(run_matches) == 1:
+				if polars_df.schema[run_matches[0]] == pl.List:
+					return str(sample_matches[0])
+				else:
+					return str(run_matches[0])
+
+			else:
+				return str(sample_matches[0])  # no run indeces, just one sample index
+
+		# no sample index, multiple run indeces
+		elif len(run_matches) > 1:
+			if not quiet:
+				raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces: {run_matches}")
+			else:
+				return [4, run_matches]
+		
+		# no sample index, one run index
+		elif len(run_matches) == 1:
+			return str(run_matches[0])
+
+		else:
+			if not quiet:
+				raise ValueError(f"No valid index column found in polars_df! Columns available: {polars_df.columns}")
+			else:
+				return [5]
+
+	def get_dupe_columns_of_two_polars(self, polars_df_a, polars_df_b, assert_shared_cols_equal=False):
+		""" Check two polars dataframes share any columns """
+		columns_a = list(polars_df_a.columns)
+		columns_b = list(polars_df_b.columns)
+		dupes = []
+		for column in columns_a:
+			if column in columns_b:
+				dupes.append(column)
+		if len(dupes) >= 0:
+			if assert_shared_cols_equal:
+				for dupe in dupes:
+					assert_series_equal(polars_df_a[dupe], polars_df_b[dupe])
+		return dupes
+
+	# --------- PRINT FUNCTIONS --------- #
+
+	def print_cols_and_dtypes(self, polars_df):
+		[print(f"{col}: {dtype}") for col, dtype in zip(polars_df.columns, polars_df.dtypes)]
+
+	def print_a_where_b_equals_these(self, polars_df, col_a, col_b, list_to_match: list, alsoprint=None, valuecounts=False, header=None):
+		header = header if header is not None else f"{col_a} where {col_b} in {list_to_match}"
+		print_columns = set(self.get_valid_id_columns(polars_df) + [col_a, col_b])
+		print_columns = list(print_columns.union(self.valid_cols(polars_df, alsoprint))) if alsoprint is not None else list(print_columns)
+		
+		if col_a not in polars_df.columns or col_b not in polars_df.columns:
+			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but at least one of those columns aren't in the dataframe!")
+			return
+		if polars_df.schema[col_b] == pl.Utf8:
+			print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_in(list_to_match)).then(pl.col(col_a)).otherwise(None).alias(col_a)).drop_nulls(subset=col_a)
+			self.super_print_pl(print_df.select(print_columns), header)
+			if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
+		else:
+			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but either {col_b} isn't a string so we can't match on it properly")
+
+	def print_a_where_b_equals_this(self, polars_df, col_a, col_b, foo, alsoprint=None, valuecounts=False, header=None):
+		header = header if header is not None else f"{col_a} where {col_b} is {foo}"
+		if col_a not in polars_df.columns or col_b not in polars_df.columns:
+			self.logging.warning(f"Tried to print column {col_a} where column {col_b} equals {foo}, but at least one of those columns aren't in the dataframe!")
+			return
+		if type(foo) == str:
+			assert polars_df.schema[col_b] == pl.Utf8
+		print_df = polars_df.with_columns(pl.when(pl.col(col_b) == foo).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
+		valid_ids = self.get_valid_id_columns(polars_df)
+		if col_a in valid_ids or col_b in valid_ids:  # this check avoids polars.exceptions.DuplicateError
+			print_columns = [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else [f"{col_a}_filtered", col_b]
+		else:
+			print_columns = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
+		self.super_print_pl(print_df.select(print_columns), header)
+		if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
+
+	def print_a_where_b_is_null(self, polars_df, col_a, col_b, alsoprint=None, valuecounts=False):
+		if col_a not in polars_df.columns or col_b not in polars_df.columns:
+			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is pl.Null, but at least one of those columns aren't in the dataframe!")
+			return
+		print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_null()).then(pl.col(col_a)).otherwise(None).alias(f"{col_a}_filtered")).drop_nulls(subset=f"{col_a}_filtered")
+		print_columns = self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b] + alsoprint if alsoprint is not None else self.get_valid_id_columns(print_df) + [f"{col_a}_filtered", col_b]
+		self.super_print_pl(print_df.select(print_columns), f"{col_a} where {col_b} is pl.Null")
+		if valuecounts: self.print_value_counts(print_columns, only_these_columns=col_a)
+
+	def print_col_where(self, polars_df, column="source", equals="Coscolla", cols_of_interest=kolumns.id_columns, everything=False):
+		if column not in polars_df.columns:
+			self.logging.warning(f"Tried to print where {column} equals {equals}, but that column isn't in the dataframe")
+			return
+		
+		# I am not adding all the various integer types in polars here. go away. you'll get a try/except block at best.
+		elif type(equals) == list and polars_df.schema[column] != pl.List:
+			self.logging.warning(f"Tried to print where {column} equals list {equals}, but that column has type {polars_df.schema[column]}")
+			return
+		elif type(equals) == str and polars_df.schema[column] != pl.Utf8:
+			self.logging.info("This is a list column and you passed in a string -- I'm assuming you are looking for the string in the list")
+			filtah = polars_df.filter(pl.col(column).list.contains(equals))
+		else:
+			filtah = polars_df.filter(pl.col(column) == equals)
+		if not everything:
+			cols_to_print = list(set([thingy for thingy in cols_of_interest if thingy in polars_df.columns] + [column]))
+		else:
+			cols_to_print = polars_df.columns
+		with pl.Config(tbl_cols=-1, tbl_rows=40):
+			print(filtah.select(cols_to_print))
+
+	def print_only_where_col_list_is_big(self, polars_df, column_of_lists):
+		if column_of_lists not in polars_df.columns:
+			self.logging.warning(f"Tried to print {column_of_lists}, but that column isn't even in the dataframe!")
+		elif polars_df.schema[column_of_lists] != pl.List:
+			self.logging.warning(f"Tried to print where {column_of_lists} has multiple values, but that column isn't a list!")
+		else:
+			cols_of_interest = kolumns.id_columns + [column_of_lists]
+			cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
+			with pl.Config(tbl_cols=-1, tbl_rows=10, fmt_str_lengths=200, fmt_table_cell_list_len=10):
+				print(polars_df.filter(pl.col(column_of_lists).list.len() > 1).select(cols_to_print))
+
+	def print_only_where_col_not_null(self, polars_df, column, cols_of_interest=kolumns.id_columns):
+		if column not in polars_df.columns:
+			self.logging.warning(f"Tried to print where {column} is not null, but that column isn't even in the dataframe!")
+		else:
+			cols_to_print = list(set(cols_of_interest + [column]).intersection(polars_df.columns))
+			with pl.Config(tbl_cols=-1, tbl_rows=10, fmt_str_lengths=200, fmt_table_cell_list_len=10):
+				print(polars_df.filter(pl.col(column).is_not_null()).select(cols_to_print))
+
+	def print_value_counts(self, polars_df, only_these_columns=None, skip_ids=True):
+		for column in polars_df.columns:
+			if skip_ids and column not in kolumns.id_columns:
+				if only_these_columns is not None and column in only_these_columns:
+					with pl.Config(fmt_str_lengths=500, tbl_rows=50):
+						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
+						print(counts)
+				elif only_these_columns is None:
+					with pl.Config(fmt_str_lengths=500, tbl_rows=50):
+						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
+						print(counts)
+				else:
+					continue
+			else:
+				continue
+
+	@staticmethod
+	def wide_print_polars(polars_df, header, these_columns):
+		assert len(these_columns) >= 3
+		print(f"┏{'━' * len(header)}┓")
+		print(f"┃{header}┃")
+		print(f"┗{'━' * len(header)}┛")
+		filtered = polars_df.select(these_columns)
+		filtered = filtered.filter(
+			(pl.col(these_columns[1]).is_not_null()) | 
+			(pl.col(these_columns[2]).is_not_null())
+		)
+		with pl.Config(tbl_cols=10, tbl_rows=200, fmt_str_lengths=200, fmt_table_cell_list_len=10):
+			print(filtered)
+
+	@staticmethod
+	def super_print_pl(polars_df, header):
+		print(f"┏{'━' * len(header)}┓")
+		print(f"┃{header}┃")
+		print(f"┗{'━' * len(header)}┛")
+		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
+			print(polars_df)
+
+	def print_schema(self, polars_df):
+		schema_df = pl.DataFrame({
+			"COLUMN": [name for name, _ in polars_df.schema.items()],
+			"TYPE": [str(dtype) for _, dtype in polars_df.schema.items()]
+		})
+		print(schema_df)
+
+	# --------- GENERAL FUNCTIONS --------- #
 
 	def null_lists_of_len_zero(self, polars_df):
 		"""skips ID columns"""
@@ -178,54 +378,7 @@ class NeighLib:
 		# do this one more time since we may have dropped some values
 		self.logging.debug("Second pass of nulling lists of len zero")
 		polars_df = self.null_lists_of_len_zero(polars_df)
-		
 		return polars_df
-
-	def print_col_where(self, polars_df, column="source", equals="Coscolla", cols_of_interest=kolumns.id_columns, everything=False):
-		if column not in polars_df.columns:
-			self.logging.warning(f"Tried to print where {column} equals {equals}, but that column isn't in the dataframe")
-			return
-		
-		# I am not adding all the various integer types in polars here. go away. you'll get a try/except block at best.
-		elif type(equals) == list and polars_df.schema[column] != pl.List:
-			self.logging.warning(f"Tried to print where {column} equals list {equals}, but that column has type {polars_df.schema[column]}")
-			return
-		elif type(equals) == str and polars_df.schema[column] != pl.Utf8:
-			self.logging.info("This is a list column and you passed in a string -- I'm assuming you are looking for the string in the list")
-			filtah = polars_df.filter(pl.col(column).list.contains(equals))
-		else:
-			filtah = polars_df.filter(pl.col(column) == equals)
-		if not everything:
-			cols_to_print = list(set([thingy for thingy in cols_of_interest if thingy in polars_df.columns] + [column]))
-		else:
-			cols_to_print = polars_df.columns
-		with pl.Config(tbl_cols=-1, tbl_rows=40):
-			print(filtah.select(cols_to_print))
-
-	def get_count_of_x_in_column_y(self, polars_df, x, column_y):
-		if x is not None:
-			return polars_df.select((pl.col(column_y) == x).sum()).item()
-		else:
-			return polars_df.select((pl.col(column_y).is_null()).sum()).item()
-
-	def print_only_where_col_list_is_big(self, polars_df, column_of_lists):
-		if column_of_lists not in polars_df.columns:
-			self.logging.warning(f"Tried to print {column_of_lists}, but that column isn't even in the dataframe!")
-		elif polars_df.schema[column_of_lists] != pl.List:
-			self.logging.warning(f"Tried to print where {column_of_lists} has multiple values, but that column isn't a list!")
-		else:
-			cols_of_interest = kolumns.id_columns + [column_of_lists]
-			cols_to_print = [thingy for thingy in cols_of_interest if thingy in polars_df.columns]
-			with pl.Config(tbl_cols=-1, tbl_rows=10, fmt_str_lengths=200, fmt_table_cell_list_len=10):
-				print(polars_df.filter(pl.col(column_of_lists).list.len() > 1).select(cols_to_print))
-
-	def print_only_where_col_not_null(self, polars_df, column, cols_of_interest=kolumns.id_columns):
-		if column not in polars_df.columns:
-			self.logging.warning(f"Tried to print where {column} is not null, but that column isn't even in the dataframe!")
-		else:
-			cols_to_print = list(set(cols_of_interest + [column]).intersection(polars_df.columns))
-			with pl.Config(tbl_cols=-1, tbl_rows=10, fmt_str_lengths=200, fmt_table_cell_list_len=10):
-				print(polars_df.filter(pl.col(column).is_not_null()).select(cols_to_print))
 
 	def mark_rows_with_value(self, polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
 		#polars_df = polars_df.with_columns(pl.lit("").alias(new_column))
@@ -244,22 +397,6 @@ class NeighLib:
 			.alias(new_column)
 		)
 		print(polars_df.select(pl.col(new_column).value_counts()))
-
-	def print_value_counts(self, polars_df, only_these_columns=None, skip_ids=True):
-		for column in polars_df.columns:
-			if skip_ids and column not in kolumns.id_columns:
-				if only_these_columns is not None and column in only_these_columns:
-					with pl.Config(fmt_str_lengths=500, tbl_rows=50):
-						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
-						print(counts)
-				elif only_these_columns is None:
-					with pl.Config(fmt_str_lengths=500, tbl_rows=50):
-						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
-						print(counts)
-				else:
-					continue
-			else:
-				continue
 
 	def valid_cols(self, polars_df, desired_columns: list):
 		return [col for col in desired_columns if col in polars_df.columns]
@@ -323,35 +460,6 @@ class NeighLib:
 			if 'k' in d and 'v' in d:
 				combined_dict[d['k']] = d['v']
 		return combined_dict
-	
-	@staticmethod
-	def wide_print_polars(polars_df, header, these_columns):
-		assert len(these_columns) >= 3
-		print(f"┏{'━' * len(header)}┓")
-		print(f"┃{header}┃")
-		print(f"┗{'━' * len(header)}┛")
-		filtered = polars_df.select(these_columns)
-		filtered = filtered.filter(
-			(pl.col(these_columns[1]).is_not_null()) | 
-			(pl.col(these_columns[2]).is_not_null())
-		)
-		with pl.Config(tbl_cols=10, tbl_rows=200, fmt_str_lengths=200, fmt_table_cell_list_len=10):
-			print(filtered)
-
-	@staticmethod
-	def super_print_pl(polars_df, header):
-		print(f"┏{'━' * len(header)}┓")
-		print(f"┃{header}┃")
-		print(f"┗{'━' * len(header)}┛")
-		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
-			print(polars_df)
-
-	def print_schema(self, polars_df):
-		schema_df = pl.DataFrame({
-			"COLUMN": [name for name, _ in polars_df.schema.items()],
-			"TYPE": [str(dtype) for _, dtype in polars_df.schema.items()]
-		})
-		print(schema_df)
 
 	def try_nullfill(self, polars_df, left_col, right_col):
 		before = self.get_null_count_in_column(polars_df, left_col, warn=False)
@@ -636,47 +744,11 @@ class NeighLib:
 			polars_df = self.iteratively_merge_these_columns(polars_df, merge_these_columns, recursion_depth=recursion_depth+1)
 		return polars_df.rename({left_col: equivalence_key}) if equivalence_key is not None else polars_df
 
-	def get_rows_where_list_col_more_than_one_value(self, polars_df, list_col):
-		""" Assumes https://github.com/pola-rs/polars/issues/19987 has been fixed, and that you have already
-		run drop_nulls() if you wanted to.
-		A partial workaround for older versions of polars: 
-		no_nulls = polars_df.filter(pl.col(list_col).list.first.is_not_null())
-		"""
-		assert polars_df.schema[list_col] == pl.List
-		return polars_df.filter(pl.col(list_col).list.len() > 1)
-
-	def get_paired_illumina(self, polars_df, inverse=False):
-		rows_before = polars_df.shape[0]
-		if 'librarysource' in polars_df.columns and 'platform' in polars_df.columns:
-			if polars_df.schema['platform'] == pl.Utf8 and polars_df.schema['librarylayout'] == pl.Utf8:
-				if not inverse:
-					self.logging.info("Filtering data to include only PE Illumina reads")
-					polars_df = polars_df.filter(
-						(pl.col('platform') == 'ILLUMINA') & 
-						(pl.col('librarylayout') == 'PAIRED')
-					)
-					self.logging.info(f"Excluded {rows_before-polars_df.shape[0]} rows of non-paired/non-Illumina data")
-				else:
-					self.logging.info("Filtering data to exclude PE Illumina reads")
-					polars_df = polars_df.filter(
-						(pl.col('platform') != 'ILLUMINA') & 
-						(pl.col('librarylayout') != 'PAIRED')
-					)
-					self.logging.info(f"Excluded {rows_before-polars_df.shape[0]} rows of PE Illumina data")
-			else:
-				self.logging.warning("Failed to filter out non-PE Illumina as platform and/or librarylayout columns aren't type string")
-		else:
-			self.logging.warning("Failed to filter out non-PE Illumina as platform and/or librarylayout columns aren't present")
-		return polars_df
-
 	def unique_bioproject_per_center_name(self, polars_df: pl.DataFrame, center_name="FZB"):
 		return (
 			polars_df.filter(pl.col("center_name") == center_name)
 			.select("BioProject").unique().to_series().to_list()
 		)
-
-	def get_valid_id_columns(self, polars_df):
-		return self.valid_cols(polars_df, kolumns.id_columns)
 	
 	def rancheroize_polars(self, polars_df, drop_non_mycobact_columns=True, nullify=True, flatten=True, disallow_right=True, check_index=True, norename=False, drop_unwanted_columns=True):
 		self.logging.debug(f"Dataframe shape before rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
@@ -762,56 +834,6 @@ class NeighLib:
 	def is_run_indexed(self, polars_df):
 		index = self.get_index_column(polars_df)
 		return True if index in kolumns.equivalence['run_index'] else False
-
-	def get_index_column(self, polars_df, quiet=False):
-		"""
-		Does NOT check for duplicates in the index column(s)
-		"""
-		sample_indeces = kolumns.equivalence['sample_index']
-		sample_matches = [col for col in sample_indeces if col in polars_df.columns]
-		run_indeces = kolumns.equivalence['run_index']
-		run_matches = [col for col in run_indeces if col in polars_df.columns]
-
-		# more than one sample index, arbitrary number of run indeces
-		if len(sample_matches) > 1:
-			if not quiet:
-				raise ValueError(f"Tried to find dataframe index, but there's multiple possible sample indeces: {sample_matches}")
-			else:
-				return [2, sample_matches]
-	
-		# one sample index, arbitrary number of run indeces
-		elif len(sample_matches) == 1:
-			if len(run_matches) > 1:
-				if not quiet:
-					raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces (may indicate failed run->sample conversion):  {run_matches}")
-				else:
-					return [3, run_matches]
-			
-			elif len(run_matches) == 1:
-				if polars_df.schema[run_matches[0]] == pl.List:
-					return str(sample_matches[0])
-				else:
-					return str(run_matches[0])
-
-			else:
-				return str(sample_matches[0])  # no run indeces, just one sample index
-
-		# no sample index, multiple run indeces
-		elif len(run_matches) > 1:
-			if not quiet:
-				raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces: {run_matches}")
-			else:
-				return [4, run_matches]
-		
-		# no sample index, one run index
-		elif len(run_matches) == 1:
-			return str(run_matches[0])
-
-		else:
-			if not quiet:
-				raise ValueError(f"No valid index column found in polars_df! Columns available: {polars_df.columns}")
-			else:
-				return [5]
 
 	def coerce_to_not_list_if_possible(self, polars_df, column, index_column, prefix_arrow=False):
 		arrow = '-->' if prefix_arrow else ''
@@ -1282,9 +1304,6 @@ class NeighLib:
 
 		return polars_df
 
-	def print_polars_cols_and_dtypes(self, polars_df):
-		[print(f"{col}: {dtype}") for col, dtype in zip(polars_df.columns, polars_df.dtypes)]
-
 	def add_column_of_just_this_value(self, polars_df, column, value):
 		assert column not in polars_df.columns
 		return polars_df.with_columns(pl.lit(value).alias(column))
@@ -1315,20 +1334,6 @@ class NeighLib:
 			debug = pl.DataFrame({col:  f"Was {dtype1}, now {dtype2}" for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if col in df_to_write.columns and dtype2 != pl.String and dtype2 != pl.List(pl.String)})
 			self.super_print_pl(debug, "Potentially problematic that may have caused the TSV write failure:")
 			exit(1)
-
-	def get_dupe_columns_of_two_polars(self, polars_df_a, polars_df_b, assert_shared_cols_equal=False):
-		""" Check two polars dataframes share any columns """
-		columns_a = list(polars_df_a.columns)
-		columns_b = list(polars_df_b.columns)
-		dupes = []
-		for column in columns_a:
-			if column in columns_b:
-				dupes.append(column)
-		if len(dupes) >= 0:
-			if assert_shared_cols_equal:
-				for dupe in dupes:
-					assert_series_equal(polars_df_a[dupe], polars_df_b[dupe])
-		return dupes
 	
 	def assert_unique_columns(self, pandas_df):
 		"""Assert all columns in a !!!PANDAS!!! dataframe are unique -- useful if converting to polars """

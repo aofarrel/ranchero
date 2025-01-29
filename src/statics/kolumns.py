@@ -51,9 +51,9 @@ equivalence = {
 		'sra_study': ['sra_study', 'SRA Study'], # SRP ID
 		'strain': ['strain', 'strain_sam_ss_dpl139', 'strain_name_alias_sam', 'strain_geno', 'sub_strain_sam_s_dpl389', 'strain_genotype_sam_s_dpl382', 'cell_line_sam', 'cell_line_run'],
 		'SRX_id': ['SRX_id', 'experiment', 'Experiment'], # DO NOT USE experiment_sam! that is something totally different! 
-		'XRS_id': ['XRS_id', 'sample_acc'], # SRS/ERS/DRS accession
+		'SRS_id': ['SRS_id', 'sample_acc'], # SRS/ERS/DRS accession
 	}
-id_columns = equivalence['run_index'] + equivalence['sample_index']
+id_columns = equivalence['run_index'] + equivalence['sample_index'] + equivalence['SRS_id'] + equivalence['SRX_id']
 assert len(set(sum(equivalence.values(), []))) == len(sum(equivalence.values(), []))  # effectively asserts no shared values (both within a key's value-lists, and across all other value-lists)
 
 # Once columns are merged, the "equivalence" columns are dropped since they have redundant information.

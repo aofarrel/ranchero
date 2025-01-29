@@ -363,7 +363,7 @@ class ProfessionalsHaveStandards():
 				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=False, overwrite=False, remove_match_from_list=True)
 
 			# DEBUG
-			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
+			NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
 
 		# here's where we actually beginning handling the stuff for this actual column!
 		for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
@@ -1125,4 +1125,4 @@ class ProfessionalsHaveStandards():
 			raise ValueError
 		if self.logging.getEffectiveLevel() == 10:
 			self.logging.debug("---- After absolutely everything ----")
-			NeighLib.print_a_where_b_is_in_list(polars_df, col_a='country', col_b='run_index', list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
+			NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_index', list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
