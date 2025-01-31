@@ -317,9 +317,21 @@ class NeighLib:
 
 	# --------- GENERAL FUNCTIONS --------- #
 
-	def null_lists_of_len_zero(self, polars_df):
+	def extract_primary_lineage(self, polars_df, lineage_column, output_column):
+		"""CAVEAT: exepcts tbprofiler format (eg "lineage" or "La")"""
+		return polars_df.with_columns(
+			pl.when(pl.col(lineage_column).is_not_null() & ~pl.col(lineage_column).str.contains(";"))
+			.then(pl.col(lineage_column).str.extract(r"(lineage\s*\d+|La\s*\d+)"))
+			.otherwise(None)
+			.alias(output_column)
+		)
+
+	def null_lists_of_len_zero(self, polars_df, just_this_column=None):
 		"""skips ID columns"""
-		list_cols = [col for col in polars_df.columns if polars_df.schema[col] == pl.List(pl.Utf8) and col not in kolumns.id_columns]
+		if just_this_column is None:
+			list_cols = [col for col in polars_df.columns if polars_df.schema[col] == pl.List(pl.Utf8) and col not in kolumns.id_columns]
+		else:
+			list_cols = just_this_column
 		for column in list_cols:
 			before = self.get_null_count_in_column(polars_df, column, warn=False)
 			polars_df = polars_df.with_columns(pl.col(column).list.drop_nulls()) # [pl.Null] --> []
@@ -481,13 +493,16 @@ class NeighLib:
 		if polars_df[column].dtype != pl.List:
 			if allow_nulls: # will break concat_list() as it propagates nulls for some reason
 				polars_df = polars_df.with_columns(pl.when(pl.col(column).is_not_null().then(pl.col(column).cast(pl.List(str)))).alias("as_this_list"))
-				polars_df.drop([column]).rename({"as_this_list": column})
+				polars_df = polars_df.drop([column]).rename({"as_this_list": column})
 				return polars_df
 			else:
-				return polars_df.with_columns(pl.col(column).cast(pl.List(str)))
+				polars_df = polars_df.with_columns(pl.col(column).cast(pl.List(str)).alias("as_this_list"))
+				polars_df = polars_df.drop([column]).rename({"as_this_list": column})
+				assert polars_df.schema[column] != pl.Utf8
+				return polars_df
 		else:
 			return polars_df
-
+	
 	def check_base_and_right_in_df(self, polars_df, left_col, right_col):
 		#if left_col not in polars_df.columns and not escalate_warnings:
 		#	self.logging.warning(f"Found {right_col}, but {left_col} not in dataframe")

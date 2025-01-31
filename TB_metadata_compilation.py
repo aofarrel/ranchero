@@ -4,6 +4,7 @@ import gc
 import src as Ranchero
 _b_ = "\033[1m"
 _bb_ = "\033[0m"
+_c_ = "\033[0;36m"
 print(f"Module import time: {time.time() - start:.4f}")
 start_from_scratch = True
 inject = True
@@ -16,12 +17,14 @@ def check_stuff(polars_df, name=None):
 		print(f"{_b_}...Performing checks on {name}...{_bb_}")
 	else:
 		print(f"{_b_}...Performing checks...{_bb_}")
+	print(f"{_c_}")
 	Ranchero.NeighLib.check_index(polars_df)
 	print(f"Estimated size: {polars_df.estimated_size(unit='mb')} MB")
 
 	if 'collection' in polars_df.columns:
 		assert polars_df.schema['collection'] is not Ranchero.pl.List(Ranchero.pl.List(Ranchero.pl.Utf8))
 		Ranchero.NeighLib.print_only_where_col_not_null(polars_df, 'collection')
+		Ranchero.NeighLib.print_value_counts(polars_df, ['collection'])
 		assert Ranchero.NeighLib.get_null_count_in_column(polars_df, 'collection') != 0
 	else:
 		print("collection not in polars_df")
@@ -457,6 +460,7 @@ def sample_index_merges(merged_runs):
 	
 	tree = Ranchero.from_tsv("./inputs/pipeline/samples on tree 2024-12-12.txt", auto_rancheroize=False)
 	merged = Ranchero.merge_dataframes(merged, tree, merge_upon="sample_index", right_name="tree", indicator="collection", drop_exclusive_right=False)
+	Ranchero.NeighLib.print_value_counts(merged, ['collection'])
 
 	tbprofiler = Ranchero.from_tsv("./inputs/TBProfiler/tbprofiler_basically_everything_rancheroized.tsv")
 	tbprofiler = tbprofiler.drop(['tbprof_main_lin', 'tbprof_family', 'superbatch'])
@@ -533,7 +537,7 @@ Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 's
 Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
 
 Ranchero.NeighLib.report(merged)
-Ranchero.to_tsv(merged, "./ranchero_rc13-IGNORE-TAXONCORE.tsv")
+Ranchero.to_tsv(merged, "./ranchero_rc15.tsv")
 
 
 #Ranchero.NeighLib.big_print_polars(merged, "merged hosts and dates", ['sample_index', 'date_collected', 'host_scienname', 'lineage'])
