@@ -266,27 +266,22 @@ class Merger:
 							# let merge_right_columns() handle it
 
 						else:
-							self.logging.debug(f"* {left_column}: LIST | SING (beware: this might be slow)")
+							self.logging.debug(f"* {left_column}: LIST | SING")
+							right_column = f"{left_column}_right"
+							assert right_column not in left.columns # shouldn't exist until after small_merge is created
 							small_merge = (
-								left.lazy()
-								.select([merge_upon, left_column])
-								.join(
-									right.lazy().select([merge_upon, left_column]),
-									on=merge_upon,
-									how="outer",
-								)
-								.with_columns(
-									# drop_nulls because concat_list() propagates them
-									concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls()
-								)
-								.drop([left_column, f"{left_column}_right", f"{merge_upon}_right"])
-								.rename({"concat_list": left_column})
-								.collect()
+								left.select([merge_upon, left_column])
+								.join(right.select([merge_upon, left_column]), on=merge_upon, how="full", coalesce=True)
 							)
-							left = left.drop(left_column)
-							right = right.drop(left_column)
-							left = left.join(small_merge, on=merge_upon, how="left")
-
+							small_merge = small_merge.with_columns(
+								pl.when(pl.col(left_column).is_null())   
+								.then(pl.col(right_column).cast(pl.List(str)))
+								.otherwise(pl.col(left_column)) 
+								.alias(f"{left_column}_nullfilled"),
+							)
+							small_merge = small_merge.with_columns(merged=pl.concat_list([f"{left_column}_nullfilled", right_column]).list.unique().list.drop_nulls()).drop([f"{left_column}_nullfilled", right_column, left_column])
+							left, right = left.drop(left_column), right.drop([left_column]) # prevent merge right columns from running after full merge
+							left = left.join(small_merge, on=merge_upon, how="full", coalesce=True).rename({"merged" : left_column})
 					else:
 						if right.schema[left_column] == pl.List(pl.String):
 							self.logging.debug(f"* {left_column}: SING | LIST")
