@@ -520,6 +520,9 @@ merged = merged_samps
 merged = merged.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'mbytes_sum_sum', 'geoloc_name'], strict=False)
 merged = merged.drop(['tbprof_rd', 'tbprof_spoligotype', 'tbprof_frac'], strict=False) # seem to be from the main lineage only, not the sublineage
 
+merged = merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info'], strict=False) # for less_columns version
+
+
 merged = Ranchero.hella_flat(merged)
 Ranchero.print_schema(merged)
 
@@ -537,7 +540,7 @@ Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 's
 Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
 
 Ranchero.NeighLib.report(merged)
-Ranchero.to_tsv(merged, "./ranchero_rc15.tsv")
+Ranchero.to_tsv(merged, "./ranchero_rc15_less_columns.tsv")
 
 
 #Ranchero.NeighLib.big_print_polars(merged, "merged hosts and dates", ['sample_index', 'date_collected', 'host_scienname', 'lineage'])
