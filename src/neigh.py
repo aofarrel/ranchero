@@ -273,11 +273,7 @@ class NeighLib:
 	def print_value_counts(self, polars_df, only_these_columns=None, skip_ids=True):
 		for column in polars_df.columns:
 			if skip_ids and column not in kolumns.id_columns:
-				if only_these_columns is not None and column in only_these_columns:
-					with pl.Config(fmt_str_lengths=500, tbl_rows=50):
-						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
-						print(counts)
-				elif only_these_columns is None:
+				if only_these_columns is None or column in only_these_columns:
 					with pl.Config(fmt_str_lengths=500, tbl_rows=50):
 						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
 						print(counts)
@@ -1332,7 +1328,10 @@ class NeighLib:
 		polars_df = polars_df.drop(cs.by_dtype(pl.List(pl.Null)))
 		return polars_df
 
-	def polars_to_tsv(self, polars_df, path: str):
+	def tsv_value_counts(self, polars_df, vcount_column, path):
+		self.polars_to_tsv(polars_df.select([pl.col(vcount_column).value_counts(sort=True)]).unnest(vcount_column), path, null_value='null')
+
+	def polars_to_tsv(self, polars_df, path: str, null_value=''):
 		print("Writing to TSV. Lists and objects will converted to strings, and columns full of nulls will be dropped.")
 		df_to_write = self.drop_null_columns(polars_df)
 		columns_with_type_list_or_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if (dtype == pl.List or dtype == pl.Object)]
@@ -1342,7 +1341,7 @@ class NeighLib:
 			if self.logging.getEffectiveLevel() == 10:
 				debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})
 				self.logging.debug(f"Non-string types, and what they converted to: {debug}")
-			df_to_write.write_csv(path, separator='\t', include_header=True, null_value='')
+			df_to_write.write_csv(path, separator='\t', include_header=True, null_value=null_value)
 			self.logging.info(f"Wrote dataframe to {path}")
 		except pl.exceptions.ComputeError:
 			print("WARNING: Failed to write to TSV due to ComputeError. This is likely a data type issue.")

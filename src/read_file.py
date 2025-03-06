@@ -93,6 +93,7 @@ class FileReader():
 
 	def polars_from_tsv(self, tsv, delimiter='\t', drop_columns=list(), explode_upon=None,
 		glob=True,
+		list_columns=None,
 		auto_parse_dates=_cfg_auto_parse_dates,
 		auto_rancheroize=_cfg_auto_rancheroize,
 		auto_standardize=_cfg_auto_standardize,
@@ -116,6 +117,16 @@ class FileReader():
 		if len(drop_columns) != 0:
 			polars_df = polars_df.drop(drop_columns)
 			self.logging.info(f"Dropped {drop_columns}")
+		
+		if list_columns is not None:
+			for column in list_columns:
+				polars_df = polars_df.with_columns(
+					polars_df[column]
+					.str.strip_chars("[]").str.replace_all("'", "", literal=True)
+					.str.split(",")
+					.alias(column)
+				)
+
 		if explode_upon != None:
 			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), delimiter=explode_upon, drop_new_non_unique=check_index)
 		if check_index: NeighLib.check_index(polars_df)
