@@ -152,6 +152,7 @@ class Merger:
 		left = NeighLib.drop_null_columns(left)
 		right = NeighLib.drop_null_columns(right)
 
+		# Check for B.S.
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:
 				raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in {name} dataframe")
@@ -165,8 +166,6 @@ class Merger:
 				else:
 					print(df.filter(pl.col(merge_upon).is_null()))
 				raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
-
-		# right/left-hand dataframe's index's values (SRR16156818, SRR12380906, etc) ONLY -- all other columns excluded
 		assert left.schema[merge_upon] == right.schema[merge_upon]
 		left_values, right_values = left[merge_upon], right[merge_upon]
 
@@ -268,33 +267,107 @@ class Merger:
 
 							# let merge_right_columns() handle it
 
+
+						# This section looks like nonsense but it is ESSENTIAL given just how annoying concat_list() can get!!
+						# Previously we tried something like this:
+						#small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
+						#small_merge = small_left.join(small_right, merge_upon, how="outer_coalesce")
+						#small_merge = small_merge.with_columns(concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls())
+						#small_merge = small_merge.drop(left_column).drop(f"{left_column}_right").rename({"concat_list": left_column})
+						#left, right = left.drop(left_column), right.drop(left_column) # prevent merge right columns from running after full merge
+						#left = left.join(small_merge, merge_upon, how='outer_coalesce')
+						# ...but it uses concat_list() too early, which results in nulls propagating before drop_nulls() can save us.
 						else:
 							self.logging.debug(f"* {left_column}: LIST | SING")
 							right_column = f"{left_column}_right"
 							assert right_column not in left.columns # shouldn't exist until after small_merge is created
+							
+							# Let's say merge_upon = "sample_index", left_column = "foo", right_column = "foo_right"
+							# Create small_merge dataframe by merging left and right upon "sample_index". This
+							# creates a new dataframe with columns "sample_index", "foo", and "foo_right".
 							small_merge = (
 								left.select([merge_upon, left_column])
 								.join(right.select([merge_upon, left_column]), on=merge_upon, how="full", coalesce=True)
 							)
+							# Wherever left column (list) is null, cast the right column (str) to list and use that
+							# value for new column "{left_column}_nullfilled_with_right_col".
+							# Otherwise (ie when left column is not null), keep that value for the new column.
+							# Keep in mind that right_column still exists!
 							small_merge = small_merge.with_columns(
 								pl.when(pl.col(left_column).is_null())   
 								.then(pl.col(right_column).cast(pl.List(str)))
 								.otherwise(pl.col(left_column)) 
-								.alias(f"{left_column}_nullfilled"),
+								.alias(f"{left_column}_nullfilled_with_right_col")
 							)
-							small_merge = small_merge.with_columns(merged=pl.concat_list([f"{left_column}_nullfilled", right_column]).list.unique().list.drop_nulls()).drop([f"{left_column}_nullfilled", right_column, left_column])
+							# Now that the left column has had as many nulls removed as possible, we want to remove nulls 
+							# from the right column, because nulls in the right column would also cause issues with concat_list.
+							small_merge = small_merge.with_columns(
+								pl.when(pl.col(right_column).is_null())
+								.then(pl.lit(""))
+								.otherwise(pl.col(right_column))
+								.alias(f"{right_column}_nullfilled_with_empty_str")
+							)
+							# Only now is it safe to use pl.concat_list() without worrying about nulls propagating.
+							small_merge = small_merge.with_columns(
+								merged=pl.concat_list([f"{left_column}_nullfilled_with_right_col", f"{right_column}_nullfilled_with_empty_str"])
+								.list.unique().list.drop_nulls()
+							).drop([f"{left_column}_nullfilled_with_right_col", f"{right_column}_nullfilled_with_empty_str", right_column, left_column])
+
+							# Remove empty strings from the list
+							small_merge = small_merge.with_columns(
+								pl.col("merged").list.eval(
+									pl.element().filter(pl.element().str.len_chars() > 0)
+								)
+							)
 							left, right = left.drop(left_column), right.drop([left_column]) # prevent merge right columns from running after full merge
 							left = left.join(small_merge, on=merge_upon, how="full", coalesce=True).rename({"merged" : left_column})
+
 					else:
 						if right.schema[left_column] == pl.List(pl.String):
 							self.logging.debug(f"* {left_column}: SING | LIST")
-							self.logging.warning("Merging a singular left column with a list right column is untested")
-							small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
-							small_merge = small_left.join(small_right, merge_upon, how="outer_coalesce")
-							small_merge = small_merge.with_columns(concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls())
-							small_merge = small_merge.drop(left_column).drop(f"{left_column}_right").rename({"concat_list": left_column})
-							left, right = left.drop(left_column), right.drop(left_column) # prevent merge right columns from running after full merge
-							left = left.join(small_merge, merge_upon, how='outer_coalesce')
+							right_column = f"{left_column}_right"
+							assert right_column not in left.columns
+
+							# Let's say merge_upon = "sample_index", left_column = "foo", right_column = "foo_right"
+							# Create small_merge dataframe by merging left and right upon "sample_index". This
+							# creates a new dataframe with columns "sample_index", "foo", and "foo_right".
+							small_merge = (
+								left.select([merge_upon, left_column])
+								.join(right.select([merge_upon, left_column]), on=merge_upon, how="full", coalesce=True)
+							)
+							# Wherever RIGHT column (list) is null, cast the LEFT column (list) to list and use that
+							# value for new column "{right_column}_nullfilled_with_left_col".
+							# Otherwise (ie when right column is not null), keep that value for the new column.
+							small_merge = small_merge.with_columns(
+								pl.when(pl.col(right_column).is_null())   
+								.then(pl.col(left_column).cast(pl.List(str)))
+								.otherwise(pl.col(right_column)) 
+								.alias(f"{right_column}_nullfilled_with_left_col")
+							)
+							# Now that the right (list) column has had as many nulls removed as possible, we want to remove nulls 
+							# from the left (str) column, because nulls in the left column would also cause issues with concat_list.
+							small_merge = small_merge.with_columns(
+								pl.when(pl.col(left_column).is_null())   
+								.then(pl.lit(""))
+								.otherwise(pl.col(left_column)) 
+								.alias(f"{left_column}_nullfilled_with_empty_str"),
+							)
+
+							# Only now is it safe to use pl.concat_list() without worrying about nulls propagating.
+							small_merge = small_merge.with_columns(
+								merged=pl.concat_list([f"{left_column}_nullfilled_with_empty_str", f"{right_column}_nullfilled_with_left_col"])
+								.list.unique().list.drop_nulls()
+							)
+
+							# Remove empty strings from the list
+							small_merge = small_merge.with_columns(
+								pl.col("merged").list.eval(
+									pl.element().filter(pl.element().str.len_chars() > 0)
+								)
+							)
+							small_merge = small_merge.drop([f"{left_column}_nullfilled_with_empty_str", f"{right_column}_nullfilled_with_left_col", right_column, left_column])	
+							left, right = left.drop(left_column), right.drop([left_column])
+							left = left.join(small_merge, on=merge_upon, how="full", coalesce=True).rename({"merged": left_column})
 						else:
 							self.logging.debug(f"* {left_column}: SING | SING")
 				else:
