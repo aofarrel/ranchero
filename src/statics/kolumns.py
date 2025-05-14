@@ -112,7 +112,8 @@ list_to_set_uniq = [
 	'libraryselection',
 	'librarylayout',
 	'librarysource',
-	'SRX_id'
+	'SRX_id',
+	'platform'
 ]
 
 # Unchanged
@@ -121,8 +122,7 @@ list_to_list_silent = [
 	'geo_loc_name_sam',
 	'geoloc_country_calc',
 	'geoloc_country_or_sea', 
-	'geoloc_info',
-	'platform'
+	'geoloc_info'
 ]
 
 # Throw an error (error can be made non-fatal in which case it will fallback on left or right per function settings)

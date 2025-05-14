@@ -517,19 +517,39 @@ class NeighLib:
 		return 0
 
 	def concat_columns_list(self, polars_df, left_col, right_col, uniq):
-		# TODO: I'm not convinced .list.drop_nulls() is actually helping anything; we still end up with [null] lists.
+	# TODO: merge or replace this function with the concat_list_no_prop_nulls function in merge.py		
 		if uniq:
 			polars_df = polars_df.with_columns(
-				pl.when(pl.col(left_col) != pl.col(right_col))                          # When a row has different values for base_col and right_col,
-				.then(pl.concat_list([left_col, right_col]).list.unique().list.drop_nulls()) # make a list of base_col and right_col, but keep only uniq values
-				.otherwise(pl.concat_list([left_col]).drop_nulls())                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
+				pl.when(
+					(pl.col(left_col).is_not_null())
+					.and_(pl.col(right_col).is_not_null()
+					.and_(pl.col(left_col) != pl.col(right_col)))       # When a row has different values for base_col and right_col,
+				)                                                       # make a list of base_col and right_col, but keep only uniq values
+				.then(pl.concat_list([left_col, right_col]).list.unique().list.drop_nulls()) 
+				.otherwise(
+					pl.when(                                            # otherwise, make list of just base_col (doesn't seem to nest if already a list)
+						pl.col(left_col).is_not_null()
+					)
+					.then(pl.concat_list([pl.col(left_col), pl.col(left_col)]).list.unique())
+					.otherwise(pl.concat_list([pl.col(right_col), pl.col(right_col)]).list.unique()) # at this point it doesn't matter if right_col is null since left is
+				)
 				.alias(left_col)
 			).drop(right_col)
 		else:
 			polars_df = polars_df.with_columns(
-				pl.when(pl.col(left_col) != pl.col(right_col))             # When a row has different values for base_col and right_col,
-				.then(pl.concat_list([left_col, right_col]).drop_nulls())  # make a list of base_col and right_col,
-				.otherwise(pl.concat_list([left_col]).drop_nulls())        # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
+				pl.when(
+					(pl.col(left_col).is_not_null())
+					.and_(pl.col(right_col).is_not_null()
+					.and_(pl.col(left_col) != pl.col(right_col)))       # When a row has different values for base_col and right_col,
+				)                                                       # make a list of base_col and right_col,
+				.then(pl.concat_list([left_col, right_col]).drop_nulls()) 
+				.otherwise(
+					pl.when(                                            # otherwise, make list of just base_col (doesn't seem to nest if already a list)
+						pl.col(left_col).is_not_null()
+					)
+					.then(pl.concat_list([pl.col(left_col), pl.col(left_col)]).list.unique())
+					.otherwise(pl.concat_list([pl.col(right_col), pl.col(right_col)]).list.unique()) # at this point it doesn't matter if right_col is null since left is
+				) 
 				.alias(left_col)
 			).drop(right_col)
 		assert polars_df.select(pl.col(left_col)).dtypes == [pl.List]
@@ -653,7 +673,12 @@ class NeighLib:
 
 			# in all other cases, try nullfilling
 			#else:
-			polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col)
+			if polars_df.schema[base_col] == pl.List(pl.Boolean) or polars_df.schema[base_col] == pl.List(pl.Boolean):
+				polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[base_col, right_col], force_index=index_column)
+				if polars_df.schema[base_col] == pl.List(pl.Boolean) or polars_df.schema[base_col] == pl.List(pl.Boolean):
+					self.logging.warning("List of booleans detected and cannot be flattened! Nulls may propagate!")
+			else:
+				polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col)
 			try:
 				# TODO: this breaks in situations like when we add Brites before Bos, since Brites has three run accessions with no sample_index,
 				# resulting in assertionerror but no printed conflicts
