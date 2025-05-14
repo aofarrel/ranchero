@@ -520,16 +520,36 @@ class NeighLib:
 		# TODO: I'm not convinced .list.drop_nulls() is actually helping anything; we still end up with [null] lists.
 		if uniq:
 			polars_df = polars_df.with_columns(
-				pl.when(pl.col(left_col) != pl.col(right_col))                          # When a row has different values for base_col and right_col,
-				.then(pl.concat_list([left_col, right_col]).list.unique().list.drop_nulls()) # make a list of base_col and right_col, but keep only uniq values
-				.otherwise(pl.concat_list([left_col]).drop_nulls())                     # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
+				pl.when(
+					(pl.col(left_col).is_not_null())
+					.and_(pl.col(right_col).is_not_null()
+					.and_(pl.col(left_col) != pl.col(right_col)))       # When a row has different values for base_col and right_col,
+				)                                                       # make a list of base_col and right_col, but keep only uniq values
+				.then(pl.concat_list([left_col, right_col]).list.unique().list.drop_nulls()) 
+				.otherwise(
+					pl.when(                                            # otherwise, make list of just base_col (doesn't seem to nest if already a list)
+						pl.col(left_col).is_not_null()
+					)
+					.then(pl.concat_list([left_col]).drop_nulls())
+					.otherwise(pl.concat_list([right_col]).drop_nulls()) # at this point it doesn't matter if right_col is null since left is
+				) 
 				.alias(left_col)
 			).drop(right_col)
 		else:
 			polars_df = polars_df.with_columns(
-				pl.when(pl.col(left_col) != pl.col(right_col))             # When a row has different values for base_col and right_col,
-				.then(pl.concat_list([left_col, right_col]).drop_nulls())  # make a list of base_col and right_col,
-				.otherwise(pl.concat_list([left_col]).drop_nulls())        # otherwise, make list of just base_col (doesn't seem to nest if already a list, thankfully)
+				pl.when(
+					(pl.col(left_col).is_not_null())
+					.and_(pl.col(right_col).is_not_null()
+					.and_(pl.col(left_col) != pl.col(right_col)))       # When a row has different values for base_col and right_col,
+				)                                                       # make a list of base_col and right_col,
+				.then(pl.concat_list([left_col, right_col]).drop_nulls()) 
+				.otherwise(
+					pl.when(                                            # otherwise, make list of just base_col (doesn't seem to nest if already a list)
+						pl.col(left_col).is_not_null()
+					)
+					.then(pl.concat_list([left_col]).drop_nulls())
+					.otherwise(pl.concat_list([right_col]).drop_nulls()) # at this point it doesn't matter if right_col is null since left is
+				) 
 				.alias(left_col)
 			).drop(right_col)
 		assert polars_df.select(pl.col(left_col)).dtypes == [pl.List]
