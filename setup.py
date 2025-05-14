@@ -9,7 +9,7 @@ setup(
     description="Bioinformatics metadata wrangler",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Ash O'Farrrell",
+    author="Ash O'Farrell",
     author_email='aofarrel@ucsc.edu',
     packages=['ranchero'],
     include_package_data=True,

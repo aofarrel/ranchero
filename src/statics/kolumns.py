@@ -38,6 +38,7 @@ equivalence = {
 		'latlon': ['latlon', 'lat_lon_sam_s_dpl34', 'lat_lon', 'latitude_and_longitude_sam', 'lat_lon_run'],
 		'lat': ['lat', 'geographic_location__latitude__sam'],
 		'lon': ['lon', 'geographic_location__longitude__sam'],
+		'library_name': ['library_name', 'libraryname', 'library_id', 'library_ID'],
 		'librarylayout': ['librarylayout', 'LibraryLayout'], # no underscore to match BQ format
 		'libraryselection': ['libraryselection', 'LibrarySelection'],
 		'librarysource': ['librarysource', 'LibrarySource'],
@@ -59,6 +60,13 @@ assert len(set(sum(equivalence.values(), []))) == len(sum(equivalence.values(), 
 # Once columns are merged, the "equivalence" columns are dropped since they have redundant information.
 columns_to_keep_after_rancheroize = equivalence.keys()
 columns_to_drop_after_rancheroize = [item for value in equivalence.values() for item in value[1:]]
+
+# primary_search tends to include values from these columns (this intentionally includes pre-rancheroized columns.)
+common_primary_search_values = [
+	# rancheroized
+	'BioProject', 'isolation_source', 'library_name', 'run_index', 'sample_index', 'sra_study', 'SRX_id', 'SRS_id',
+	# not rancheroized but common
+	'acc', 'bioproject', 'biosample', 'experiment', 'isolate_run', 'isolate_sam_ss_dpl100', 'library_id', 'sample_name', 'sample_acc', 'sample_id_run']
 
 # Special handling for taxoninomic columns -- don't add them to any of the list-to-x stuff below.
 special_taxonomic_handling = {key: value for key, value in equivalence.items() if key in ['clade', 'genotype', 'lineage', 'organism', 'strain']}
@@ -104,7 +112,6 @@ list_to_set_uniq = [
 	'libraryselection',
 	'librarylayout',
 	'librarysource',
-	'platform',
 	'SRX_id'
 ]
 
@@ -114,7 +121,8 @@ list_to_list_silent = [
 	'geo_loc_name_sam',
 	'geoloc_country_calc',
 	'geoloc_country_or_sea', 
-	'geoloc_info'
+	'geoloc_info',
+	'platform'
 ]
 
 # Throw an error (error can be made non-fatal in which case it will fallback on left or right per function settings)
@@ -130,7 +138,6 @@ list_fallback_or_null = [
 	'host_scienname',
 	'country',
 	'continent',
-	'platform',
 	'region',
 ]
 

@@ -190,18 +190,19 @@ class NeighLib:
 	def print_cols_and_dtypes(self, polars_df):
 		[print(f"{col}: {dtype}") for col, dtype in zip(polars_df.columns, polars_df.dtypes)]
 
-	def print_a_where_b_equals_these(self, polars_df, col_a, col_b, list_to_match: list, alsoprint=None, valuecounts=False, header=None):
+	def print_a_where_b_equals_these(self, polars_df, col_a, col_b, list_to_match: list, alsoprint=None, valuecounts=False, header=None, and_id_columns=True, and_return_filtered=False):
 		header = header if header is not None else f"{col_a} where {col_b} in {list_to_match}"
-		print_columns = set(self.get_valid_id_columns(polars_df) + [col_a, col_b])
+		print_columns = set(self.get_valid_id_columns(polars_df) + [col_a, col_b]) if and_id_columns else set([col_a, col_b])
 		print_columns = list(print_columns.union(self.valid_cols(polars_df, alsoprint))) if alsoprint is not None else list(print_columns)
 		
 		if col_a not in polars_df.columns or col_b not in polars_df.columns:
 			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but at least one of those columns aren't in the dataframe!")
 			return
 		if polars_df.schema[col_b] == pl.Utf8:
-			print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_in(list_to_match)).then(pl.col(col_a)).otherwise(None).alias(col_a)).drop_nulls(subset=col_a)
+			print_df = polars_df.with_columns(pl.when(pl.col(col_b).is_in(list_to_match)).then(pl.col(col_a)).otherwise(None).alias(col_a)).filter(pl.col(col_a).is_not_null())
 			self.super_print_pl(print_df.select(print_columns), header)
-			if valuecounts: self.print_value_counts(polars_df, only_these_columns=col_a)
+			if valuecounts: self.print_value_counts(print_df, only_these_columns=col_a)
+			if and_return_filtered: return print_df
 		else:
 			self.logging.warning(f"Tried to print column {col_a} where column {col_b} is in {list_to_match}, but either {col_b} isn't a string so we can't match on it properly")
 
@@ -297,12 +298,18 @@ class NeighLib:
 			print(filtered)
 
 	@staticmethod
-	def super_print_pl(polars_df, header):
+	def super_print_pl(polars_df, header, select=None):
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
-		with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
-			print(polars_df)
+		if select is not None:
+			valid_selected_columns = [col for col in select if col in polars_df.columns]
+			print(valid_selected_columns)
+			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
+				print(polars_df.select(valid_selected_columns))
+		else:
+			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
+				print(polars_df)
 
 	def print_schema(self, polars_df):
 		schema_df = pl.DataFrame({
@@ -313,14 +320,13 @@ class NeighLib:
 
 	# --------- GENERAL FUNCTIONS --------- #
 
-	def extract_primary_lineage(self, polars_df, lineage_column, output_column):
-		"""CAVEAT: exepcts tbprofiler format (eg "lineage" or "La")"""
-		return polars_df.with_columns(
-			pl.when(pl.col(lineage_column).is_not_null() & ~pl.col(lineage_column).str.contains(";"))
-			.then(pl.col(lineage_column).str.extract(r"(lineage\s*\d+|La\s*\d+)"))
-			.otherwise(None)
-			.alias(output_column)
-		)
+	def tempcol(self, polars_df):
+		"""Return a string of a valid temporary column name"""
+		candidates = ["temp", "foo", "bar", "tmp1", "tmp2", "scratch"]
+		for name in candidates:
+			if name not in polars_df.columns:
+				return name
+		raise ValueError("Could not generate a temporary column")
 
 	def null_lists_of_len_zero(self, polars_df, just_this_column=None):
 		"""skips ID columns"""
@@ -585,7 +591,7 @@ class NeighLib:
 			])
 			return self.postmerge_fallback_or_null(polars_df, left_col, right_col, fallback, dont_crash_please=dont_crash_please+1)
 
-	def merge_right_columns(self, polars_df, fallback_on_left=True, escalate_warnings=True):
+	def merge_right_columns(self, polars_df, fallback_on_left=True, escalate_warnings=True, force_index=None):
 		"""
 		Takes in a polars_df with some number of columns ending in "_right", where each _right column has
 		a matching column with the same basename (ie, "foo_right" matches "foo"), and merges each base:right
@@ -599,7 +605,10 @@ class NeighLib:
 		Additional special handling for taxoncore columns... kind of
 		"""
 		right_columns = [col for col in polars_df.columns if col.endswith("_right")]
-		index_column = self.get_index_column(polars_df)
+		if force_index is None:
+			index_column = self.get_index_column(polars_df)
+		else:
+			index_column = force_index
 		assert index_column not in right_columns
 		for right_col in right_columns:
 			self.logging.debug(f"\n[{right_columns.index(right_col)}/{len(right_columns)}] Trying to merge {right_col} (type: {polars_df.schema[right_col]}...")
@@ -706,7 +715,7 @@ class NeighLib:
 					polars_df = self.cast_to_list(polars_df, base_col)
 					polars_df = self.cast_to_list(polars_df, right_col)
 				polars_df = self.concat_columns_list(polars_df, base_col, right_col, True)
-				self.logging.debug(self.get_rows_where_list_col_more_than_one_value(polars_df, base_col).select([self.get_index_column(polars_df), base_col]))
+				#self.logging.debug(self.get_rows_where_list_col_more_than_one_value(polars_df, base_col).select([self.get_index_column(polars_df), base_col]))
 
 			assert base_col in polars_df.columns
 			assert right_col not in polars_df.columns
@@ -846,9 +855,13 @@ class NeighLib:
 		index = self.get_index_column(polars_df)
 		return True if index in kolumns.equivalence['run_index'] else False
 
-	def coerce_to_not_list_if_possible(self, polars_df, column, index_column, prefix_arrow=False):
+	def add_list_len_col(self, polars_df, list_col, new_col):
+		return polars_df.with_columns(pl.col(list_col).list.len().alias(new_col))
+
+	def coerce_to_not_list_if_possible(self, polars_df, column, index_column=None, prefix_arrow=False):
 		arrow = '-->' if prefix_arrow else ''
-		assert column != index_column
+		if index_column is not None:
+			assert column != index_column
 		if polars_df.schema[column] == pl.List:
 			if len(self.get_rows_where_list_col_more_than_one_value(polars_df, column)) == 0:
 				print(f"{arrow}Can delist") if self.logging.getEffectiveLevel() == 10 else None
@@ -856,8 +869,8 @@ class NeighLib:
 			else:
 				if self.logging.getEffectiveLevel() == 10:
 					debug_print = self.get_rows_where_list_col_more_than_one_value(polars_df, column)
-					print(f"{arrow}{len(debug_print)} multi-element lists in {column}") if self.logging.getEffectiveLevel() == 10 else None
-					self.super_print_pl(debug_print.select([index_column, f"{column}"]).head(40), f"list cols with more than one value (true len {len(debug_print)})")
+					print(f"{arrow}{len(debug_print)} multi-element lists in {column}")
+					self.super_print_pl(debug_print, f"list cols with more than one value (true len {len(debug_print)})", select=[index_column, column])
 				return polars_df
 		else:
 			self.logging.debug(f"Tried to coerce {column} into a non-list, but it's already a non-list")
@@ -865,12 +878,12 @@ class NeighLib:
 
 	def flatten_list_col_as_set(self, polars_df, column):
 		polars_df = self.flatten_one_nested_list_col(polars_df, column) # recursive
-		index_column = self.get_index_column(polars_df)
 		polars_df = polars_df.with_columns(pl.col(column).list.unique().alias(f"{column}"))
-		polars_df = self.coerce_to_not_list_if_possible(polars_df, column, index_column)
+		polars_df = self.coerce_to_not_list_if_possible(polars_df, column, index_column=self.get_index_column(polars_df))
 		return polars_df
 
-	def flatten_all_list_cols_as_much_as_possible(self, polars_df, hard_stop=False, force_strings=False, just_these_columns=None):
+	def flatten_all_list_cols_as_much_as_possible(self, polars_df, hard_stop=False, force_strings=False, just_these_columns=None,
+		force_index=None):
 		"""
 		Flatten list columns as much as possible. If a column is just a bunch of one-element lists, for
 		instance, then just take the 0th value of that list and make a column that isn't a list.
@@ -878,7 +891,10 @@ class NeighLib:
 		If force_strings, any remaining columns that are still lists are forced into strings.
 		"""
 		# Do not run check index first, as it will break when this is run right after run-to-sample conversion
-		index_column = self.get_index_column(polars_df)
+		if force_index is None:
+			index_column = self.get_index_column(polars_df)
+		else:
+			index_column = force_index
 
 		# unnest nested lists (recursive)
 		self.logging.debug("Recursively unnesting lists...")
@@ -1094,26 +1110,31 @@ class NeighLib:
 		rm_dupes = self._sentinal_handler(rm_dupes)
 		force_NCBI_runs = self._sentinal_handler(force_NCBI_runs)
 		force_BioSamples = self._sentinal_handler(force_BioSamples)
-		apparent_index_column = self.get_index_column(polars_df)
+
+		# if index column is manually set, it's okay if get_index() fails
+		if manual_index_column is not None:
+			try:
+				apparent_index_column = self.get_index_column(polars_df)
+				if manual_index_column not in polars_df.columns:
+					self.logging.error(f"manual_index_column is {manual_index_column}, but that column isn't in the dataframe!")
+					raise ValueError
+				elif manual_index_column != apparent_index_column:
+					self.logging.error(f"Manual index column set to {apparent_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
+					self.logging.error("Consider dropping these columns before proceeding further with this dataframe, or adjusting kolumns.equivalence as needed.")
+					raise ValueError
+				else:
+					index_column = manual_index_column
+			except ValueError:
+				self.logging.info(f"Index manually set to {manual_index_column}, no other valid indeces found")
+				index_column = manual_index_column
+		else:
+			index_column = self.get_index_column(polars_df)
 		
 		if force_str_index:
-			assert polars_df.schema[apparent_index_column] == pl.Utf8
+			assert polars_df.schema[index_column] == pl.Utf8
 
 		if rstrip:
-			polars_df = self.recursive_rstrip(polars_df, apparent_index_column, strip_char=" ")
-
-		if manual_index_column is not None:
-			if manual_index_column not in polars_df.columns:
-				self.logging.error(f"manual_index_column is {manual_index_column}, but that column isn't in the dataframe!")
-				raise ValueError
-			elif manual_index_column != apparent_index_column:
-				self.logging.error(f"Manual index column set to {apparent_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
-				self.logging.error("Consider dropping these columns before proceeding further with this dataframe, or adjusting kolumns.equivalence as needed.")
-				raise ValueError
-			else:
-				index_column = manual_index_column # this is valid, so override the get_index_column() result so we can properly check for dupes
-		else:
-			index_column = apparent_index_column
+			polars_df = self.recursive_rstrip(polars_df, index_column, strip_char=" ")
 		
 		if type(index_column) == list:
 			if index_column[0] == 2:
@@ -1154,7 +1175,7 @@ class NeighLib:
 			run_or_sample = 'run_index' if index_column in kolumns.equivalence['run_index'] else 'sample_index'
 			if rm_dupes:
 				self.logging.warning(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- will attempt to remove them (THIS MAY LEAD TO DATA LOSS)")
-				self.logging.warning(f"Duplicates: {duplicates.select(index_column)}")
+				self.logging.debug(f"Duplicates: {duplicates.select(index_column)}")
 				polars_df = subset # do not return yet
 			else:
 				self.logging.error(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- not removing as per cfg perferences")

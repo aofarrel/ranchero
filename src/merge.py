@@ -83,11 +83,12 @@ class Merger:
 		n_rows_left, 
 		n_rows_right,
 		right_name,
-		right_name_in_this_column):
+		right_name_in_this_column,
+		manual_index_column=None):
 		n_rows_merged = merged_df.shape[0]
 		n_rows_expected = sum([len(intersection_values), len(exclusive_left_values), len(exclusive_right_values)])
 
-		merged_df = NeighLib.check_index(merged_df)
+		merged_df = NeighLib.check_index(merged_df, manual_index_column=manual_index_column)
 
 		# we expect n_rows_merged = intersection_values + exclusive_left_values + exclusive_right_values
 		if n_rows_merged == n_rows_expected:
@@ -125,7 +126,8 @@ class Merger:
 		merge_upon: str, left_name ="left", right_name="right", indicator=_DEFAULT_TO_CONFIGURATION,
 		bad_list_error=True,
 		fallback_on_left=True, drop_exclusive_right=False,
-		escalate_warnings=False):
+		escalate_warnings=False,
+		force_index=None):
 		"""
 		Merge two polars dataframe upon merge_upon. 
 
@@ -165,6 +167,7 @@ class Merger:
 				raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
 
 		# right/left-hand dataframe's index's values (SRR16156818, SRR12380906, etc) ONLY -- all other columns excluded
+		assert left.schema[merge_upon] == right.schema[merge_upon]
 		left_values, right_values = left[merge_upon], right[merge_upon]
 
 		# left-hand dataframe with true-false for whether index at that position is also present somewhere in the right dataframe
@@ -192,8 +195,8 @@ class Merger:
 		self.logging.info(f"--> Exclusive to {left_name}: {len(exclusive_left_values)}")
 		if drop_exclusive_right==True:
 			self.logging.info(f"--> Exclusive to {right_name}: {len(exclusive_right_values)} (will be dropped)")
-			if len(exclusive_right_values) > 0:
-				self.logging.debug(f"Some of the exclusive right values, which will be dropped: {exclusive_right_values}")
+			#if len(exclusive_right_values) > 0:
+			#	self.logging.debug(f"Some of the exclusive right values, which will be dropped: {exclusive_right_values}")
 			
 			# recalculate these variables to prevent issues with the post-merge check function
 			right = right.filter(~exclusive_right)
@@ -201,8 +204,8 @@ class Merger:
 			exclusive_right_values = pl.DataFrame()
 		else:
 			self.logging.info(f"--> Exclusive to {right_name}: {len(exclusive_right_values)}")
-			if len(exclusive_right_values) > 0:
-				self.logging.debug(f"--> Some of the exclusive right values: {exclusive_right_values}")
+			#if len(exclusive_right_values) > 0:
+			#	self.logging.debug(f"--> Some of the exclusive right values: {exclusive_right_values}")
 
 		# TODO: this is here just so we have better testing of list merges, but later it's probably better to just
 		# put something like this at the end by concat_list()ing pl.lit() the name into the column
@@ -302,7 +305,7 @@ class Merger:
 			exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
 
 			initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
-			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings)
+			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings, force_index=force_index)
 			really_merged_no_dupes = really_merged.unique()
 			self.logging.info(f"""Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe.
 			Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})
@@ -312,9 +315,9 @@ class Merger:
 		self.logging.debug("Checking merged dataframe for unexpected rows...")
 		self.check_if_unexpected_rows(merged_dataframe, merge_upon=merge_upon, 
 			intersection_values=intersection_values, exclusive_left_values=exclusive_left_values, exclusive_right_values=exclusive_right_values, 
-			n_rows_left=n_rows_left, n_rows_right=n_rows_right, right_name=right_name, right_name_in_this_column=indicator)
+			n_rows_left=n_rows_left, n_rows_right=n_rows_right, right_name=right_name, right_name_in_this_column=indicator, manual_index_column=force_index)
 		self.logging.debug("Checking merged dataframe's index...")
-		NeighLib.check_index(merged_dataframe)
+		NeighLib.check_index(merged_dataframe, manual_index_column=force_index)
 		self.logging.debug("Trying to null newly created empty lists...")
 		merged_dataframe = NeighLib.null_lists_of_len_zero(merged_dataframe)
 		return merged_dataframe

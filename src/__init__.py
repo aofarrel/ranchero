@@ -4,12 +4,15 @@ Configuration = RancheroConfig()  # creates a default config
 _NeighLib = NeighLib(Configuration)
 logger = Configuration.logger
 from .analyze import *
+from .extract import Extractor
+_Extractor = Extractor(Configuration)
 from .merge import *
 _Merger = Merger(Configuration)
 from .standardize import ProfessionalsHaveStandards
 _Standardizer = ProfessionalsHaveStandards(Configuration)
 from .read_file import FileReader
 _FileReader = FileReader(Configuration)
+
 
 
 # exposed classes of global instances
@@ -35,6 +38,10 @@ run_index_to_sample_index = _FileReader.polars_run_to_sample
 explode_delimited_index = _FileReader.polars_explode_delimited_rows
 
 merge_dataframes = _Merger.merge_polars_dataframes
+
+extract_primary_lineage = _Extractor.extract_primary_lineage
+extract_simplified_primary_search = _Extractor.extract_simplified_primary_search
+extract_filename = _Extractor.extract_filename
 
 inject_metadata = _Standardizer.inject_metadata
 standardize_everything = _Standardizer.standardize_everything
