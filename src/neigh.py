@@ -298,6 +298,12 @@ class NeighLib:
 			print(filtered)
 
 	@staticmethod
+	def cool_header(header):
+		print(f"┏{'━' * len(header)}┓")
+		print(f"┃{header}┃")
+		print(f"┗{'━' * len(header)}┛")
+
+	@staticmethod
 	def super_print_pl(polars_df, header, select=None):
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
@@ -895,7 +901,7 @@ class NeighLib:
 				if self.logging.getEffectiveLevel() == 10:
 					debug_print = self.get_rows_where_list_col_more_than_one_value(polars_df, column)
 					print(f"{arrow}{len(debug_print)} multi-element lists in {column}")
-					self.super_print_pl(debug_print, f"list cols with more than one value (true len {len(debug_print)})", select=[index_column, column])
+					print(debug_print.select(index_column, column))
 				return polars_df
 		else:
 			self.logging.debug(f"Tried to coerce {column} into a non-list, but it's already a non-list")
@@ -1150,7 +1156,7 @@ class NeighLib:
 				else:
 					index_column = manual_index_column
 			except ValueError:
-				self.logging.info(f"Index manually set to {manual_index_column}, no other valid indeces found")
+				self.logging.debug(f"Index manually set to {manual_index_column}, no other valid indeces found")
 				index_column = manual_index_column
 		else:
 			index_column = self.get_index_column(polars_df)
@@ -1369,16 +1375,21 @@ class NeighLib:
 		assert column in polars_df.columns
 		return polars_df.drop(column)
 
-	def drop_null_columns(self, polars_df):
+	def drop_null_columns(self, polars_df, and_non_null_type_full_of_nulls=False):
 		polars_df = polars_df.drop(cs.by_dtype(pl.Null))
 		polars_df = polars_df.drop(cs.by_dtype(pl.List(pl.Null)))
+		if and_non_null_type_full_of_nulls:
+			cols_to_keep = [col for col in polars_df.schema
+				if polars_df.select(pl.col(col)).null_count().item() < polars_df.height
+			]
+			polars_df = polars_df.select(cols_to_keep)
 		return polars_df
 
 	def tsv_value_counts(self, polars_df, vcount_column, path):
 		self.polars_to_tsv(polars_df.select([pl.col(vcount_column).value_counts(sort=True)]).unnest(vcount_column), path, null_value='null')
 
 	def polars_to_tsv(self, polars_df, path: str, null_value=''):
-		print("Writing to TSV. Lists and objects will converted to strings, and columns full of nulls will be dropped.")
+		self.logging.info("Writing to TSV. Lists and objects will converted to strings, and columns full of nulls will be dropped.")
 		df_to_write = self.drop_null_columns(polars_df)
 		columns_with_type_list_or_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if (dtype == pl.List or dtype == pl.Object)]
 		if len(columns_with_type_list_or_obj) > 0:
