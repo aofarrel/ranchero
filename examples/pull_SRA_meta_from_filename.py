@@ -36,8 +36,6 @@ bq = bq.with_columns(
 	.alias("SRA_dupe")
 )
 
-print(bq.columns)
-
 # It looks goofy, but this explode-then-unexplode approach allows us to handle
 # both duplicate uploads and multi-file uploads.
 bq = bq.group_by("filename").agg([pl.col('sample_name'),
