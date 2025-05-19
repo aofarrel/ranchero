@@ -68,7 +68,7 @@ class RancheroConfig:
 		self.auto_cast_types = True
 
 		# Automatically parse dates when reading a file
-		self.auto_parse_dates = True
+		self.auto_parse_dates = False
 
 		# Automatically rancheroize dataframes upon file read
 		self.auto_rancheroize = True
@@ -104,7 +104,7 @@ class RancheroConfig:
 		self.intermediate_files = False
 
 		# Log level -- logging.DEBUG = 10, logging.INFO = 20, etc
-		self.loglevel = logging.DEBUG
+		self.loglevel = logging.ERROR
 
 		# If 'platform' and 'layout' columns exist and have type pl.Utf8 (string), remove all samples that aren't
 		# "PAIRED" for 'layout' and "ILLUMINA" for 'platform'

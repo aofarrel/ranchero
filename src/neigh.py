@@ -304,6 +304,11 @@ class NeighLib:
 		print(f"┗{'━' * len(header)}┛")
 
 	@staticmethod
+	def dfprint(polars_df, cols=10, rows=20, str_len=40, list_len=10, width=140):
+		with pl.Config(tbl_cols=cols, tbl_rows=rows, fmt_str_lengths=str_len, fmt_table_cell_list_len=list_len, tbl_width_chars=width):
+			print(polars_df)
+
+	@staticmethod
 	def super_print_pl(polars_df, header, select=None):
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
@@ -1150,9 +1155,9 @@ class NeighLib:
 					self.logging.error(f"manual_index_column is {manual_index_column}, but that column isn't in the dataframe!")
 					raise ValueError
 				elif manual_index_column != apparent_index_column:
-					self.logging.error(f"Manual index column set to {apparent_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
-					self.logging.error("Consider dropping these columns before proceeding further with this dataframe, or adjusting kolumns.equivalence as needed.")
-					raise ValueError
+					self.logging.warning(f"Manual index column set to {apparent_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
+					self.logging.warning("Consider dropping these columns before proceeding further with this dataframe, or adjusting kolumns.equivalence as needed.")
+					index_column = manual_index_column
 				else:
 					index_column = manual_index_column
 			except ValueError:
