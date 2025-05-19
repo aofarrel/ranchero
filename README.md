@@ -19,6 +19,7 @@ Ranchero is a Python solution to the dozens of different metadata formats used i
  * [pyarrow](https://pypi.org/project/pyarrow/), even if not working with Apache Arrow datasets
  * [polars](https://github.com/pola-rs/polars) for Python ==1.16.0
    * Please check the minimum version; this code expects the behavior of https://github.com/pola-rs/polars/issues/20069
+   * polars==1.27.0 *seems* to be working too after some changes but I'm still testing
  * [tqdm](https://github.com/tqdm/tqdm)
 
 
