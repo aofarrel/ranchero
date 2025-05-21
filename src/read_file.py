@@ -71,7 +71,7 @@ class FileReader():
 				dict_list.append(clean_row)
 		return dict_list
 
-	def polars_from_ncbi_run_selector(self, csv, drop_columns=list(), check_index=_cfg_check_index, auto_rancheroize=_cfg_auto_rancheroize):
+	def from_run_selector(self, csv, drop_columns=list(), check_index=_cfg_check_index, auto_rancheroize=_cfg_auto_rancheroize):
 		"""
 		1. Read CSV
 		2. Drop columns in drop_columns, if any
@@ -138,8 +138,55 @@ class FileReader():
 				polars_df = Standardizer.standardize_everything(polars_df)
 		return polars_df
 
+	def fix_efetch_file(self, efetch_xml):
+		'''
+		Turn this:
+		<?xml version="1.0" encoding="UTF-8"  ?>
+		<EXPERIMENT_PACKAGE_SET>
+		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28844847"></EXPERIMENT_PACKAGE></EXPERIMENT_PACKAGE_SET>
+		<?xml version="1.0" encoding="UTF-8"  ?>
+		<EXPERIMENT_PACKAGE_SET>
+		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28704751"></EXPERIMENT_PACKAGE></EXPERIMENT_PACKAGE_SET>
+
+		Into this:
+		<?xml version="1.0" encoding="UTF-8"  ?>
+		<EXPERIMENT_PACKAGE_SET>
+		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28844847"></EXPERIMENT_PACKAGE>
+		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28704751"></EXPERIMENT_PACKAGE>
+		</EXPERIMENT_PACKAGE_SET>
+		'''
+		out_file_path = f"{os.path.basename(efetch_xml)}_modified.xml"
+		# last one shouldn't show up on its own line but just in case
+		remove_lines = ['<?xml version="1.0" encoding="UTF-8"  ?>\n']
+
+		with open(efetch_xml, 'r') as in_file:
+			lines = in_file.readlines()
+		with open(out_file_path, 'w') as out_file:
+			out_file.write('<?xml version="1.0" encoding="UTF-8"  ?>\n')
+			for line in lines:
+				if line not in remove_lines:
+					#line = line.removesuffix('\n') # to make handling next removesuffix() easier
+					#line = line.removesuffix('</EXPERIMENT_PACKAGE_SET>')
+					out_file.write(line+'\n')
+			#out_file.write('</EXPERIMENT_PACKAGE_SET>\n')
+
+		self.logging.warning(f"Reformatted XML saved to {out_file_path}")
+		return out_file_path
+
+	def from_efetch(self, efetch_xml):
+		import lxml
+		try:
+			pandas_df = pd.read_xml(efetch_xml)
+		except lxml.etree.XMLSyntaxError:
+			pandas_df = pd.read_xml(self.fix_efetch_file(efetch_xml))
+			except lxml.etree.XMLSyntaxError:
+				self.logging.error("Caught exception reading XML file after attempting to fix it. Giving up!")
+				exit(1)
+		pandas_df = pandas_df.drop(drop_columns)
+		return pandas_df
+
 	def fix_bigquery_file(self, bq_file):
-		out_file_path = f"{bq_file}_modified.json"
+		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
 		with open(bq_file, 'r') as in_file:
 			lines = in_file.readlines()
 		with open(out_file_path, 'w') as out_file:
@@ -152,6 +199,7 @@ class FileReader():
 			out_file.write("]\n")
 		self.logging.warning(f"Reformatted JSON saved to {out_file_path}")
 		return out_file_path
+
 
 	def polars_from_bigquery(self, bq_file, drop_columns=list(), normalize_attributes=True):
 		""" 

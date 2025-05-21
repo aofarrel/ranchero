@@ -160,7 +160,7 @@ class Merger:
 				if not NeighLib.is_run_indexed(df):
 					self.logging.warning(f"Merging upon {merge_upon}, which looks like a run accession, but {name} dataframe appears to not be indexed by run accession")
 			if len(df.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
-				print("Dataframe has null values for the merge column:")
+				self.logging.error("Dataframe has null values for the merge column:")
 				if merge_upon != "sample_index" and "sample_index" in df.columns:
 					print(df.filter(pl.col(merge_upon).is_null()).select(["sample_index", merge_upon]))
 				else:
@@ -195,7 +195,7 @@ class Merger:
 		if drop_exclusive_right==True:
 			self.logging.info(f"--> Exclusive to {right_name}: {len(exclusive_right_values)} (will be dropped)")
 			#if len(exclusive_right_values) > 0:
-			#	self.logging.debug(f"Some of the exclusive right values, which will be dropped: {exclusive_right_values}")
+				#self.logging.debug(f"Some of the exclusive right values, which will be dropped: {exclusive_right_values}")
 			
 			# recalculate these variables to prevent issues with the post-merge check function
 			right = right.filter(~exclusive_right)
@@ -215,7 +215,6 @@ class Merger:
 				left = left.with_columns(pl.lit(left_name).alias(indicator))
 			else:
 				self.logging.debug("--> Already an indicator in left")
-				
 			right = right.with_columns(pl.lit(right_name).alias(indicator))
 			n_cols_right = right.shape[1]
 			n_cols_left = left.shape[1]

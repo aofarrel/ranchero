@@ -2,3 +2,4 @@ pandas>=2.0.0
 polars==1.16.0
 pyarrow
 tqdm
+lxml

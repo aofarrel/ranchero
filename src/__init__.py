@@ -33,7 +33,8 @@ fix_index = _NeighLib.check_index
 
 from_tsv = _FileReader.polars_from_tsv
 from_bigquery = _FileReader.polars_from_bigquery
-from_ncbi_run_selector = _FileReader.polars_from_ncbi_run_selector
+from_run_selector = _FileReader.from_run_selector
+fix_json = _FileReader.fix_bigquery_file
 injector_from_tsv = _FileReader.read_metadata_injection
 run_index_to_sample_index = _FileReader.polars_run_to_sample
 explode_delimited_index = _FileReader.polars_explode_delimited_rows
