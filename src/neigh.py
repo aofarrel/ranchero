@@ -1,5 +1,7 @@
 # general purpose functions
 
+import os
+import re
 import polars as pl
 import datetime
 from src.statics import kolumns, drop_zone, null_values
@@ -331,13 +333,95 @@ class NeighLib:
 
 	# --------- GENERAL FUNCTIONS --------- #
 
-	def tempcol(self, polars_df):
-		"""Return a string of a valid temporary column name"""
-		candidates = ["temp", "foo", "bar", "tmp1", "tmp2", "scratch"]
-		for name in candidates:
-			if name not in polars_df.columns:
-				return name
+	@staticmethod
+	def tempcol(polars_df, name, error=True):
+		"""
+		Return a string of a valid temporary column name, trying user-specified string first.
+		If error, raise an error if user-specificed string isn't available.
+		"""
+		candidates = [name, "temp", "foo", "bar", "tmp1", "tmp2", "scratch"]
+		for candidate in candidates:
+			if candidate not in polars_df.columns:
+				return candidate
+			elif candidate == name and error:
+				raise ValueError(f"Could not generate temporary column called {name} as that name is already taken")
 		raise ValueError("Could not generate a temporary column")
+
+	def replace_substring_with_col_value(self, polars_df, sample_column, output_column, template):
+		"""
+		template: substring SAMPLENAME will be replaced by value in that row's sample_column 
+		Useful for making the 'title' string for SRA submissions.
+		"""
+		assert sample_column in polars_df.columns
+		assert output_column not in polars_df.columns
+
+		return polars_df.with_columns(
+			pl.col(sample_column).map_elements(
+				lambda sample_column: template.replace("SAMPLENAME", sample_column),
+				return_dtype=pl.String
+			).alias(output_column)
+		)
+	
+	def basename_col(self, polars_df, in_col, out_col, extension='_R1_001.fastq.gz'):
+		assert in_col in polars_df.columns
+		assert out_col not in polars_df.columns
+
+		if extension:
+			return polars_df.with_columns(
+			pl.col(in_col).map_elements(lambda f: os.path.basename(f).split(extension, 1)[0], return_dtype=pl.Utf8).alias(out_col)
+		)
+			
+
+		return polars_df.with_columns(
+			pl.col(in_col).map_elements(lambda f: os.path.basename(f), return_dtype=pl.Utf8).alias(out_col)
+		)
+
+	def pair_illumina_reads(self, polars_df, read_column: str, check_suffix=True):
+		"""
+		Try to pair everything in read_column correctly per standard Illumina paired-end
+		naming conventions, which is to say:
+
+		some_string_R1_001.fastq (or .fastq.gz)
+		some_string_R2_001.fastq (or .fastq.gz)
+
+		TODO: better way of handling no _001
+		"""
+		if polars_df.height % 2 != 0:
+			raise ValueError("Odd number of FASTQ files provided. Cannot pair reads.")
+
+		def extract_parts(filename):
+			if check_suffix:
+				match = re.match(r"(.+)_R([12])_001\.fastq(?:\.gz)?", filename)
+			else:
+				# NOT TESTED!! But this might be better for those without 001 at end?
+				match = re.match(r"(.+)_R([12])", filename)
+			if not match:
+				return None, None
+			return match.group(1), match.group(2)
+
+		polars_df = polars_df.with_columns([
+			pl.col(read_column).map_elements(lambda f: extract_parts(f)[0], return_dtype=pl.Utf8).alias(self.tempcol(polars_df,"pair_key")),
+			pl.col(read_column).map_elements(lambda f: extract_parts(f)[1], return_dtype=pl.Utf8).alias(self.tempcol(polars_df,"read")),
+		])
+
+		if polars_df["pair_key"].null_count() > 0 or polars_df["read"].null_count() > 0:
+			invalid_files = polars_df.filter(pl.col("pair_key").is_null() | pl.col("read").is_null())[read_column].to_list()
+			raise ValueError(f"Invalid or unpairable FASTQ filenames: {invalid_files}")
+
+		# we are not using pivot(on="read", index="pair_key", values=read_column) as we want to keep other metadata columns
+		# unfortunately this means we have to do a costly join
+		df_R1 = polars_df.filter(pl.col("read") == "1").rename({read_column: "R1"}).drop("read")
+		df_R2 = polars_df.filter(pl.col("read") == "2").rename({read_column: "R2"}).drop("read")
+		joined = df_R1.join(df_R2, on="pair_key", how="inner", suffix="_R2")
+		other_cols = [col for col in polars_df.columns if col not in {read_column, "read", "pair_key"}]
+		if other_cols:
+			extras = (
+				polars_df.group_by("pair_key")
+				.agg([pl.col(c).unique().alias(c) for c in other_cols])
+			)
+			joined = joined.join(extras, on="pair_key", how="left")
+
+		return joined.select(["R1", "R2"] + other_cols)
 
 	def null_lists_of_len_zero(self, polars_df, just_this_column=None):
 		"""skips ID columns"""
