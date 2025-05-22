@@ -30,20 +30,27 @@ bq = bq.group_by("filename").agg([pl.col('sample_id'), pl.col('SRR_per_SRA'), pl
 bq = Ranchero.hella_flat(bq, force_index="filename")
 bq = Ranchero.NeighLib.check_index(bq, manual_index_column="filename") # sanity check for duplicates
 
+
 # Parse TSV file of metadata
 metadata = Ranchero.from_tsv(sys.argv[2], check_index=False, auto_rancheroize=False)
 metadata = Ranchero.NeighLib.check_index(metadata, manual_index_column='filename')
+print(bq.filter(pl.col('SRR_per_SRA').list.contains("SRR13684378")))
+print(bq.filter(pl.col('SRR_per_SRA').list.len() > 1))
+print(bq.filter(pl.col('SRR_per_SRA').list.contains("SRR30310805")))
 
 # Merge with BQ information
 merged = Ranchero.merge_dataframes(
-	left=bq, right=metadata, 
-	left_name="SRA_table", right_name="metadata_table",
-	merge_upon="filename", force_index="filename")
+	left=metadata, right=bq, 
+	left_name="metadata_table", right_name="SRA_table",
+	merge_upon="filename", force_index="filename", drop_exclusive_right=True)
+print(merged.filter(pl.col('SRR_per_SRA').list.contains("SRR13684378")))
+print(merged.filter(pl.col('SRR_per_SRA').list.len() > 1))
+print(merged.filter(pl.col('SRR_per_SRA').list.contains("SRR30310805")))
 
 # Mark rows of files not on SRA
 merged = merged.with_columns(
 	pl.when(pl.col('SRR_per_SRA').is_null())
-	.then(True).otherwise(False).alias("not_on_sra")
+	.then(False).otherwise(True).alias("on_SRA")
 )
 
 # Also mark rows with "fail" in filename, which we may or may not want on SRA
@@ -52,8 +59,49 @@ merged = merged.with_columns(
 	.then(True).otherwise(False).alias("is_fail")
 )
 
-confirmed_not_on_sra = Ranchero.hella_flat(merged.filter(pl.col("not_on_sra") == True), force_index="filename")
-confirmed_not_on_sra = Ranchero.NeighLib.drop_null_columns(confirmed_not_on_sra, and_non_null_type_full_of_nulls=True)
-Ranchero.dfprint(confirmed_not_on_sra, cols=10, rows=-1, width=190, str_len=100)
-Ranchero.to_tsv(confirmed_not_on_sra, "confirmed_not_on_sra.tsv")
+#print("Merged dataframe")
+#Ranchero.dfprint(merged, cols=10, rows=20, width=190, str_len=100)
+
+if "production" in merged.columns:
+	Ranchero.NeighLib.cool_header("Merged dataframe where production is WUSTL Y1")
+	merged = merged.filter(pl.col('production') == 'WUSTL_HPRC_HiFi_Year1').sort("filename")
+	Ranchero.dfprint(merged.select(['sample_id', 'filename', 'SRR_per_SRA', 'on_SRA']), rows=500)
+
+	Ranchero.NeighLib.cool_header("Probably on SRA")
+	probably_on_sra = merged.filter(pl.col("on_SRA") == True)
+	probably_on_sra = probably_on_sra.filter(pl.col('production') == 'WUSTL_HPRC_HiFi_Year1')
+	Ranchero.dfprint(probably_on_sra.select(['sample_id', 'filename', 'SRR_per_SRA', 'on_SRA']), rows=500)
+
+	Ranchero.NeighLib.cool_header("Probably not on SRA")
+	probably_not_on_sra = merged.filter(pl.col("on_SRA") == False)
+	probably_not_on_sra = probably_not_on_sra.filter(pl.col('production') == 'WUSTL_HPRC_HiFi_Year1')
+	Ranchero.dfprint(probably_not_on_sra.select(['sample_id', 'filename', 'SRR_per_SRA', 'on_SRA']), rows=500)
+
+	Ranchero.NeighLib.cool_header("Grouped by production")
+	Ranchero.dfprint(merged.group_by(pl.col("production")).agg([pl.col('sample_id'), pl.col('SRR_per_SRA'), pl.col('library_id')]))
+	exit(1)
+
+print("Stuff probably not on SRA")
+probably_not_on_sra = Ranchero.hella_flat(merged.filter(pl.col("on_SRA") == False), force_index="filename")
+probably_not_on_sra = Ranchero.NeighLib.drop_null_columns(probably_not_on_sra, and_non_null_type_full_of_nulls=True)
+Ranchero.dfprint(probably_not_on_sra, cols=10, rows=-1, width=190, str_len=100)
+Ranchero.to_tsv(probably_not_on_sra, "probably_not_on_sra.tsv")
+
+if "production" in merged.columns:
+	print("Not on SRA, production is WUSTL_HPRC_HiFi_Year1")
+	probably_not_on_sra = probably_not_on_sra.filter(pl.col('production') == 'WUSTL_HPRC_HiFi_Year1')
+	Ranchero.dfprint(probably_not_on_sra.select(['sample_id', 'filename', 'production']))
+
+	print("On SRA, production is WUSTL_HPRC_HiFi_Year1")
+	probably_on_sra = merged.filter(pl.col("on_SRA") == True)
+	probably_on_sra = probably_on_sra.filter(pl.col('production') == 'WUSTL_HPRC_HiFi_Year1')
+	Ranchero.dfprint(probably_on_sra.select(['sample_id', 'filename', 'production']))
+	exit(1)
+
+	#print("Not on SRA, grouped by production")
+	#Ranchero.dfprint(probably_not_on_sra.group_by(pl.col("production")).agg([pl.col('sample_id'), pl.col('library_id')]))
+
+	print("On SRA, grouped by production")
+	probably_on_sra = Ranchero.hella_flat(merged.filter(pl.col("on_SRA") == True), force_index="filename")
+	Ranchero.dfprint(probably_on_sra.group_by(pl.col("production")).agg([pl.col('sample_id'), pl.col('library_id')]))
 
