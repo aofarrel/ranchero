@@ -154,37 +154,101 @@ class FileReader():
 		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28844847"></EXPERIMENT_PACKAGE>
 		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28704751"></EXPERIMENT_PACKAGE>
 		</EXPERIMENT_PACKAGE_SET>
+		
+		Because:
+		* The XML header shouldn't be repeated
+		* Having multiple packages of multiple experiments really isn't helpful for our purposes
 		'''
 		out_file_path = f"{os.path.basename(efetch_xml)}_modified.xml"
-		# last one shouldn't show up on its own line but just in case
-		remove_lines = ['<?xml version="1.0" encoding="UTF-8"  ?>\n']
+		remove_lines = ['<?xml version="1.0" encoding="UTF-8"  ?>\n', '<EXPERIMENT_PACKAGE_SET>\n']
 
 		with open(efetch_xml, 'r') as in_file:
 			lines = in_file.readlines()
 		with open(out_file_path, 'w') as out_file:
 			out_file.write('<?xml version="1.0" encoding="UTF-8"  ?>\n')
+			out_file.write('<EXPERIMENT_PACKAGE_SET>\n')
 			for line in lines:
 				if line not in remove_lines:
-					#line = line.removesuffix('\n') # to make handling next removesuffix() easier
-					#line = line.removesuffix('</EXPERIMENT_PACKAGE_SET>')
+					line = line.removesuffix('\n') # to make handling next removesuffix() easier
+					line = line.removesuffix('</EXPERIMENT_PACKAGE_SET>')
 					out_file.write(line+'\n')
-			#out_file.write('</EXPERIMENT_PACKAGE_SET>\n')
+			out_file.write('</EXPERIMENT_PACKAGE_SET>\n')
 
 		self.logging.warning(f"Reformatted XML saved to {out_file_path}")
 		return out_file_path
 
 	def from_efetch(self, efetch_xml):
-		import lxml
-		try:
-			pandas_df = pd.read_xml(efetch_xml)
-		except lxml.etree.XMLSyntaxError:
-			pandas_df = pd.read_xml(self.fix_efetch_file(efetch_xml))
-			except lxml.etree.XMLSyntaxError:
-				self.logging.error("Caught exception reading XML file after attempting to fix it. Giving up!")
+		better_xml = self.fix_efetch_file(efetch_xml)
+		import xmltodict
+		with open(better_xml, "r") as file:
+			xml_content = file.read()
+		cursed_dictionary = xmltodict.parse(xml_content)
+		# Currently cursed_dictionary kind of looks like this:
+		# {"EXPERIMENT_PACKAGE_SET":
+		# 	{"EXPERIMENT_PACKAGE":
+		# 		[ # "list_of_experiments"
+		#			{ # this an "actual experiment" dict, index[0] of list_of_experiments
+		#	 			{'EXPERIMENT': dict() with SRX ID, library layout and stategy, instrument, etc}
+		#	 			{'SUBMISSION': dict() including center_name, SUB ID, etc}
+		#	 			{'Organization': dict() with stuff about submitter}
+		#	 			{'STUDY': dict() with stuff about the BioProject}
+		#	 			{'SAMPLE': dict() with very basic stuff about BioSample}
+		#	 			{'Pool': ignore this one, it's a multiplexing thing I think, sometimes it's missing}
+		#	 			{'RUN_SET': 
+		#	 				{
+		#	 					'@runs': '1',
+		#	 					'@bases': '10705886485',
+		#	 					'@spots': '500788',
+		#	 					'@bytes': '4550349867', 
+		#	 					'RUN': dict() of a single SRR      # TODO: what if multi SRR?
+		#	 				}
+		#				}
+		# 			},
+		# 			{ # the next "actual experiment" dict, index[1] of list_of_experiments
+		# 				{'EXPERIMENT': dict()}
+		# 				{'SUBMISSION': dict()}
+		# 				{'Organization': dict()}
+		# 				{'STUDY': dict()}
+		# 				{'SAMPLE': dict()}
+		# 				{'Pool': dict()}  # NOT ALWAYS PRESENT!
+		# 				{'RUN_SET': dict()}
+		# 			}
+		#		]
+		# 	}
+		# }
+		# This is, as the name implies, extremely cursed, so we'll try to make this make a bit more sense
+		blessed_dictionary = dict()
+		assert len(cursed_dictionary) == 1
+		for EXPERIMENT_PACKAGE_SET, EXPERIMENT_PACKAGE in cursed_dictionary.items():
+			assert EXPERIMENT_PACKAGE_SET == "EXPERIMENT_PACKAGE_SET"
+			assert type(EXPERIMENT_PACKAGE) == dict
+			assert list(EXPERIMENT_PACKAGE.keys()) == ["EXPERIMENT_PACKAGE"]
+			for list_of_experiments in EXPERIMENT_PACKAGE.values():
+				assert type(list_of_experiments) == list
+				for actual_experiment in list_of_experiments:
+					assert type(actual_experiment) == dict
+					if len(actual_experiment) == 7 or len(actual_experiment) == 6:
+						# TODO: DOES THIS WORK WITH ENA/DDBJ DATA?! THAT WOULD HAVE OTHER EXTERNAL_IDS YEAH?!
+						BioSample = (actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']['#text'])
+						assert len(actual_experiment['RUN_SET']) == 5 # TODO: does this catch multi SRR samples or not?!
+						SRR = actual_experiment['RUN_SET']['RUN']['@accession']
+					else:
+						self.logging.error("Expected 6 or 7 keys per experiment dictionary, found... not that")
+						for thing in actual_experiment:
+							self.logging.error(thing)
+						exit(1)
 				exit(1)
-		pandas_df = pandas_df.drop(drop_columns)
-		return pandas_df
+			#for keys, values in values[0]['RUN_SET'].items():
+			#	if len(keys) !=5:
+			#		print("ooo")
+			#	print(keys)
+			#	print(values)
+			#	print("-----")
 
+		pandas_df = pd.DataFrame(xml_dict)
+		print(pandas_df)
+		exit(1)
+	
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
 		with open(bq_file, 'r') as in_file:
