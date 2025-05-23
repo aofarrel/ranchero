@@ -182,7 +182,7 @@ class FileReader():
 		self.logging.warning(f"Reformatted XML saved to {out_file_path}")
 		return out_file_path
 
-	def from_efetch(self, efetch_xml):
+	def from_efetch(self, efetch_xml, index_by_file=False):
 		better_xml = self.fix_efetch_file(efetch_xml)
 		import xmltodict
 		with open(better_xml, "r") as file:
@@ -249,18 +249,51 @@ class FileReader():
 						assert len(actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']) == 1
 						assert type(actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']) == list # of k-v dictionaries
 
-						# get information
+						# get information that's always there
 						BioSample = (actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']['#text'])
 						SRR_id = actual_experiment['RUN_SET']['RUN']['@accession']
+						alias = actual_experiment['RUN_SET']['RUN']['@alias']
+						
+						# these ones aren't always present
+						try:
+							total_spots = actual_experiment['RUN_SET']['RUN']['@total_spots']
+						except KeyError:
+							total_spots = None
+						try:
+							total_bases = actual_experiment['RUN_SET']['RUN']['@total_bases']
+						except KeyError:
+							total_bases = None
+						try:
+							# NOT ORIGINAL SUBMITTED FILE SIZE BYTES! CAN BE AN ORDER OF MAG SMALLER!
+							archive_data_bytes = actual_experiment['RUN_SET']['RUN']['@size']
+						except KeyError:
+							archive_data_bytes = None
+						
+						# these are analogous to (but may not be equivalent to) the j_attr stuff you get from BigQuery
 						attributes = actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']
 						normalized_attr = pl.json_normalize(attributes, max_level=1)
 						pivoted = normalized_attr.transpose(header_name="VALUE", column_names="TAG")
-						files = list()
+						
+						submitted_files, submitted_file_sizes_bytes, submitted_file_sizes_gibi = list(), list(), list()
 						for file_dict in actual_experiment['RUN_SET']['RUN']['SRAFiles']['SRAFile']:
 							filename = file_dict['@filename']
+							file_bytes = int(file_dict['@size'])
+							file_gibi = file_bytes / (1024 ** 3)
 							if filename != SRR_id: # exclude the .srr file (which has no extension here for some reason)
-								files.append(filename)
-						blessed_dictionary = {'SRR_id': SRR_id, 'BioSample': BioSample, 'files': files}
+								submitted_files.append(filename)
+								submitted_file_sizes_bytes.append(file_bytes)
+								submitted_file_sizes_gibi.append(file_gibi)
+						
+						blessed_dictionary = {
+							'SRR_id': SRR_id,
+							'BioSample': BioSample,
+							'submitted_files': submitted_files,
+							'submitted_files_bytes': submitted_file_sizes_bytes,
+							'submitted_files_gibytes': submitted_file_sizes_gibi,
+							'alias': alias, 
+							'total_bases': total_bases,
+							'archive_data_bytes': archive_data_bytes,
+						}
 						blessed_dataframe = pl.concat([pl.DataFrame(blessed_dictionary), pivoted], how='horizontal')
 						blessed_dataframes.append(blessed_dataframe)
 					else:
@@ -269,10 +302,13 @@ class FileReader():
 							self.logging.error(thing)
 						exit(1)
 		blessed_dataframe = pl.concat(blessed_dataframes, how='diagonal').rename({'SRR_id': 'run_index', 'BioSample': 'sample_index'})
-		blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by('run_index').agg(
-			[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != 'run_index']
-		))
-		return blessed_dataframe
+		if index_by_file:
+			return blessed_dataframe
+		else:
+			# TODO: sum() submitted_file_sizes
+			return NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by('run_index').agg(
+				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != 'run_index']
+			))
 	
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
