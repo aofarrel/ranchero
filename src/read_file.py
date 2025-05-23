@@ -113,7 +113,8 @@ class FileReader():
 		auto_standardize = self._sentinal_handler(auto_standardize)
 		ignore_polars_read_errors = self._sentinal_handler(ignore_polars_read_errors)
 
-		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, ignore_errors=ignore_polars_read_errors, glob=glob)
+		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, glob=glob,
+								null_values=null_values, ignore_errors=ignore_polars_read_errors)
 		if len(drop_columns) != 0:
 			polars_df = polars_df.drop(drop_columns)
 			self.logging.info(f"Dropped {drop_columns}")
@@ -128,7 +129,8 @@ class FileReader():
 				)
 
 		if explode_upon != None:
-			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), delimiter=explode_upon, drop_new_non_unique=check_index)
+			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True),
+															delimiter=explode_upon, drop_new_non_unique=check_index)
 		if check_index: NeighLib.check_index(polars_df)
 		if auto_rancheroize: 
 			self.logging.info("Rancheroizing dataframe from TSV...")
@@ -159,7 +161,7 @@ class FileReader():
 		* The XML header shouldn't be repeated
 		* Having multiple packages of multiple experiments really isn't helpful for our purposes
 		'''
-		out_file_path = f"{os.path.basename(efetch_xml)}_modified.xml"
+		out_file_path = f"{os.path.splitext(efetch_xml)[0]}_modified.xml"
 		remove_lines = ['<?xml version="1.0" encoding="UTF-8"  ?>\n', '<EXPERIMENT_PACKAGE_SET>\n']
 
 		with open(efetch_xml, 'r') as in_file:
@@ -171,7 +173,10 @@ class FileReader():
 				if line not in remove_lines:
 					line = line.removesuffix('\n') # to make handling next removesuffix() easier
 					line = line.removesuffix('</EXPERIMENT_PACKAGE_SET>')
-					out_file.write(line+'\n')
+					experiment_packages = line.split('<EXPERIMENT_PACKAGE>')
+					for i, experiment in enumerate(experiment_packages):
+						if experiment != '':
+							out_file.write('<EXPERIMENT_PACKAGE>'+experiment+'\n')
 			out_file.write('</EXPERIMENT_PACKAGE_SET>\n')
 
 		self.logging.warning(f"Reformatted XML saved to {out_file_path}")
@@ -184,15 +189,16 @@ class FileReader():
 			xml_content = file.read()
 		cursed_dictionary = xmltodict.parse(xml_content)
 		# Currently cursed_dictionary kind of looks like this:
+		#
 		# {"EXPERIMENT_PACKAGE_SET":
 		# 	{"EXPERIMENT_PACKAGE":
 		# 		[ # "list_of_experiments"
 		#			{ # this an "actual experiment" dict, index[0] of list_of_experiments
-		#	 			{'EXPERIMENT': dict() with SRX ID, library layout and stategy, instrument, etc}
-		#	 			{'SUBMISSION': dict() including center_name, SUB ID, etc}
-		#	 			{'Organization': dict() with stuff about submitter}
-		#	 			{'STUDY': dict() with stuff about the BioProject}
-		#	 			{'SAMPLE': dict() with very basic stuff about BioSample}
+		#	 			{'EXPERIMENT': dict with SRX ID, library layout and stategy, instrument, etc}
+		#	 			{'SUBMISSION': dict including center_name, SUB ID, etc}
+		#	 			{'Organization': dict with stuff about submitter}
+		#	 			{'STUDY': dict with stuff about the BioProject}
+		#	 			{'SAMPLE': dict with very basic stuff about BioSample}
 		#	 			{'Pool': ignore this one, it's a multiplexing thing I think, sometimes it's missing}
 		#	 			{'RUN_SET': 
 		#	 				{
@@ -200,24 +206,30 @@ class FileReader():
 		#	 					'@bases': '10705886485',
 		#	 					'@spots': '500788',
 		#	 					'@bytes': '4550349867', 
-		#	 					'RUN': dict() of a single SRR      # TODO: what if multi SRR?
+		#	 					'RUN': dict with keys:  @accession, @alias, @total_spots, @total_bases, @size,
+		#												@load_done, @published, @is_public, @cluster_name,
+		#  												@has_taxanalysis, @static_data_available, IDENTIFIERS,
+		# 												EXPERIMENT_REF, RUN_ATTRIBUTES, pool, SRAFiles, CloudFiles,
+		# 												Statistics, Databases, Bases
 		#	 				}
 		#				}
 		# 			},
 		# 			{ # the next "actual experiment" dict, index[1] of list_of_experiments
-		# 				{'EXPERIMENT': dict()}
-		# 				{'SUBMISSION': dict()}
-		# 				{'Organization': dict()}
-		# 				{'STUDY': dict()}
-		# 				{'SAMPLE': dict()}
-		# 				{'Pool': dict()}  # NOT ALWAYS PRESENT!
-		# 				{'RUN_SET': dict()}
+		# 				{'EXPERIMENT': as above }
+		# 				{'SUBMISSION': as above }
+		# 				{'Organization': as above }
+		# 				{'STUDY': as above }
+		# 				{'SAMPLE': as above }
+		# 				{'Pool': as above }
+		# 				{'RUN_SET': as above }
 		# 			}
 		#		]
 		# 	}
 		# }
-		# This is, as the name implies, extremely cursed, so we'll try to make this make a bit more sense
-		blessed_dictionary = dict()
+		# This is, as the name implies, extremely cursed, so we'll try to make this make a bit more sense.
+		# It appears that every "actual_experiment" contains one run accession and one BioSample. This means
+		# we are basically indexed by run accession (SRR), and that BioSamples can be repeated.
+		blessed_dataframes = list()
 		assert len(cursed_dictionary) == 1
 		for EXPERIMENT_PACKAGE_SET, EXPERIMENT_PACKAGE in cursed_dictionary.items():
 			assert EXPERIMENT_PACKAGE_SET == "EXPERIMENT_PACKAGE_SET"
@@ -227,27 +239,40 @@ class FileReader():
 				assert type(list_of_experiments) == list
 				for actual_experiment in list_of_experiments:
 					assert type(actual_experiment) == dict
-					if len(actual_experiment) == 7 or len(actual_experiment) == 6:
-						# TODO: DOES THIS WORK WITH ENA/DDBJ DATA?! THAT WOULD HAVE OTHER EXTERNAL_IDS YEAH?!
+					if len(actual_experiment) == 7 or len(actual_experiment) == 6: # whether or not "Pool" is present
+						
+						# TODO: DDBJ/ENA data probably have additional external IDs and will need special handling
+
+						# checks for data structure
+						assert len(actual_experiment['RUN_SET']) == 5
+						assert type(actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']) == dict
+						assert len(actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']) == 1
+						assert type(actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']) == list # of k-v dictionaries
+
+						# get information
 						BioSample = (actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']['#text'])
-						assert len(actual_experiment['RUN_SET']) == 5 # TODO: does this catch multi SRR samples or not?!
-						SRR = actual_experiment['RUN_SET']['RUN']['@accession']
+						SRR_id = actual_experiment['RUN_SET']['RUN']['@accession']
+						attributes = actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']
+						normalized_attr = pl.json_normalize(attributes, max_level=1)
+						pivoted = normalized_attr.transpose(header_name="VALUE", column_names="TAG")
+						files = list()
+						for file_dict in actual_experiment['RUN_SET']['RUN']['SRAFiles']['SRAFile']:
+							filename = file_dict['@filename']
+							if filename != SRR_id: # exclude the .srr file (which has no extension here for some reason)
+								files.append(filename)
+						blessed_dictionary = {'SRR_id': SRR_id, 'BioSample': BioSample, 'files': files}
+						blessed_dataframe = pl.concat([pl.DataFrame(blessed_dictionary), pivoted], how='horizontal')
+						blessed_dataframes.append(blessed_dataframe)
 					else:
 						self.logging.error("Expected 6 or 7 keys per experiment dictionary, found... not that")
 						for thing in actual_experiment:
 							self.logging.error(thing)
 						exit(1)
-				exit(1)
-			#for keys, values in values[0]['RUN_SET'].items():
-			#	if len(keys) !=5:
-			#		print("ooo")
-			#	print(keys)
-			#	print(values)
-			#	print("-----")
-
-		pandas_df = pd.DataFrame(xml_dict)
-		print(pandas_df)
-		exit(1)
+		blessed_dataframe = pl.concat(blessed_dataframes, how='diagonal').rename({'SRR_id': 'run_index', 'BioSample': 'sample_index'})
+		blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by('run_index').agg(
+			[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != 'run_index']
+		))
+		return blessed_dataframe
 	
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
@@ -300,19 +325,21 @@ class FileReader():
 		assert polars_df.shape[0] == attributes_rows, f"Polars dataframe has {polars_df.shape[0]} rows, but the pandas_attributes has {attributes_rows} rows" 
 		
 		self.logging.info(f"Normalizing {attributes_rows} rows (this might take a while)...")
-		just_attributes = pl.json_normalize(pandas_attributes_series, strict=False, max_level=1, infer_schema_length=100000)  # just_attributes is a polars dataframe
-		assert polars_df.shape[0] == just_attributes.shape[0], f"Polars dataframe has {polars_df.shape[0]} rows, but normalized attributes we want to horizontally combine it with has {just_attributes.shape[0]} rows" 
+		just_attributes_df = pl.json_normalize(pandas_attributes_series, strict=False, max_level=1, infer_schema_length=100000)
+
+		assert polars_df.shape[0] == just_attributes_df.shape[0], f"Polars dataframe has {polars_df.shape[0]} rows, "
+		"but normalized attributes we want to horizontally combine it with has {just_attributes_df.shape[0]} rows" 
 
 		if self.logging.getEffectiveLevel() == 10: self.logging.info("Concatenating to the original dataframe...")
-		if collection_date_sam_workaround:
-			# polars_df already has a collection_date_sam which it converted to YYYY-MM-DD format. to avoid a merge conflict and to
+		if collection_date_sam_workaround and 'collection_date_sam' in polars_df.columns:
+			# when working in BQ data, polars_df already has a collection_date_sam which it converted to YYYY-MM-DD format. to avoid a merge conflict and to
 			# fall back on the attributes version (which perserves dates that failed to YYYY-MM-DD convert), drop collection_date_sam
 			# from polars_df before merging.
-			bq_jnorm = pl.concat([polars_df.drop(['attributes', 'collection_date_sam']), just_attributes], how="horizontal")
+			bq_jnorm = pl.concat([polars_df.drop(['attributes', 'collection_date_sam']), just_attributes_df], how="horizontal")
 		else:
-			bq_jnorm = pl.concat([polars_df.drop('attributes'), just_attributes], how="horizontal")
-		self.logging.info(f"An additional {len(just_attributes.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
-		if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Columns added: {just_attributes.columns}")
+			bq_jnorm = pl.concat([polars_df.drop('attributes'), just_attributes_df], how="horizontal")
+		self.logging.info(f"An additional {len(just_attributes_df.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
+		if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Columns added: {just_attributes_df.columns}")
 		if rancheroize: bq_jnorm = NeighLib.rancheroize_polars(bq_jnorm)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
@@ -467,7 +494,11 @@ class FileReader():
 			NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
-		polars_df = NeighLib.null_lists_of_len_zero(NeighLib.flatten_all_list_cols_as_much_as_possible(self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)))
+		polars_df = NeighLib.null_lists_of_len_zero(
+			NeighLib.flatten_all_list_cols_as_much_as_possible(
+				self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)
+			)
+		)
 		duplicated_samples = polars_df.filter(pl.col(sample_index).is_duplicated())
 		if duplicated_samples.shape[0] > 0:
 			if drop_bad_news:

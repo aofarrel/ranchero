@@ -4,7 +4,7 @@ import os
 import re
 import polars as pl
 import datetime
-from src.statics import kolumns, drop_zone, null_values
+from src.statics import kolumns, drop_zone, null_values, HPRC_sample_ids
 from polars.testing import assert_series_equal
 import polars.selectors as cs
 from .config import RancheroConfig
@@ -679,6 +679,18 @@ class NeighLib:
 		}, strict=False)
 		self.super_print_pl(bar, "per-column stats")
 
+	def translate_HPRC_IDs(self, polars_df, col_to_translate, new_col):
+		return self.translate_column(polars_df, col_to_translate, new_col, HPRC_sample_ids.HPRC_R2_isolate_to_BioSample)
+
+	def translate_column(self, polars_df, col_to_translate, new_col, dictionary):
+		if new_col not in polars_df.columns:
+			polars_df = polars_df.with_columns(pl.lit(None).alias(new_col))
+		for key, value in dictionary.items():
+			polars_df = polars_df.with_columns(
+				pl.when(pl.col(col_to_translate) == pl.lit(key))
+				.then(pl.lit(value)).otherwise(pl.col(new_col)).alias(new_col)
+			)
+		return polars_df
 
 	def postmerge_fallback_or_null(self, polars_df, left_col, right_col, fallback=None, dont_crash_please=0):
 		if dont_crash_please >= 3:
@@ -1020,6 +1032,7 @@ class NeighLib:
 		self.logging.debug("Recursively unnesting lists...")
 		polars_df = self.flatten_nested_list_cols(polars_df)
 		self.logging.debug("Unnested all list columns. Index seems okay.")
+
 		what_was_done = []
 
 		if just_these_columns is None:
@@ -1040,6 +1053,8 @@ class NeighLib:
 				continue
 			
 			if datatype == pl.List and datatype.inner != datetime.datetime:
+
+				polars_df = polars_df.with_columns(pl.col(col).list.drop_nulls())
 
 				if col in kolumns.equivalence['run_index'] and index_column in kolumns.equivalence['sample_index']:
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'skipped (runs in samp-indexed df)'})
@@ -1236,10 +1251,10 @@ class NeighLib:
 			try:
 				apparent_index_column = self.get_index_column(polars_df)
 				if manual_index_column not in polars_df.columns:
-					self.logging.error(f"manual_index_column is {manual_index_column}, but that column isn't in the dataframe!")
+					self.logging.error(f"Manual index column set to {manual_index_column}, but that column isn't in the dataframe!")
 					raise ValueError
 				elif manual_index_column != apparent_index_column:
-					self.logging.warning(f"Manual index column set to {apparent_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
+					self.logging.warning(f"Manual index column set to {manual_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
 					self.logging.warning("Consider dropping these columns before proceeding further with this dataframe, or adjusting kolumns.equivalence as needed.")
 					index_column = manual_index_column
 				else:
