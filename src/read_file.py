@@ -160,6 +160,7 @@ class FileReader():
 		Because:
 		* The XML header shouldn't be repeated
 		* Having multiple packages of multiple experiments really isn't helpful for our purposes
+		* More newlines = easier to navigate in certain text editors
 		'''
 		out_file_path = f"{os.path.splitext(efetch_xml)[0]}_modified.xml"
 		remove_lines = ['<?xml version="1.0" encoding="UTF-8"  ?>\n', '<EXPERIMENT_PACKAGE_SET>\n']
@@ -182,7 +183,7 @@ class FileReader():
 		self.logging.warning(f"Reformatted XML saved to {out_file_path}")
 		return out_file_path
 
-	def from_efetch(self, efetch_xml, index_by_file=False):
+	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=_cfg_check_index):
 		better_xml = self.fix_efetch_file(efetch_xml)
 		import xmltodict
 		with open(better_xml, "r") as file:
@@ -303,6 +304,12 @@ class FileReader():
 						exit(1)
 		blessed_dataframe = pl.concat(blessed_dataframes, how='diagonal').rename({'SRR_id': 'run_index', 'BioSample': 'sample_index'})
 		if index_by_file:
+			if group_by_file:
+				blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by("submitted_files").agg(
+						[c for c in blessed_dataframe.columns if c != 'submitted_files']
+				), force_index='submitted_files')
+			if check_index: # must come AFTER the group_by option
+				blessed_dataframe = NeighLib.check_index(blessed_dataframe, manual_index_column='submitted_files')
 			return blessed_dataframe
 		else:
 			# TODO: sum() submitted_file_sizes

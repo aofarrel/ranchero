@@ -16,12 +16,12 @@ import traceback
 globals().update({f"_cfg_{name}": object() for name in [
 	"force_SRR_ERR_DRR_run_index", "force_SAMN_SAME_SAMD_sample_index",
 	"check_index", "indicator_column",
-	"intermediate_files", "rm_dupes", "rm_not_pared_illumina"
+	"intermediate_files", "dupe_index_handling", "rm_not_pared_illumina"
 ]})
 _SENTINEL_TO_CONFIG = {
 	_cfg_force_SRR_ERR_DRR_run_index: "force_SRR_ERR_DRR_run_index",
 	_cfg_force_SAMN_SAME_SAMD_sample_index: "force_SAMN_SAME_SAMD_sample_index",
-	_cfg_rm_dupes: "rm_dupes",
+	_cfg_dupe_index_handling: "dupe_index_handling",
 	_cfg_check_index: "check_index",
 	_cfg_intermediate_files: "intermediate_files",
 	_cfg_indicator_column: "indicator_column",
@@ -1229,11 +1229,11 @@ class NeighLib:
 
 	def check_index(self, polars_df, 
 			manual_index_column=None, 
-			rm_dupes=_cfg_rm_dupes, 
 			force_NCBI_runs=_cfg_force_SRR_ERR_DRR_run_index, 
 			force_BioSamples=_cfg_force_SAMN_SAME_SAMD_sample_index,
 			rstrip=False, # VERY SLOW AND NOT WELL TESTED!
-			force_str_index=True):
+			dupe_index_handling=_cfg_dupe_index_handling
+			):
 		"""
 		Check a polars dataframe's apparent index, which is expected to be either run accessions or sample accessions, for the following issues:
 		* pl.null/None values
@@ -1242,7 +1242,7 @@ class NeighLib:
 
 		Unless manual_index_column is not none, this function will use kolumns.equivalence to figure out what your index column(s) are.
 		"""
-		rm_dupes = self._sentinal_handler(rm_dupes)
+		dupe_index_handling = self._sentinal_handler(dupe_index_handling)
 		force_NCBI_runs = self._sentinal_handler(force_NCBI_runs)
 		force_BioSamples = self._sentinal_handler(force_BioSamples)
 
@@ -1254,8 +1254,7 @@ class NeighLib:
 					self.logging.error(f"Manual index column set to {manual_index_column}, but that column isn't in the dataframe!")
 					raise ValueError
 				elif manual_index_column != apparent_index_column:
-					self.logging.warning(f"Manual index column set to {manual_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
-					self.logging.warning("Consider dropping these columns before proceeding further with this dataframe, or adjusting kolumns.equivalence as needed.")
+					self.logging.debug(f"Manual index column set to {manual_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
 					index_column = manual_index_column
 				else:
 					index_column = manual_index_column
@@ -1264,13 +1263,11 @@ class NeighLib:
 				index_column = manual_index_column
 		else:
 			index_column = self.get_index_column(polars_df)
-		
-		if force_str_index:
-			assert polars_df.schema[index_column] == pl.Utf8
 
 		if rstrip:
 			polars_df = self.recursive_rstrip(polars_df, index_column, strip_char=" ")
 		
+		# handle get_index_column() error cases
 		if type(index_column) == list:
 			if index_column[0] == 2:
 				self.logging.error(f"Dataframe has multiple possible sample based indeces: {index_column[1]}")
@@ -1289,9 +1286,10 @@ class NeighLib:
 				self.logging.error(f"Your dataframe's columns: {polars_df.columns}")
 				raise ValueError
 			else:
-				raise ValueError # who knows what happened in get_index_column()?
+				raise ValueError
+		assert polars_df.schema[index_column] != pl.List # just to be super-extra-double sure
 
-		# drop any nulls in the index column -- these needs to be before checking for duplicates or it breaks
+		# drop any nulls in the index column -- these needs to be before checking for duplicates
 		nulls = self.get_null_count_in_column(polars_df, index_column, warn=False, error=False)
 		if nulls > 0:
 			self.logging.warning(f"Dropped {nulls} row(s) with null value(s) in index column {index_column}")
@@ -1301,26 +1299,49 @@ class NeighLib:
 				self.logging.error(f"Failed to remove null values from index column {index_column}")
 				raise ValueError
 		
-		# at this point index_column can only be a string
-		self.logging.debug(f"Index column appears to be {index_column}")
-		assert polars_df.schema[index_column] != pl.List
-		subset = polars_df.unique(subset=[index_column], keep="first")
-		duplicates = polars_df.filter(polars_df[index_column].is_duplicated())
-		if len(polars_df) != len(polars_df.unique(subset=[index_column], keep="first")):
-			run_or_sample = 'run_index' if index_column in kolumns.equivalence['run_index'] else 'sample_index'
-			if rm_dupes:
-				self.logging.warning(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- will attempt to remove them (THIS MAY LEAD TO DATA LOSS)")
-				self.logging.debug(f"Duplicates: {duplicates.select(index_column)}")
-				polars_df = subset # do not return yet
-			else:
-				self.logging.error(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- not removing as per cfg perferences")
-				raise ValueError
+		# check for duplicates
+		assert polars_df.schema[index_column] == pl.Utf8
 		
+		duplicate_df = polars_df.filter(polars_df[index_column].is_duplicated())
+		n_dupe_indeces = len(duplicate_df)
+		#if len(polars_df) != len(polars_df.unique(subset=[index_column], keep="any")):
+		if n_dupe_indeces > 0:
+			self.logging.debug(f"Found {n_dupe_indeces} dupes in {index_column}, will handle according to prefernces")
+			if dupe_index_handling == 'allow':
+				self.logging.warning(f"Reluctantly keeping {n_dupe_indeces} duplicate values in index {index_column} as per dupe_index_handling")
+			elif dupe_index_handling in ['error', 'verbose_error']:
+				self.logging.error("Duplicates in index found!") # print above and below verbose dataframe
+				if dupe_index_handling == 'error':
+					raise ValueError(f"Found {n_dupe_indeces} duplicates in index column")
+				else:
+					self.dfprint(duplicate_df)
+					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
+					raise ValueError(f"Found {n_dupe_indeces} duplicate indeces in index column (dumped to dupes_in_index.tsv)")
+			elif dupe_index_handling in ['warn', 'verbose_warn', 'silent']:
+				subset = polars_df.unique(subset=[index_column], keep="any")
+				if dupe_index_handling == 'warn':
+					self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in index {index_column}, "
+						"will keep one instance per dupe")
+				elif dupe_index_handling == 'verbose_warn':
+					duplicate_df = duplicate_df.select(self.valid_cols(duplicate_df, [index_column, 'run_index', 'sample_index', 'submitted_files_bytes']))
+					self.dfprint(duplicate_df.sort(index_column))
+					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
+					self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in index {index_column} (dumped to dupes_in_index.tsv), "
+						"will keep one instance per dupe")
+				polars_df = subset
+			elif dupe_index_handling == 'dropall':
+				subset = polars_df.unique(subset=[index_column], keep="none")
+				self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in index {index_column}, will drop all of them")
+				polars_df = subset
+			else:
+				raise ValueError(f"Unknown value provided for dupe_index_handling: {dupe_index_handling}")
+		else:
+			self.logging.debug(f"Did not find any duplicates in {index_column}")
 		# if applicable, make sure there's no nonsense in our index columns -- also, we're checking run AND sample columns if both are present,
 		# to prevent issues if we do a run-to-sample conversion later
 		# also, thanks to earlier checks, we know there should only be a maximum of one sample index and one run index.
 		for column in polars_df.columns:
-			if column in kolumns.equivalence['sample_index'] and force_BioSamples:
+			if column in kolumns.equivalence['sample_index'] and force_BioSamples and polars_df.schema[column] != pl.List:
 				good = (
 					polars_df[column].str.starts_with("SAMN") |
 					polars_df[column].str.starts_with("SAME") |
