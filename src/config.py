@@ -113,9 +113,16 @@ class RancheroConfig:
 		# Try to (mostly) use polars when normalizing the dataframe
 		self.polars_normalize = True
 
-		# When checking the index, automatically remove rows that have duplicate values in that index
-		# Note that if the dataframe is run-indexed, this will NOT remove duplicate sample_index values by design
-		self.rm_dupes = True
+		# How to handle duplicate values when running check_index().
+		#
+		# - error: Throw a fatal error that includes the number of duplicate values
+		# - verbose_error: As error, but attempt to print all duplicated values, and dump a TSV
+		# - warn: pl.DataFrame.unique(subset=[index_column], keep='any') + print a non-fatal warning
+		# - verbose_warn: As warn, but attempt to print all duplicated values, and dump a TSV
+		# - silent: pl.DataFrame.unique(subset=[index_column], keep='any') + print to logging.debug
+		# - allow: Allow duplicate values. NOT RECOMMENDED; THIS WILL BREAK MERGING DATAFRAMES! Will print a warning!
+		# - dropall: pl.DataFrame.unique(subset=[index_column], keep='none') + warn
+		self.dupe_index_handling = 'verbose_warn'
 
 		# Try to remove phages when standardizing taxonomic information
 		self.rm_phages = True
