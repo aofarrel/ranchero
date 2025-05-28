@@ -1,0 +1,5 @@
+## examples/parsing_JSONs_from_BigQuery
+
+These scripts are designed for parsing the JSONL (newline-delimited JSON) output of a BigQuery search of the SRA data table. BigQuery is probably the easiest way to dump a ton of metadata about dozens of samples at once (unless all the info you need is accessible via the outputs of SRA web search, in which case you can dump that to TSV and use Ranchero's TSV readers instead).
+
+There is one caveat, which only matters if you care about file-level information: **BigQuery does not store file-level information consistently.** A multi-file run accession (ex: Illumina PE r1 and r2; ONT data split across multiple uBAMs; etc) *might* return information on all of files, but often it doesn't. This is important mainly if you are querying SRA in order to figure out if you already uploaded files on there. If you need file-level information that includes absolutely everything, you'll need to use enterz direct instead of BigQuery. Worry not -- I wrote a parser for edirect XMLs too! See [../did_I_already_put_that_on_SRA.py](../did_I_already_put_that_on_SRA.py) as an example.

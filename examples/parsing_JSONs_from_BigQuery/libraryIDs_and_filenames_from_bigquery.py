@@ -1,6 +1,11 @@
 # This is an example of using Ranchero to wrangle human data from a BQ JSONL.
 # We're going to parse the primary_search fields to get library IDs and
 # filenames of samples on the BQ table.
+#
+# YOU SHOULD NOT RELY ON THIS TO PROVIDE A COMPREHENSIVE LIST OF ALL FILES
+# ASSOCIATED WITH ANY GIVEN RUN/SAMPLE ACCESSION. BIGQUERY DOES NOT STORE ALL
+# OF THAT INFO, YOU NEED ENTERZ DIRECT FOR A COMPREHENSIVE LIST. THIS SCRIPT JUST
+# RESTATES WHAT'S ALREADY IN THE BIGQUERY FILE.
 
 import sys
 import src as Ranchero

@@ -1,3 +1,8 @@
+#  ** You should use did_I_already_put_that_on_SRA.py instead of this script unless ALL are true: **
+#  A) you cannot use edirect, but can use BigQuery
+#  B) you are absolutely certain all run accessions have PRECISELY ONE file associated with them
+#  C) you are not working with PE Illumina data, sample pools, or barcodes
+#
 # This is an extension of libraryIDs_and_filenames_from_bigquery.py
 # In this scenario, we already uploaded a bunch of files to SRA but
 # lost track of which ones were uploaded. We did a search of SRA on

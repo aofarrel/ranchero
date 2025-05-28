@@ -1,4 +1,9 @@
-# See if stuff in a metadata JSON file have already been upload to BQ by matching on filename.
+#  ** You should use did_I_already_put_that_on_SRA.py instead of this script unless ALL are true: **
+#  A) you cannot use edirect, but can use BigQuery
+#  B) you are absolutely certain all run accessions have PRECISELY ONE file associated with them
+#  C) you are not working with PE Illumina data, sample pools, or barcodes
+#
+# See if stuff in a metadata TSV file have already been upload to BQ by matching on filename.
 # Usage: did_I_already_put_that_on_SRA_simple.py <bq_json> <metadata_tsv>
 #       <bq_json>: jsonl from BigQuery search of SRA (all samples in a given BioProject, etc)
 #       <metadata_tsv>: a TSV of stuff you want on SRA that, at a minimum, includes a "filename" column
