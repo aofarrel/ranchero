@@ -1393,8 +1393,8 @@ class NeighLib:
 		with pl.Config(tbl_cols=-1, tbl_rows=20, fmt_str_lengths=200, fmt_table_cell_list_len=10):
 			for col in nested_lists:
 				self.logging.debug(f"unnesting {col}")
-				if col not in self.get_valid_id_columns(polars_df):
-					self.print_only_where_col_list_is_big(polars_df, col)
+				#if col not in self.get_valid_id_columns(polars_df):
+					#self.print_only_where_col_list_is_big(polars_df, col)
 
 				polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
 				
@@ -1402,9 +1402,9 @@ class NeighLib:
 				#polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten())) # leaves a bunch of hanging nulls
 				#polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
 
-				if col not in self.get_valid_id_columns(polars_df):
-					self.logging.debug(f"after flatten")
-					self.print_only_where_col_list_is_big(polars_df, col)
+				#if col not in self.get_valid_id_columns(polars_df):
+				#	self.logging.debug(f"after flatten")
+				#	self.print_only_where_col_list_is_big(polars_df, col)
 		
 		# this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
 		remaining_nests = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
