@@ -444,7 +444,6 @@ class FileReader():
 		"""
 		At the cost of a slower initial process, this ultimately saves 10-20 seconds upon being flattened.
 		"""
-		self.logging.debug("Using some tricks...")
 		non_index_columns = [col for col in polars_df.columns if col not in [run_index, sample_index]]
 		listbusters, listmakers, listexisters = [], [], [col for col, dtype in polars_df.schema.items() if (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8)]
 		
@@ -504,8 +503,13 @@ class FileReader():
 		[SRR126]        | SAMN3        | [bar]
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
-		NeighLib.check_index(polars_df, manual_index_column=run_index)
 		assert sample_index in polars_df.columns
+		assert run_index in polars_df.columns
+		self.logging.debug(f"Sample index {sample_index} is in columns, and so is run index {run_index}")
+
+		self.logging.debug("Before changing the dataframe, null counts in each column are as follows:")
+		self.logging.debug(polars_df.null_count())
+
 		duplicated_samples = polars_df.filter(pl.col(run_index).is_duplicated())
 		if duplicated_samples.shape[0] > 0:
 			if drop_bad_news:
@@ -516,6 +520,19 @@ class FileReader():
 					To drop these in-place instead of erroring, set drop_bad_news to True. Here's some of those dupes:""")
 				NeighLib.super_print_pl(duplicated_samples)
 				exit(1)
+		else:
+			self.logging.debug("Did not find any duplicates in the run_index column")
+		
+
+		self.logging.debug("After duplicated sample check, null counts in each column are as follows:")
+		self.logging.debug(polars_df.null_count())
+
+		polars_df = NeighLib.check_index(polars_df, manual_index_column=run_index)
+		self.logging.debug("Ran check_index as a double-check and saved return to polars_df")
+
+		self.logging.debug("After check_index(), null counts in each column are as follows:")
+		self.logging.debug(polars_df.null_count())
+
 		nulls_in_sample_index = polars_df.with_columns(pl.when(
 			pl.col(sample_index).is_null())
 			.then(pl.col(run_index))
@@ -531,10 +548,18 @@ class FileReader():
 				NeighLib.super_print_pl(nulls_in_sample_index)
 				exit(1)
 
+		self.logging.debug("After handling of nulls in sample index, null counts in each column are as follows:")
+		self.logging.debug(polars_df.null_count())
+
 		if not skip_rancheroize:
+			self.logging.debug("Rancheroizing run-indexed dataframe")
 			polars_df = NeighLib.rancheroize_polars(polars_df) # runs check_index()
 		else:
+			self.logging.debug("NOT rancheroizing run-indexed dataframe")
 			NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
+
+		self.logging.debug("After rancheroize (or not), null counts in each column are as follows:")
+		self.logging.debug(polars_df.null_count())
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		polars_df = NeighLib.null_lists_of_len_zero(
@@ -542,6 +567,10 @@ class FileReader():
 				self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)
 			)
 		)
+
+		self.logging.debug("After null lists of len zero, null counts in each column are as follows:")
+		self.logging.debug(polars_df.null_count())
+
 		duplicated_samples = polars_df.filter(pl.col(sample_index).is_duplicated())
 		if duplicated_samples.shape[0] > 0:
 			if drop_bad_news:
@@ -552,6 +581,11 @@ class FileReader():
 					To drop these in-place instead of erroring, set drop_bad_news to True. Here's {run_index} where {sample_index} is null:""")
 				NeighLib.super_print_pl(duplicated_samples)
 				exit(1)
+
+		self.logging.debug("At end of this function, null counts in each column are as follows")
+		self.logging.debug(polars_df.null_count())
+		self.logging.debug("Returning...")
+
 		return polars_df
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search_and_host_info=True):
