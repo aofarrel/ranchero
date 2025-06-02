@@ -1,3 +1,7 @@
+rc = "rc17"
+
+
+
 import time
 start = time.time()
 import gc
@@ -137,7 +141,7 @@ def inital_file_parse():
 	print(f"Dropped non-TB-related columns in {time.time() - start:.4f} seconds")
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, "tba6_no_nonsense.tsv")
+	Ranchero.to_tsv(tba6, f"tba6_no_nonsense_{rc}.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
 
 	# initial rancheroize
@@ -159,11 +163,11 @@ def inital_file_parse():
 	Ranchero.NeighLib.report(tba6)
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, "tba6_standardized.tsv")
+	Ranchero.to_tsv(tba6, f"tba6_standardized_{rc}.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
 	check_stuff(tba6, "tba6 in memory")
 	print("Reading disk:")
-	what_we_just_wrote = Ranchero.from_tsv("tba6_standardized.tsv", auto_standardize=False)
+	what_we_just_wrote = Ranchero.from_tsv(f"tba6_standardized_{rc}.tsv", auto_standardize=False)
 	check_stuff(what_we_just_wrote, "tba6 on disk")
 	what_we_just_wrote = None
 	gc.collect()
@@ -207,7 +211,7 @@ def inject_metadata(tba6):
 	check_stuff(tba6, "tba6 after injectors in memory")
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, "tba6_injected.tsv")
+	Ranchero.to_tsv(tba6, f"tba6_injected_{rc}.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
 	return tba6
 
@@ -324,7 +328,7 @@ def run_merges(tba6):
 	check_stuff(merged)
 
 	start = time.time()
-	Ranchero.to_tsv(merged, "./merged_by_run.tsv")
+	Ranchero.to_tsv(merged, f"./merged_by_run_{rc}.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
 	return merged
 
@@ -338,10 +342,10 @@ def sample_index_merges(merged_runs):
 	start = time.time()
 	merged_flat = Ranchero.hella_flat(merged)
 	merged_by_sample = Ranchero.run_index_to_sample_index(merged_flat)
-	#Ranchero.to_tsv(merged_by_sample, "./merged_per_sample_not_flat.tsv")
+	#Ranchero.to_tsv(merged_by_sample, f"./merged_per_sample_not_flat_{rc}.tsv")
 	merged_by_sample = Ranchero.hella_flat(merged_by_sample)
 	print(f"{_b_}Converted run indeces to sample indeces in {time.time() - start:.4f} seconds{_bb_}")
-	Ranchero.to_tsv(merged_by_sample, "./merged_per_sample.tsv")
+	Ranchero.to_tsv(merged_by_sample, f"./merged_per_sample_{rc}.tsv")
 	
 	Ranchero.NeighLib.print_value_counts(merged_by_sample, ['clade', 'organism', 'lineage', 'strain'])
 	check_stuff(merged_by_sample)
@@ -524,7 +528,7 @@ merged = merged_samps
 merged = merged.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'mbytes_sum_sum', 'geoloc_name'], strict=False)
 merged = merged.drop(['tbprof_rd', 'tbprof_spoligotype', 'tbprof_frac'], strict=False) # seem to be from the main lineage only, not the sublineage
 
-Ranchero.to_tsv(merged, "./ranchero_rc17_full_columns.tsv")
+Ranchero.to_tsv(merged, f"./ranchero_{rc}_full_columns.tsv")
 merged = merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info'], strict=False) # for less_columns version
 
 
@@ -545,7 +549,7 @@ Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 's
 Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
 
 Ranchero.NeighLib.report(merged)
-Ranchero.to_tsv(merged, "./ranchero_rc17_less_columns.tsv")
+Ranchero.to_tsv(merged, f"./ranchero_{rc}_less_columns.tsv")
 
 
 #Ranchero.NeighLib.big_print_polars(merged, "merged hosts and dates", ['sample_index', 'date_collected', 'host_scienname', 'lineage'])
