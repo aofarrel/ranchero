@@ -545,7 +545,7 @@ Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 's
 Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
 
 Ranchero.NeighLib.report(merged)
-Ranchero.to_tsv(merged, "./ranchero_rc17_less_columns.tsv")
+Ranchero.to_tsv(merged, "./ranchero_rc18_less_columns.tsv")
 
 
 #Ranchero.NeighLib.big_print_polars(merged, "merged hosts and dates", ['sample_index', 'date_collected', 'host_scienname', 'lineage'])

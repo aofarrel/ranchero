@@ -508,7 +508,14 @@ class NeighLib:
 		print(polars_df.select(pl.col(new_column).value_counts()))
 
 	def valid_cols(self, polars_df, desired_columns: list):
-		return [col for col in desired_columns if col in polars_df.columns]
+		"""
+		Returns the valid subset of desired_columns, "valid" in the sense of "yeah that's in the dataframe."
+		Attempts to maintain order as much as possible since people like their index columns on the left.
+		Will also drop duplicates (which can happen with unusual indeces or if the user messes up).
+		"""
+		seen = set()
+		seen_uniq = [col for col in desired_columns if not (col in seen or seen.add(col))]
+		return [col for col in seen_uniq if col in polars_df.columns]
 
 	def concat_dicts_with_shared_keys(self, dict_list: list):
 		"""
@@ -1054,7 +1061,12 @@ class NeighLib:
 			
 			if datatype == pl.List and datatype.inner != datetime.datetime:
 
-				polars_df = polars_df.with_columns(pl.col(col).list.drop_nulls())
+				try:
+					polars_df = polars_df.with_columns(pl.col(col).list.drop_nulls())
+				except Exception:
+					self.logging.error(f"{col} has type {datatype} but is acting like it isn't a list -- is it full of nulls?")
+					self.logging.error(polars_df.select(col))
+					exit(1)
 
 				if col in kolumns.equivalence['run_index'] and index_column in kolumns.equivalence['sample_index']:
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'skipped (runs in samp-indexed df)'})
