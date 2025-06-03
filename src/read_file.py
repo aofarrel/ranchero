@@ -184,10 +184,16 @@ class FileReader():
 		return out_file_path
 
 	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=_cfg_check_index):
-		better_xml = self.fix_efetch_file(efetch_xml)
 		import xmltodict
-		with open(better_xml, "r") as file:
-			xml_content = file.read()
+		try:
+			# XML files with a normal format
+			with open(efetch_xml, "r") as file:
+				xml_content = file.read()
+		except Exception:
+			# XML files in which edirect got a little too silly
+			better_xml = self.fix_efetch_file(efetch_xml)
+			with open(better_xml, "r") as file:
+				xml_content = file.read()
 		cursed_dictionary = xmltodict.parse(xml_content)
 		# Currently cursed_dictionary kind of looks like this:
 		#
