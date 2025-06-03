@@ -178,16 +178,16 @@ class Merger:
 		# ex: following previous example, this would include 'SRR16156818'
 		intersection_values = left.filter(intersection).select(merge_upon)
 
-		# left/right-hand datafrae with true-false for whether index at that position is NOT also present in the right/left dataframe
+		# left/right-hand dataframe with true-false for whether index at that position is NOT also present in the right/left dataframe
 		exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
 
 		# the index values where exclusive_left/right is true
 		exclusive_left_values, exclusive_right_values = left.filter(exclusive_left).select(merge_upon), right.filter(exclusive_right).select(merge_upon)
 		
-		if len(intersection) == 0:
+		if (~intersection).all():
 			if drop_exclusive_right:
 				self.logging.warning(f"No values in {merge_upon} are shared across the dataframes, but drop_exclusive_right is True, so the dataframe is unchanged")
-				return polars_df
+				return left
 			else:
 				self.logging.warning(f"No values in {merge_upon} are shared across the dataframes -- merge can continue, but no rows in {right_name} will merge with existing rows in {left_name}")
 		self.logging.info(f"--> Intersection: {len(intersection_values)}")
