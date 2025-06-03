@@ -1036,9 +1036,15 @@ class NeighLib:
 			index_column = force_index
 
 		# unnest nested lists (recursive)
+		self.logging.debug("Null counts in flatten_all_list_cols() start")
+		self.logging.debug(polars_df.null_count())
+
 		self.logging.debug("Recursively unnesting lists...")
 		polars_df = self.flatten_nested_list_cols(polars_df)
 		self.logging.debug("Unnested all list columns. Index seems okay.")
+
+		self.logging.debug("Null counts in after recursively unnesting lists")
+		self.logging.debug(polars_df.null_count())
 
 		what_was_done = []
 
@@ -1088,7 +1094,8 @@ class NeighLib:
 
 							polars_df = self.coerce_to_not_list_if_possible(polars_df, kolumn, index_column, prefix_arrow=True)
 					if polars_df.schema[col] == pl.List: # since it might not be after coerce_to_not_list_if_possible()
-						long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
+						#long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
+						long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage']) # TODO: BAD WORKAROUND
 						if len(long_boi) > 0:
 							# TODO: more rules could be added, and this is a too TB specific, but for my purposes it's okay for now
 							if col == 'organism' and polars_df.schema['organism'] == pl.List:
@@ -1135,7 +1142,8 @@ class NeighLib:
 								# We'll treat every remaining conflict as invalid and null it 
 								polars_df = polars_df.with_columns(pl.when((pl.col('lineage').list.len() > 1)).then(None).otherwise(pl.col("lineage")).alias('lineage'))
 							
-							long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
+							#long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
+							long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage']) # TODO BAD WORKAROUND
 							print(f"After delongating {col}...")
 							print(long_boi)
 							polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)

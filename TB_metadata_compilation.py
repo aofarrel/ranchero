@@ -347,7 +347,8 @@ def sample_index_merges(merged_runs):
 	print(f"{_b_}Converted run indeces to sample indeces in {time.time() - start:.4f} seconds{_bb_}")
 	Ranchero.to_tsv(merged_by_sample, f"./merged_per_sample_{rc}.tsv")
 	
-	Ranchero.NeighLib.print_value_counts(merged_by_sample, ['clade', 'organism', 'lineage', 'strain'])
+	#Ranchero.NeighLib.print_value_counts(merged_by_sample, ['clade', 'organism', 'lineage', 'strain'])
+	Ranchero.NeighLib.print_value_counts(merged_by_sample, ['clade', 'organism', 'lineage'])
 	check_stuff(merged_by_sample)
 
 	merged = merged_by_sample
@@ -420,7 +421,8 @@ def sample_index_merges(merged_runs):
 	start, merged = time.time(), Ranchero.cleanup_dates(merged)
 	print(f"Cleaned up dates so far in {time.time() - start:.4f} seconds")
 
-	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	#Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage'])
 	Ranchero.NeighLib.print_value_counts(merged, ['country', 'region'])
 	check_stuff(merged)
 
@@ -437,7 +439,8 @@ def sample_index_merges(merged_runs):
 	walker = Ranchero.standardize_everything(walker)
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, walker, merge_upon="sample_index", right_name="Walker_2022", indicator="collection")
 	print(f"Merged with sample-based Walker in {time.time() - start:.4f} seconds")
-	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	#Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage'])
 	Ranchero.NeighLib.print_value_counts(merged, ['country', 'region'])
 	check_stuff(merged)
 
@@ -450,7 +453,8 @@ def sample_index_merges(merged_runs):
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, Fran_non_sra, merge_upon="sample_index", right_name="TGU", indicator="collection", drop_exclusive_right=False)
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, Fran_sra, merge_upon="sample_index", right_name="TGU", indicator="collection", drop_exclusive_right=False)
 	print(f"Merged with TGU in {time.time() - start:.4f} seconds")
-	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	#Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage'])
 	check_stuff(merged)
 
 	# input lists
@@ -474,7 +478,8 @@ def sample_index_merges(merged_runs):
 	merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="sample_index", right_name="denylist", indicator="collection", drop_exclusive_right=False)
 	
 	print(f"Merged with pipeline information in {time.time() - start:.4f} seconds")
-	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	#Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage'])
 	Ranchero.NeighLib.print_a_where_b_equals_these(merged, col_a='country', col_b='run_index', list_to_match=['ERR046972', 'ERR2884698', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
 	Ranchero.NeighLib.print_value_counts(merged, ['country', 'region'])
 	check_stuff(merged)
@@ -485,7 +490,8 @@ def sample_index_merges(merged_runs):
 	merged = Ranchero.standardize_everything(merged, force_strings=True, organism_fallback="Mycobacterium tuberculosis complex sp.", clade_fallback="MTBC", skip_sample_source=True)
 	print(f"Re-standardized in {time.time() - start:.4f} seconds")
 
-	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	#Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+	Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage'])
 	check_stuff(merged)
 
 	return merged
@@ -520,7 +526,8 @@ else:
 merged_samps = Ranchero.inject_metadata(merged_samps, Ranchero.injector_from_tsv("./inputs/overrides/caprae_injector.tsv"), overwrite=True)
 
 
-Ranchero.NeighLib.print_value_counts(merged_samps, ['clade', 'organism', 'lineage', 'strain'])
+#Ranchero.NeighLib.print_value_counts(merged_samps, ['clade', 'organism', 'lineage', 'strain'])
+Ranchero.NeighLib.print_value_counts(merged_samps, ['clade', 'organism', 'lineage'])
 
 
 merged = merged_samps
@@ -545,7 +552,8 @@ Ranchero.NeighLib.print_value_counts(merged, ['libraryselection'])
 Ranchero.NeighLib.print_value_counts(merged, ['sample_source'])
 Ranchero.NeighLib.print_value_counts(merged, ['host_scienname', 'host_confidence', 'host_streetname'])
 Ranchero.NeighLib.print_value_counts(merged, ['date_collected'])
-Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+#Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage'])
 Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
 
 Ranchero.NeighLib.report(merged)

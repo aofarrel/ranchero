@@ -561,6 +561,10 @@ class FileReader():
 		self.logging.debug("After rancheroize (or not), null counts in each column are as follows:")
 		self.logging.debug(polars_df.null_count())
 
+		# TODO: REALLY BAD WORKAROUND!!!
+		if 'strain' in polars_df:
+			polars_df = polars_df.drop('strain')
+
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		polars_df = NeighLib.null_lists_of_len_zero(
 			NeighLib.flatten_all_list_cols_as_much_as_possible(
