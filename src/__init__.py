@@ -30,6 +30,7 @@ print_schema = _NeighLib.print_schema
 add_column_with_this_value = _NeighLib.add_column_of_just_this_value
 dfprint = _NeighLib.dfprint
 fix_index = _NeighLib.check_index
+translate_HPRC_IDs = _NeighLib.translate_HPRC_IDs
 
 from_tsv = _FileReader.polars_from_tsv
 from_bigquery = _FileReader.polars_from_bigquery

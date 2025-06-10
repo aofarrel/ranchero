@@ -142,20 +142,32 @@ class FileReader():
 
 	def fix_efetch_file(self, efetch_xml):
 		'''
-		Turn this:
+		Handles what appears to be the two most typical ways for efetch to crap itself:
+
+		-------- CASE A --------
 		<?xml version="1.0" encoding="UTF-8"  ?>
 		<EXPERIMENT_PACKAGE_SET>
-		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28844847"></EXPERIMENT_PACKAGE></EXPERIMENT_PACKAGE_SET>
+		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28844847">[...]</EXPERIMENT_PACKAGE></EXPERIMENT_PACKAGE_SET>
 		<?xml version="1.0" encoding="UTF-8"  ?>
 		<EXPERIMENT_PACKAGE_SET>
-		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28704751"></EXPERIMENT_PACKAGE></EXPERIMENT_PACKAGE_SET>
+		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28704751">[...]</EXPERIMENT_PACKAGE></EXPERIMENT_PACKAGE_SET>
 
 		Into this:
 		<?xml version="1.0" encoding="UTF-8"  ?>
 		<EXPERIMENT_PACKAGE_SET>
-		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28844847"></EXPERIMENT_PACKAGE>
-		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28704751"></EXPERIMENT_PACKAGE>
+		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28844847">[...]</EXPERIMENT_PACKAGE>
+		<EXPERIMENT_PACKAGE><EXPERIMENT accession="SRX28704751">[...]</EXPERIMENT_PACKAGE>
 		</EXPERIMENT_PACKAGE_SET>
+
+		-------- CASE B --------
+		<?xml version="1.0" encoding="UTF-8" ?>
+		<!DOCTYPE EXPERIMENT_PACKAGE_SET>
+		<EXPERIMENT_PACKAGE_SET>
+		  <EXPERIMENT_PACKAGE>
+			[...]
+		  </EXPERIMENT_PACKAGE>
+		  <EXPERIMENT_PACKAGE_SET>
+		    <EXPERIMENT_PACKAGE>
 		
 		Because:
 		* The XML header shouldn't be repeated
@@ -163,39 +175,69 @@ class FileReader():
 		* More newlines = easier to navigate in certain text editors
 		'''
 		out_file_path = f"{os.path.splitext(efetch_xml)[0]}_modified.xml"
-		remove_lines = ['<?xml version="1.0" encoding="UTF-8"  ?>\n', '<EXPERIMENT_PACKAGE_SET>\n']
+		remove_lines = ['<!DOCTYPE EXPERIMENT_PACKAGE_SET>\n',
+						'<?xml version="1.0" encoding="UTF-8"  ?>\n', # two spaces
+						'<?xml version="1.0" encoding="UTF-8" ?>\n',  # one space
+						'<EXPERIMENT_PACKAGE_SET>\n',
+						'</EXPERIMENT_PACKAGE_SET>\n',
+						'  </EXPERIMENT_PACKAGE_SET>\n',
+						'  <EXPERIMENT_PACKAGE_SET>\n'
+		]
 
 		with open(efetch_xml, 'r') as in_file:
 			lines = in_file.readlines()
+		xml_headers = [line for line in lines if line.startswith("<?xml")]
+		nice_lines = [line for line in lines if not line in remove_lines]
+		
+		if len(xml_headers) > 1:
+			likely_one_line_per_experiment_package_set = True
+		else:
+			likely_one_line_per_experiment_package_set = False
+
+
 		with open(out_file_path, 'w') as out_file:
 			out_file.write('<?xml version="1.0" encoding="UTF-8"  ?>\n')
+			if not likely_one_line_per_experiment_package_set:
+				out_file.write('<!DOCTYPE EXPERIMENT_PACKAGE_SET>\n')
 			out_file.write('<EXPERIMENT_PACKAGE_SET>\n')
-			for line in lines:
-				if line not in remove_lines:
+			for line in nice_lines:
+				if likely_one_line_per_experiment_package_set:
 					line = line.removesuffix('\n') # to make handling next removesuffix() easier
 					line = line.removesuffix('</EXPERIMENT_PACKAGE_SET>')
 					experiment_packages = line.split('<EXPERIMENT_PACKAGE>')
 					for i, experiment in enumerate(experiment_packages):
 						if experiment != '':
 							out_file.write('<EXPERIMENT_PACKAGE>'+experiment+'\n')
+				else:
+					out_file.write(line)
 			out_file.write('</EXPERIMENT_PACKAGE_SET>\n')
-
 		self.logging.warning(f"Reformatted XML saved to {out_file_path}")
 		return out_file_path
 
 	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=_cfg_check_index):
+		"""
+		1. Convert the output of efetch into an XML format that is actually correct (harder than you'd expect)
+		2. Convert the resulting dictionary into a Polars dataframe that is actually useful (also hard)
+
+		For #1 we have to account for at least three different ways edirect can spit out something:
+		  a) Actually valid XML file
+		  b) Several <EXPERIMENT_PACKAGE_SET>s, one of which is unmatched
+		  c) Like b but there's also additional <?xml version="1.0" encoding="UTF-8"  ?> headers thrown in for fun
+		 """
+		import xml
 		import xmltodict
+		with open(efetch_xml, "r") as file:
+			xml_content = file.read()
+		
 		try:
-			# XML files with a normal format
-			with open(efetch_xml, "r") as file:
-				xml_content = file.read()
-		except Exception:
-			# XML files in which edirect got a little too silly
+			cursed_dictionary = xmltodict.parse(xml_content)
+		except xml.parsers.expat.ExpatError:
 			better_xml = self.fix_efetch_file(efetch_xml)
 			with open(better_xml, "r") as file:
 				xml_content = file.read()
-		cursed_dictionary = xmltodict.parse(xml_content)
-		# Currently cursed_dictionary kind of looks like this:
+			cursed_dictionary = xmltodict.parse(xml_content)
+		
+		# Regardless of whether or not we had to fix the XML file, cursed_dictionary kind of looks like this:
 		#
 		# {"EXPERIMENT_PACKAGE_SET":
 		# 	{"EXPERIMENT_PACKAGE":

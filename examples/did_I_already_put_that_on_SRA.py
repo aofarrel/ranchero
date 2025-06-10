@@ -8,9 +8,10 @@ import sys
 import src as Ranchero
 import polars as pl
 
-if len(sys.argv) > 4:
+if len(sys.argv) == 4:
 	if sys.argv[3] not in ['-v', '-verbose', '--verbose']:
 		print(f"Can't parse third argument: {sys.argv[3]}")
+		exit(1)
 	else:
 		verbose = True
 else:
@@ -18,65 +19,69 @@ else:
 
 # Parse XML file to get what's already on SRA
 edirect = Ranchero.from_efetch(sys.argv[1], index_by_file=True)
-edirect = edirect.rename({'submitted_files':'filename'}).drop(['notes'])
+edirect = edirect.rename({'submitted_files':'filename', 'run_index':'run_accession'}).drop(['notes'])
+assert edirect.height > 0
 
 # We want to merge this with our own TSVs on the filename column, but there's a possibility
 # of duplicate filenames on SRA, which causes issues when merging. This approach fixes that.
 edirect_by_filename = edirect.group_by("filename").agg(
-	[pl.col('run_index'), pl.col('submitted_files_gibytes'), pl.col('alias')]
+	[pl.col('run_accession'), pl.col('submitted_files_gibytes'), pl.col('alias')]
 )
 edirect_by_filename = Ranchero.hella_flat(edirect_by_filename, force_index="filename")
 
 # Unfortunately, sometimes SRA changes the name of files upon upload. It seems that when this
 # happens, it saves the old filename in the "alias" column, which is typically a list at this point.
+# "Alias" also includes the other read for Illumina PE.
 if edirect_by_filename.schema["alias"] == pl.List:
 	edirect_by_alias = edirect.explode("alias")
-	edirect_by_alias = edirect_by_alias.filter(pl.col('alias') != pl.col('filename'))
+	edirect_alternative_filenames_only = edirect_by_alias.filter(pl.col('alias') != pl.col('filename'))
 else:
-	edirect_by_alias = edirect.filter(pl.col('alias') != pl.col('filename'))
+	edirect_alternative_filenames_only = edirect.filter(pl.col('alias') != pl.col('filename'))
 
 # Like we did with the filenames, handle dupes among the aliases
-edirect_by_alias = edirect_by_alias.group_by("alias").agg(
-	[pl.col('run_index'), pl.col('submitted_files_gibytes')]
+edirect_alternative_filenames_only = edirect_alternative_filenames_only.group_by("alias").agg(
+	[pl.col('run_accession'), pl.col('submitted_files_gibytes'), pl.col('filename')]
 )
-edirect_by_alias = Ranchero.hella_flat(edirect_by_alias, force_index="alias")
+edirect_alternative_filenames_only = Ranchero.hella_flat(edirect_alternative_filenames_only, force_index="alias")
 
 # Parse TSV file of metadata
 # If it's not indexed by filename, you'll want to add an explode() in here
 metadata = Ranchero.from_tsv(sys.argv[2], check_index=False, auto_rancheroize=False)
 metadata = Ranchero.NeighLib.check_index(metadata, manual_index_column='filename')
+assert metadata.height > 0
 if verbose:
 	print("Metadata dataframe:")
 	Ranchero.dfprint(metadata.sort("filename"), cols=5, rows=20, width=190, str_len=100)
+else:
+	print(f"{metadata.height} files in metadata dataframe")
+
+# To make merging easier, we're going to drop columns from the dataframes
+metadata_partial = metadata.select(["filename", "filetype", "sample_ID", "biosample_accession"])
+edirect_by_filename = edirect_by_filename.drop("alias")
+edirect_alternative_filenames_only = edirect_alternative_filenames_only.drop("filename")
 
 # Merge with SRA table upon the "filename" column
 upon_filename = Ranchero.merge_dataframes(
-	left=metadata, right=edirect_by_filename, 
-	left_name="metadata_table", right_name="SRA_table",
+	left=metadata_partial, right=edirect_by_filename, 
+	left_name="metadata_table", right_name="SRA_filename",
 	merge_upon="filename", force_index="filename", drop_exclusive_right=True)
 
 # Unfortunately we also need to merge on the "alias" column because some files get
 # their name changed when uploaded to SRA!
-upon_alias = Ranchero.merge_dataframes(
-	left=metadata.rename({"filename": "alias"}), right=edirect_by_alias, 
-	left_name="metadata_table", right_name="SRA_table",
-	merge_upon="alias", force_index="alias", drop_exclusive_right=True)
-
-Ranchero.dfprint(edirect_by_filename, cols=10, rows=20, width=190, str_len=100)
-Ranchero.dfprint(edirect_by_alias, cols=10, rows=20, width=190, str_len=100)
-exit(1)
-
-
-
-
-
-
+upon_filename_and_alias = Ranchero.merge_dataframes(
+	left=upon_filename, right=edirect_alternative_filenames_only.rename({"alias": "filename"}), 
+	left_name="metadata_table", right_name="SRA_alias",
+	merge_upon="filename", force_index="filename", drop_exclusive_right=True)
 
 # Mark rows of files not on SRA
-merged = merged.with_columns(
-	pl.when(pl.col('run_index').is_null())
-	.then(False).otherwise(True).alias("on_SRA")
-)
+try:
+	merged = upon_filename_and_alias.with_columns(
+		pl.when(pl.col('run_accession').is_null())
+		.then(False).otherwise(True).alias("on_SRA")
+	)
+except pl.exceptions.ColumnNotFoundError:
+	print("Could not find run_accession column -- usually this means none of your data is on SRA")
+	merged = upon_filename_and_alias.with_columns(on_SRA=False)
 
 # Also mark rows with "fail" in filename, which we may or may not want on SRA
 merged = merged.with_columns(
@@ -85,19 +90,40 @@ merged = merged.with_columns(
 )
 
 if verbose:
-	print("Merged dataframe")
+	print("Merged dataframe (metadata + edirect)")
 	Ranchero.dfprint(merged.sort("on_SRA"), cols=10, rows=20, width=190, str_len=100)
 
 probably_not_on_sra = Ranchero.hella_flat(merged.filter(pl.col("on_SRA") == False), force_index="filename")
 probably_not_on_sra = Ranchero.NeighLib.drop_null_columns(probably_not_on_sra, and_non_null_type_full_of_nulls=True)
 if probably_not_on_sra.height > 0:
-	print("Stuff probably not on SRA")
-	Ranchero.dfprint(probably_not_on_sra.sort("filename").drop(
-		[c for c in probably_not_on_sra.columns if c != 'filename']
-	), cols=10, rows=-1, width=190, str_len=100)
-	Ranchero.to_tsv(probably_not_on_sra, "probably_not_on_sra.tsv")
+	# Generate data table to put on SRA by merging back with input TSV
+	slap_that_on_sra = Ranchero.merge_dataframes(
+		left=probably_not_on_sra.select("filename"), right=metadata,
+		merge_upon="filename", force_index="filename", drop_exclusive_right=True).drop('collection')
+	assert slap_that_on_sra.height == probably_not_on_sra.height
+	Ranchero.to_tsv(slap_that_on_sra, "upload_candidates.tsv")
+	if verbose:
+		print("Samples that don't seem to be on SRA (wrote a to-upload table to upload_candidates.tsv):")
+		Ranchero.dfprint(probably_not_on_sra.sort("filename"), cols=10, rows=-1, width=190, str_len=100)
+	else:
+		print(f"{probably_not_on_sra.height} files need to be uploaded, wrote to upload_candidates.tsv")
+	
 else:
 	print("Everything seems to be on SRA!")
+
+probably_on_sra = Ranchero.hella_flat(merged.filter(pl.col("on_SRA") == True), force_index="filename")
+probably_on_sra = Ranchero.NeighLib.drop_null_columns(probably_on_sra, and_non_null_type_full_of_nulls=True)
+if probably_on_sra.height > 0:
+	Ranchero.to_tsv(probably_on_sra, "probably_on_sra.tsv")
+	if verbose:
+		print("Samples that DO seem to be on SRA (wrote to probably_on_sra.tsv):")
+		Ranchero.dfprint(probably_on_sra.sort("filename"), cols=10, rows=-1, width=190, str_len=100)
+	else:
+		print(f"{probably_on_sra.height} files are already on SRA, wrote to probably_on_sra.tsv")
+else:
+	print("None of the provided files are on SRA!")
+
+assert probably_on_sra.height + probably_not_on_sra.height == metadata.height
 
 if verbose:
 	if "production" in merged.columns:
