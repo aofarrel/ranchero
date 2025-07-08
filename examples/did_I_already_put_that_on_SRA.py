@@ -1,5 +1,5 @@
 # See if stuff in a metadata TSV file have already been upload to SRA by matching on filename.
-# Usage: did_I_already_put_that_on_SRA_simple.py <edirect_XML> <metadata_tsv> <verbose>
+# Usage: did_I_already_put_that_on_SRA.py <edirect_XML> <metadata_tsv> <verbose>
 #       <edirect_XML>: XML from Entrez Direct search of SRA, assuming -db sra
 #       <metadata_tsv>: a TSV of stuff you want on SRA that, at a minimum, includes a "filename" column
 #       <verbose>: Optional -v flag to print intermediate dataframes
@@ -55,14 +55,14 @@ if verbose:
 else:
 	print(f"{metadata.height} files in metadata dataframe")
 
-# To make merging easier, we're going to drop columns from the dataframes
-metadata_partial = metadata.select(["filename", "filetype", "sample_ID", "biosample_accession"])
-edirect_by_filename = edirect_by_filename.drop("alias")
+# To make merging easier, we're going to drop columns from edirect dataframe, since we care less about its contents
+edirect_by_filename = edirect_by_filename.select(["filename", "alias", "run_accession"])
 edirect_alternative_filenames_only = edirect_alternative_filenames_only.drop("filename")
+print(edirect_by_filename)
 
 # Merge with SRA table upon the "filename" column
 upon_filename = Ranchero.merge_dataframes(
-	left=metadata_partial, right=edirect_by_filename, 
+	left=metadata, right=edirect_by_filename, 
 	left_name="metadata_table", right_name="SRA_filename",
 	merge_upon="filename", force_index="filename", drop_exclusive_right=True)
 
@@ -74,6 +74,8 @@ upon_filename_and_alias = Ranchero.merge_dataframes(
 	merge_upon="filename", force_index="filename", drop_exclusive_right=True)
 
 # Mark rows of files not on SRA
+print(upon_filename)
+print(upon_filename_and_alias)
 try:
 	merged = upon_filename_and_alias.with_columns(
 		pl.when(pl.col('run_accession').is_null())

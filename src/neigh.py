@@ -1035,16 +1035,23 @@ class NeighLib:
 		else:
 			index_column = force_index
 
-		# unnest nested lists (recursive)
-		self.logging.debug("Null counts in flatten_all_list_cols() start")
-		self.logging.debug(polars_df.null_count())
+		null_counts_before = polars_df.filter(pl.col(col).null_count() > 0 for col in polars_df.columns)
+		if null_counts_before.shape[0] == 0:
+			self.logging.debug("Dataframe already seems to have no nulls")
+		else:
+			self.logging.debug("Dataframe has some nulls")
+			self.logging.debug(null_counts_before)
 
 		self.logging.debug("Recursively unnesting lists...")
 		polars_df = self.flatten_nested_list_cols(polars_df)
 		self.logging.debug("Unnested all list columns. Index seems okay.")
 
-		self.logging.debug("Null counts in after recursively unnesting lists")
-		self.logging.debug(polars_df.null_count())
+		null_counts_after = polars_df.filter(pl.col(col).null_count() > 0 for col in polars_df.columns)
+		if null_counts_after.shape[0] == 0:
+			self.logging.debug("After recursively unnesting lists, dataframe seems to have no nulls")
+		else:
+			self.logging.debug("After recursively unnesting lists, dataframe has some nulls")
+			self.logging.debug(null_counts_after)
 
 		what_was_done = []
 
@@ -1534,15 +1541,16 @@ class NeighLib:
 		self.polars_to_tsv(polars_df.select([pl.col(vcount_column).value_counts(sort=True)]).unnest(vcount_column), path, null_value='null')
 
 	def polars_to_tsv(self, polars_df, path: str, null_value=''):
-		self.logging.info("Writing to TSV. Lists and objects will converted to strings, and columns full of nulls will be dropped.")
 		df_to_write = self.drop_null_columns(polars_df)
 		columns_with_type_list_or_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if (dtype == pl.List or dtype == pl.Object)]
 		if len(columns_with_type_list_or_obj) > 0:
+			self.logging.warning("Went to write a TSV file but detected column(s) with type list or object. Due to polars limitations, the TSVs will attempt to encode these as strings.")
 			df_to_write = self.stringify_all_list_columns(df_to_write)
 		try:
 			if self.logging.getEffectiveLevel() == 10:
-				debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype2 != pl.String})
-				self.logging.debug(f"Non-string types, and what they converted to: {debug}")
+				debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype1 not in [pl.String, pl.Int32, pl.UInt32]})
+				if debug.height > 0:
+					self.logging.debug(f"Non-string types, and what they converted to: {debug}")
 			df_to_write.write_csv(path, separator='\t', include_header=True, null_value=null_value)
 			self.logging.info(f"Wrote dataframe to {path}")
 		except pl.exceptions.ComputeError:
