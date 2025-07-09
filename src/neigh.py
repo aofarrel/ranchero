@@ -125,45 +125,43 @@ class NeighLib:
 		"""
 		Does NOT check for duplicates in the index column(s)
 		"""
-		sample_indeces = kolumns.equivalence['sample_index']
-		sample_matches = [col for col in sample_indeces if col in polars_df.columns]
-		run_indeces = kolumns.equivalence['run_index']
-		run_matches = [col for col in run_indeces if col in polars_df.columns]
+		possible_sample_indeces = [col for col in kolumns.equivalence['sample_index'] if col in polars_df.columns]
+		possible_run_indeces = [col for col in kolumns.equivalence['run_index'] if col in polars_df.columns]
 
 		# more than one sample index, arbitrary number of run indeces
-		if len(sample_matches) > 1:
+		if len(possible_sample_indeces) > 1:
 			if not quiet:
-				raise ValueError(f"Tried to find dataframe index, but there's multiple possible sample indeces: {sample_matches}")
+				raise ValueError(f"Tried to find dataframe index, but there's multiple possible sample indeces: {possible_sample_indeces}")
 			else:
-				return [2, sample_matches]
+				return [2, possible_sample_indeces]
 	
 		# one sample index, arbitrary number of run indeces
-		elif len(sample_matches) == 1:
-			if len(run_matches) > 1:
+		elif len(possible_sample_indeces) == 1:
+			if len(possible_run_indeces) > 1:
 				if not quiet:
-					raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces (may indicate failed run->sample conversion):  {run_matches}")
+					raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces (may indicate failed run->sample conversion):  {possible_run_indeces}")
 				else:
-					return [3, run_matches]
+					return [3, possible_run_indeces]
 			
-			elif len(run_matches) == 1:
-				if polars_df.schema[run_matches[0]] == pl.List:
-					return str(sample_matches[0])
+			elif len(possible_run_indeces) == 1:
+				if polars_df.schema[possible_run_indeces[0]] == pl.List:
+					return str(possible_sample_indeces[0])
 				else:
-					return str(run_matches[0])
+					return str(possible_run_indeces[0])
 
 			else:
-				return str(sample_matches[0])  # no run indeces, just one sample index
+				return str(possible_sample_indeces[0])  # no run indeces, just one sample index
 
 		# no sample index, multiple run indeces
-		elif len(run_matches) > 1:
+		elif len(possible_run_indeces) > 1:
 			if not quiet:
-				raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces: {run_matches}")
+				raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces: {possible_run_indeces}")
 			else:
-				return [4, run_matches]
+				return [4, possible_run_indeces]
 		
 		# no sample index, one run index
-		elif len(run_matches) == 1:
-			return str(run_matches[0])
+		elif len(possible_run_indeces) == 1:
+			return str(possible_run_indeces[0])
 
 		else:
 			if not quiet:
@@ -1195,7 +1193,7 @@ class NeighLib:
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
 					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
-					print(invalid_rows)
+					print(invalid_rows.select(column))
 					return valid_rows
 			elif column in kolumns.equivalence['run_index'] and force_NCBI_runs and polars_df.schema[column] != pl.List:
 				good = (
@@ -1207,7 +1205,7 @@ class NeighLib:
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
 					self.logging.warning(f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR (will be dropped, leaving {len(valid_rows)} afterwards):")
-					print(invalid_rows)
+					print(invalid_rows.select(column))
 					return valid_rows
 			else:
 				continue
@@ -1351,6 +1349,9 @@ class NeighLib:
 
 	def tsv_value_counts(self, polars_df, vcount_column, path):
 		self.polars_to_tsv(polars_df.select([pl.col(vcount_column).value_counts(sort=True)]).unnest(vcount_column), path, null_value='null')
+
+	def multiply_and_trim(self, col: str) -> pl.Expr:
+		return (pl.col(col) * 100).round(3).cast(pl.Float64)
 
 	def polars_to_tsv(self, polars_df, path: str, null_value=''):
 		print("Writing to TSV. Lists and objects will converted to strings, and columns full of nulls will be dropped.")
