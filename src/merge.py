@@ -149,8 +149,10 @@ class Merger:
 		if indicator is _DEFAULT_TO_CONFIGURATION:
 			indicator = self.cfg.indicator_column
 
-		left = NeighLib.drop_null_columns(left)
-		right = NeighLib.drop_null_columns(right)
+		#if _cfg_dupe_index_handling == 'allow':
+		#	self.logging.warning("You have set the dataframe to allow duplicate indeces. This may cause unexpected behavior when merging dataframes.")
+		left = NeighLib.check_index(NeighLib.drop_null_columns(left), force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon)
+		right = NeighLib.check_index(NeighLib.drop_null_columns(right), force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon)
 
 		# Check for B.S.
 		for df, name in zip([left,right], [left_name,right_name]):
@@ -237,18 +239,34 @@ class Merger:
 		else:
 			self.logging.info(f"--> Shared columns: {', '.join(thing for thing in shared_columns)}")
 
+			# The problem with concat'ing list columns is that a .join() considers ["foo", "bar"] and ["bar", "foo"] to be different,
+			# which means that we can end up with duplicates in the index. So, we're going to check if left and right are
+			# identical for all columns except left_column. If yes, we will concat the lists.
+
+			shared_list_cols = list()
 			yargh = list(left.columns)
 			yargh.remove(merge_upon)
+			for left_column in yargh:
+				assert f"{merge_upon}_right" not in left.columns
+				if left_column in drop_zone.silly_columns: # no need to handle this if it's getting yote
+					left, right = left.drop(left_column), right.drop(left_column, strict=False)
+				elif left_column in right.columns:
+					if left.schema[left_column] == pl.List(pl.String):
+						shared_list_cols.append(left_column)
+					elif right.schema[left_column] == pl.List(pl.String):
+						shared_list_cols.append(left_column)
+
+			self.logging.debug(f"Shared columns where left or right (or both) have type list: {shared_list_cols}")
+			self.logging.debug("Keep an eye on them, they can be an issue later...")
 
 			for left_column in yargh:
 				assert f"{merge_upon}_right" not in left.columns
 				if left_column in right.columns:
 					merged_columns.append(f"\n\t* {left_column}")
 
-					if left_column in drop_zone.silly_columns:
-						left, right = left.drop(left_column), right.drop(left_column)
+					# already handled drop_zone earlier
 
-					elif left_column in kolumns.list_throw_error:
+					if left_column in kolumns.list_throw_error:
 						if left.schema[left_column] == pl.List or right.schema[left_column] == pl.List:
 							if bad_list_error:
 								self.logging.error(f'{left_column} is marked as "error if becomes a list when merging" but is already a list in {left_name} and/or {right_name}!')
@@ -264,8 +282,7 @@ class Merger:
 						if right.schema[left_column] == pl.List(pl.String):
 							self.logging.debug(f"* {left_column}: LIST | LIST")
 
-							# let merge_right_columns() handle it
-
+							# let merge_right_columns() handle it... or rename the shared column so they aren't shared anymore?
 
 						# This section looks like nonsense but it is ESSENTIAL given just how annoying concat_list() can get!!
 						# Previously we tried something like this:
@@ -288,6 +305,10 @@ class Merger:
 								left.select([merge_upon, left_column])
 								.join(right.select([merge_upon, left_column]), on=merge_upon, how="full", coalesce=True)
 							)
+							if drop_exclusive_right and left.shape[0] != small_merge.shape[0]:
+								self.logging.warning("drop_exclusive_right, but small_merge and left have different lengths")
+								self.logging.warning("this might indicate a merge failure and/or duplicated indeces, but will attempt to continue")
+
 							# Wherever left column (list) is null, cast the right column (str) to list and use that
 							# value for new column "{left_column}_nullfilled_with_right_col".
 							# Otherwise (ie when left column is not null), keep that value for the new column.
@@ -320,6 +341,7 @@ class Merger:
 							)
 							left, right = left.drop(left_column), right.drop([left_column]) # prevent merge right columns from running after full merge
 							left = left.join(small_merge, on=merge_upon, how="full", coalesce=True).rename({"merged" : left_column})
+							self.logging.debug(f"left rows after merge with small_merge: {left.shape[0]}")
 
 					else:
 						if right.schema[left_column] == pl.List(pl.String):
@@ -377,8 +399,11 @@ class Merger:
 			exclusive_left, exclusive_right = ~left_values.is_in(right_values), ~right_values.is_in(left_values)
 
 			initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
+			self.logging.debug(f"after initial join but before merge right columns, {initial_merge.shape[0]} rows")
 			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings, force_index=force_index)
-			really_merged_no_dupes = really_merged.unique()
+			really_merged_no_dupes = really_merged.unique() # this doesn't actually help with duplicate indeces
+			duplicated_indices = really_merged_no_dupes.filter(pl.col(merge_upon).is_duplicated())
+			assert duplicated_indices.shape[0] == 0 # TODO: unless we allow dupes in index i guess
 			self.logging.info(f"""Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe.
 			Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})
 			The columns that were merged were:{''.join(thing for thing in merged_columns)}""")
