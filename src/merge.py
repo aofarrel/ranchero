@@ -92,9 +92,10 @@ class Merger:
 
 		# we expect n_rows_merged = intersection_values + exclusive_left_values + exclusive_right_values
 		if n_rows_merged == n_rows_expected:
+			self.logging.debug("Did not find any unexpected rows")
 			return
 		else:
-			print("-------")
+			self.logging.debug("-------")
 			self.logging.debug(f"Expected {n_rows_expected} rows in merged dataframe but got {n_rows_merged}")
 			if right_name_in_this_column is not None:
 				self.logging.debug("%s n_rows_right (%s exclusive)" % (n_rows_right, len(exclusive_right_values)))
@@ -109,16 +110,16 @@ class Merger:
 					self.logging.debug("%s rows have right_name in indicator column" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name))))
 					self.logging.debug("%s has right_name and in intersection" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name), pl.col(merge_upon).is_in(intersection_values))))
 					self.logging.debug("%s has right_name and in exclusive left" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name), pl.col(merge_upon).is_in(exclusive_left_values))))
-					self.logging.debug("%s has right_name and in exclusive right" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name), pl.col(merge_upon).is_in(exclusive_right_values))))
+					#self.logging.debug("%s has right_name and in exclusive right" % len(merged_df.filter(pl.col(right_name_in_this_column).list.contains(right_name), pl.col(merge_upon).is_in(exclusive_right_values))))
 			duplicated_indices = merged_df.filter(pl.col(merge_upon).is_duplicated())
 			if len(duplicated_indices) > 0:
 				self.logging.error(f"Found {len((duplicated_indices).unique())} duplicated values in column {merge_upon}! This indicates a merge failure.")
-				print(duplicated_indices.unique().select(merge_upon))
+				self.logging.error(duplicated_indices.unique().select(merge_upon))
 				exit(1)
 			else:
 				self.logging.info(f"Right-hand dataframe appears to have added {n_rows_expected - n_rows_merged} new samples.")
 				self.logging.info(f"(Expected {n_rows_expected} rows, got {n_rows_merged}, found no duplicate values in {merge_upon})")
-			print("-------")
+			self.logging.debug("-------")
 
 	def merge_polars_dataframes(self, 
 		left: pl.dataframe.frame.DataFrame, 

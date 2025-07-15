@@ -38,7 +38,7 @@ species = {
 	'Bison bonasus': ['Bison bonasus', 3, "European bison"],
 	'Bobcat': ['Lynx rufus', 2, "bobcat"],
 	'Bos indicus': ['Bos indicus', 3, "zebu"],
-	'Bos gaurus': ['Bos gaurus', 3, "guar"],
+	'Bos gaurus': ['Bos gaurus', 3, "gaur"],
 	'Bos taurus': ['Bos taurus', 3, "domestic cattle"],
 	'bovine': ['Bos taurus', 2, "bovine"],
 	'Bubalus bubalis': ['Bubalus bubalis', 3, "water buffalo"],

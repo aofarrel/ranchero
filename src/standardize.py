@@ -557,7 +557,7 @@ class ProfessionalsHaveStandards():
 			if polars_df.schema['date_collected'] == pl.List:
 				if err_on_list:
 					self.logging.error("Tried to flatten date_collected, but there seems to be some rows with unique values.")
-					print(NeighLib.get_rows_where_list_col_more_than_one_value(polars_df, 'date_collected').select([NeighLib.get_index_column(polars_df), 'date_collected']))
+					self.logging.error(NeighLib.get_rows_where_list_col_more_than_one_value(polars_df, 'date_collected').select([NeighLib.get_index_column(polars_df), 'date_collected']))
 					exit(1)
 				else:
 					self.logging.warning("Tried to flatten date_collected, but there seems to be some rows with unique values. Will convert to string. This may be less accurate.")

@@ -296,8 +296,9 @@ class FileReader():
 			])
 		)
 
-		NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
-		NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
+		if self.logging.getEffectiveLevel() == 10:
+			NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
+			NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
 
 		return grouped_df_
 

@@ -57,11 +57,7 @@ class NeighLib:
 		return get_df
 
 	def get_most_common_non_null_and_its_counts(self, polars_df, col, and_its_counts=True):
-		counts = polars_df.select(
-			pl.col(col)
-			.filter(pl.col(col).is_not_null())
-			.value_counts(sort=True) # creates struct[2] column named col, sorted in descending order
-		)
+		counts = polars_df.select(pl.col(col).filter(pl.col(col).is_not_null()).value_counts(sort=True)) # creates struct[2] column named col, descending order sort
 		counts = counts.unnest(col) # splits col into col and "counts" columns
 		try:
 			return tuple(counts.row(0))
@@ -987,8 +983,8 @@ class NeighLib:
 								polars_df = polars_df.with_columns(pl.when((pl.col('lineage').list.len() > 1)).then(None).otherwise(pl.col("lineage")).alias('lineage'))
 							
 							long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
-							print(f"After delongating {col}...")
-							print(long_boi)
+							self.logging.debug(f"After delongating {col}...")
+							self.logging.debug(long_boi)
 							polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
 						else:
 							self.logging.debug(f"Taxoncore column {col} will not be adjusted further")
@@ -1175,6 +1171,8 @@ class NeighLib:
 				self.logging.warning(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- will attempt to remove them (THIS MAY LEAD TO DATA LOSS)")
 				self.logging.debug(f"Duplicates: {duplicates.select(index_column)}")
 				polars_df = subset # do not return yet
+				duplicates = polars_df.filter(polars_df[index_column].is_duplicated())
+				assert polars_df.filter(polars_df[index_column].is_duplicated()).shape[0] == 0
 			else:
 				self.logging.error(f"Dataframe has {len(polars_df) - len(subset)} duplicates in {run_or_sample} column named {index_column} -- not removing as per cfg perferences")
 				raise ValueError
@@ -1193,7 +1191,7 @@ class NeighLib:
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
 					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
-					print(invalid_rows.select(column))
+					self.logging.warning(invalid_rows.select(column))
 					return valid_rows
 			elif column in kolumns.equivalence['run_index'] and force_NCBI_runs and polars_df.schema[column] != pl.List:
 				good = (
@@ -1205,10 +1203,14 @@ class NeighLib:
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
 					self.logging.warning(f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR (will be dropped, leaving {len(valid_rows)} afterwards):")
-					print(invalid_rows.select(column))
+					self.logging.warning(invalid_rows.select(column))
 					return valid_rows
 			else:
 				continue
+		# double check no funny business
+		if rm_dupes:
+			duplicates = polars_df.filter(polars_df[index_column].is_duplicated())
+			assert polars_df.filter(polars_df[index_column].is_duplicated()).shape[0] == 0
 		return polars_df
 
 	def drop_non_tb_columns(self, polars_df):
@@ -1230,7 +1232,7 @@ class NeighLib:
 		"""There are other ways to do this, but this one doesn't break the schema, so we're sticking with it"""
 		nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
 
-		self.logging.debug(f"Nested lists: {nested_lists}")
+		self.logging.info(f"Unnesting these lists: {nested_lists}")
 
 		with pl.Config(tbl_cols=-1, tbl_rows=20, fmt_str_lengths=200, fmt_table_cell_list_len=10):
 			for col in nested_lists:
@@ -1244,8 +1246,8 @@ class NeighLib:
 				#polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten())) # leaves a bunch of hanging nulls
 				#polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
 
-				if col not in self.get_valid_id_columns(polars_df):
-					self.logging.debug(f"after flatten")
+				if col not in self.get_valid_id_columns(polars_df) and self.logging.getEffectiveLevel() == 10:
+					self.logging.debug(f"after flatten:")
 					self.print_only_where_col_list_is_big(polars_df, col)
 		
 		# this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
