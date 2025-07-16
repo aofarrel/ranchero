@@ -804,18 +804,21 @@ class NeighLib:
 				self.logging.debug(f"Not equal after filling in nulls (or nullfill errored so they're definitely not equal)")
 		
 			# everything past this point in this for loop only fires if the assertion error happened!
-			if base_col in kolumns.special_taxonomic_handling:
-				self.logging.warning(f"[kolumns.special_taxonomic_handling] {base_col} --> Falling back on {base_col if fallback_on_left else right_col}")
-				# previously we did this, which would just drop the incoming/existing column entirely when there was a conflict:
-				#polars_df = polars_df.drop(right_col) if fallback_on_left else polars_df.drop(base_col).rename({right_col: base_col})
-				# but now this is the same as kolumns.list_fallback_or_null
-				polars_df = self.postmerge_fallback_or_null(polars_df, base_col, right_col, fallback='left' if fallback_on_left else 'right')
-			
-			elif base_col in kolumns.list_throw_error:
+			if base_col in kolumns.list_throw_error:
 				self.logging.error(f"[kolumns.list_throw_error] {base_col} --> Fatal error. There should never be lists in this column.")
 				print_cols = [base_col, right_col, index_column, self.cfg.indicator_column] if self.cfg.indicator_column in polars_df.columns else [base_col, right_col, index_column]
 				self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(print_cols), f"conflicts")
 				exit(1)
+
+			elif base_col in kolumns.special_taxonomic_handling:
+				# same as kolumns.list_fallback_or_null, only different in logging output
+				if escalate_warnings:
+					self.logging.error(f"[kolumns.special_taxonomic_handling] {base_col} --> Fatal error due to escalate_warnings=True")
+					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select([base_col, right_col, index_column]), f"conflicts")
+					exit(1)
+				else:
+					self.logging.warning(f"[kolumns.special_taxonomic_handling] {base_col} --> Conflicts fall back on {'left' if fallback_on_left else 'right'}")
+					polars_df = self.postmerge_fallback_or_null(polars_df, base_col, right_col, fallback='left' if fallback_on_left else 'right')
 			
 			elif base_col in kolumns.list_fallback_or_null:
 				if escalate_warnings:
@@ -1340,7 +1343,7 @@ class NeighLib:
 				self.logging.error("Duplicates in index found!") # print above and below verbose dataframe
 				if dupe_index_handling == 'error':
 					raise ValueError(f"Found {n_dupe_indeces} duplicates in index column")
-				else:
+				else: # verbose_error
 					self.dfprint(duplicate_df)
 					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
 					raise ValueError(f"Found {n_dupe_indeces} duplicate indeces in index column (dumped to dupes_in_index.tsv)")
@@ -1374,7 +1377,7 @@ class NeighLib:
 					polars_df[column].str.starts_with("SAME") |
 					polars_df[column].str.starts_with("SAMD")
 				)
-				invalid_rows = polars_df.filter(~good)
+				invalid_rows = polars_df.filter(~good).drop([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_index'] + kolumns.equivalence['run_index'])])
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
 					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
@@ -1386,7 +1389,7 @@ class NeighLib:
 					polars_df[column].str.starts_with("ERR") |
 					polars_df[column].str.starts_with("DRR")
 				)
-				invalid_rows = polars_df.filter(~good)
+				invalid_rows = polars_df.filter(~good).drop([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_index'] + kolumns.equivalence['run_index'])])
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
 					self.logging.warning(f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR (will be dropped, leaving {len(valid_rows)} afterwards):")
@@ -1482,7 +1485,7 @@ class NeighLib:
 
 		LIMITATIONS: This may not work as expected on pl.List(pl.Null). You may also see oddities on some pl.Object types.
 		"""
-		self.logging.warning(f"Forcing ALL list columns into strings")
+		self.logging.debug(f"Forcing ALL list columns into strings")
 		for col, datatype in polars_df.schema.items():
 			if datatype == pl.List(pl.String):
 				polars_df = polars_df.with_columns(
