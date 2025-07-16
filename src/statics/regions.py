@@ -19,6 +19,8 @@ regions_to_countries = {
 	'Dundee Hospital': 'GBR',
 	"St Mary's Kwa-Magwaza Hospital": 'ZAF',
 	"St Margaret's TB Hospital": 'ZAF',
+	'Osindisweni Hospital - Occ Health, staff clinic': 'ZAF',
+
 
 	'North America; USA': 'USA',
 	'USA, North America': 'USA',
@@ -92,7 +94,7 @@ regions_to_smaller_regions = {
 	"PITTSBURGH": "Pittsburgh",
 	"Port Elizabeth_": "Port Elizabeth",
 	"POUGHKEEPSIE": "Poughkeepsie", # okay this is probably new york
-	"RANGATAIKI": "Rangataiki",
+	"RANGATAIKI": "Rangitaiki", # seems to have two spellings, using the "official" one here
 	"RANGITAIKI": "Rangitaiki",
 	"SAN JUAN CAPISTRANO": "San Juan Capistrano",
 	"SanJuan Capistrano": "San Juan Capistrano",

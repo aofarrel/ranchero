@@ -123,12 +123,13 @@ if_this_and_that_then = [
 	
 	# everything else
 	['(?i)scrapate', '(?i)granuloma', 'scrapate of granuloma'],
-	['(?i)biopsy', '(?i)skin', 'biopsy from skin'],
-	['(?i)biopsy', '(?i)intestine', 'biopsy from intestine'],
-	['(?i)biopsy', '(?i)thoracic', 'biopsy from thorax'],
-	['(?i)biopsy', '(?i)pleura', 'biopsy from pleura/pleural effusion'],
-	['(?i)necropsy', '(?i)lung', 'necropsy from lung tissue'],
-	['(?i)necropsy', '(?i)spleen', 'necropsy from spleen'],
+	['(?i)biopsy', '(?i)skin', 'biopsy (skin)'],
+	['(?i)biopsy', '(?i)intestine', 'biopsy (intestine)'],
+	['(?i)biopsy', '(?i)thoracic', 'biopsy (thoracic)'],
+	['(?i)biopsy', '(?i)pleura', 'biopsy (pleura/pleural effusion)'],
+	['(?i)necropsy', '(?i)lung', 'necropsy (lung tissue)'],
+	['(?i)necropsy', '(?i)spleen', 'necropsy (spleen)'],
+	['(?i)necropsy', '(?i)kidney', 'necropsy (kidney)'],
 	['(?i)cow', '(?i)feces', 'feces (bovine)'],
 	['(?i)FFPE', '(?i)skin', 'FFPE block (skin)'],
 
@@ -151,6 +152,7 @@ sample_source = {
 	# BAL and friends -- BAL is too generic on its own
 	'BRL': 'bronchoalveolar lavage',
 	'BALF': 'bronchoalveolar lavage',
+	'BAL RUL': 'bronchoalveolar lavage',
 	'BAL_RUL': 'bronchoalveolar lavage',
 	'\bbronch.*lavage': 'bronchoalveolar lavage',
 	'bronchialLavage': 'bronchoalveolar lavage',
@@ -160,6 +162,7 @@ sample_source = {
 	'bronchial aspirate': 'bronchoalveolar aspirate',
 	'bronchial wash': 'bronchial wash',
 	# CSF
+	'Cerebospinal fluid': 'cerebrospinal fluid',
 	'cerebrospinal fluid': 'cerebrospinal fluid',
 	'cerebrospinalFluid': 'cerebrospinal fluid',
 	'cerebral spinal fluid': 'cerebrospinal fluid',
@@ -184,10 +187,11 @@ sample_source = {
 	'thoracentesis': 'pleural fluid',
 	'pleural effusion': 'pleural fluid (effusion)',
 	'Pleural': 'pleural fluid',
-	
-	# other
+	# synovial (joint juice)
+	'synov fl': 'synovial fluid',
+	'synovial': 'synovial fluid',
+	# blood
 	'blood': 'blood',
-	'synovial': 'synovial fluid', # joint fluid
 
 	# organs
 	'bone': 'bone',
@@ -208,15 +212,16 @@ sample_source = {
 	# lab stuff
 	'Laboratory experiment': 'laboratory, experimental evolution',
 	'laboratory evolution': 'laboratory, experimental evolution',
-	'Laboratory obtained strain': 'laboratory-obtained strain',
-	'laboratory reference strain': 'laboratory reference strain',
-	'Lab strain': 'laboratory-obtained strain',
-	'lab strain': 'laboratory-obtained strain',
+	'laboratory reference strain': 'laboratory strain ("reference", may or may not be H37Rv)',
+	'Laboratory obtained strain': 'laboratory strain (unspecified)',
+	'Lab strain': 'laboratory strain (unspecified)',
+	'laboratory strain': 'laboratory strain (unspecified)',
 
 	# dead
 	'Morgue': 'necropsy (morgue)',
 	'Abbattoir': 'necropsy (abbattoir)',
 	'slaughterhouse': 'necropsy (abbattoir)',
+	'necropsy': 'necropsy',
 
 	# owies
 	'abscess': 'abscess',
@@ -247,6 +252,9 @@ sample_source = {
 	'animal waste': 'feces (unspecified animal)',
 	'chicken dung': 'feces (chicken)',
 
+	# i dont even want to know
+	'excreted bodily substance': 'excreted bodily substance (unspecified)',
+
 	# lungscore?
 	'PULMONARY': 'pulmonary',
 
@@ -269,6 +277,7 @@ sample_source = {
 	'diagnostic sample': 'diagnostic sample',
 	'culture': 'culture',
 	'Environmental': 'environmental',
+	'Biopsy': 'biopsy'
 	
 }
 
