@@ -151,17 +151,21 @@ sample_source = {
 	# BAL and friends -- BAL is too generic on its own
 	'BRL': 'bronchoalveolar lavage',
 	'BALF': 'bronchoalveolar lavage',
+	'BAL_RUL': 'bronchoalveolar lavage',
 	'\bbronch.*lavage': 'bronchoalveolar lavage',
 	'bronchialLavage': 'bronchoalveolar lavage',
+	'broncho-alveolar lavage': 'bronchoalveolar lavage',
+	'Bronchio Alveolar Lavage': 'bronchoalveolar lavage',
+	'bronchoalveolar lavage': 'bronchoalveolar lavage', # prevent "as reported" showing up
 	'bronchial aspirate': 'bronchoalveolar aspirate',
 	'bronchial wash': 'bronchial wash',
 	# CSF
 	'cerebrospinal fluid': 'cerebrospinal fluid',
 	'cerebrospinalFluid': 'cerebrospinal fluid',
 	'cerebral spinal fluid': 'cerebrospinal fluid',
-	'CSF': 'cerebrospinal fluid',
 	# gastric
 	'Gastric lavage': 'gastric lavage',
+	'aspirate gastric': 'gastric aspirate',
 	'Gastric Aspirate': 'gastric aspirate',
 	'stomach contents': 'gastric (stomach contents)',
 	'gastric juice': 'gastric fluid',
@@ -178,6 +182,9 @@ sample_source = {
 	'pleural fluid': 'pleural fluid',
 	'pleuralFluid': 'pleural fluid',
 	'thoracentesis': 'pleural fluid',
+	'pleural effusion': 'pleural fluid (effusion)',
+	'Pleural': 'pleural fluid',
+	
 	# other
 	'blood': 'blood',
 	'synovial': 'synovial fluid', # joint fluid
@@ -237,24 +244,32 @@ sample_source = {
 	'fecal': 'feces',
 	'stool': 'feces',
 	'feces': 'feces',
-	'animal waste': 'feces',
+	'animal waste': 'feces (unspecified animal)',
+	'chicken dung': 'feces (chicken)',
 
 	# lungscore?
 	'PULMONARY': 'pulmonary',
 
 	# do these last to avoid overwrites
-	'culture': 'culture (unspecified)',
+	'phlegm': 'phlegm',
+	'CSF': 'cerebrospinal fluid',
+	
 	'in vitro': 'culture (unspecified)',
 	'in-vitro': 'culture (unspecified)',
 	'clinical strain': 'clinical strain',
 	'clinical isolate': 'clinical (unspecified)',
 	'clinical sample': 'clinical (unspecified)',
-	'Environmental': 'environmental (unspecified)',
 	'clinical': 'clinical (unspecified)',
 	'lawn on agar plate': 'culture (lawn/sweep)',
 	'hospital': 'clinical (unspecified)',
 	'Negative Control': 'negative control',
 	'bacterial suspension': 'culture (unspecified)',
+
+	# REALLY generic, don't even say "unspecified" here
+	'diagnostic sample': 'diagnostic sample',
+	'culture': 'culture',
+	'Environmental': 'environmental',
+	
 }
 
 # unlike the above, 

@@ -110,6 +110,7 @@ regions_to_smaller_regions = {
 	"UTICA": "Utica", # not necessarily new york
 	"Veracurz": "Veracruz", # 99% sure this is a typo
 	"WAIRAUVALLEY": "Wairau Valley",
+	"WANGAPEKAVALLEY": "Wangapeka Valley",
 	"WESTLAND": "Westland",
 	"Zoo-": "Zoo",
 
