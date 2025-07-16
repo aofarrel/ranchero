@@ -122,7 +122,7 @@ class RancheroConfig:
 		# - silent: pl.DataFrame.unique(subset=[index_column], keep='any') + print to logging.debug
 		# - allow: Allow duplicate values. NOT RECOMMENDED; THIS WILL BREAK MERGING DATAFRAMES! Will print a warning!
 		# - dropall: pl.DataFrame.unique(subset=[index_column], keep='none') + warn
-		self.dupe_index_handling = 'verbose_warn'
+		self.dupe_index_handling = 'warn'
 
 		# Try to remove phages when standardizing taxonomic information
 		self.rm_phages = True
