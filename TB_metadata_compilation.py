@@ -1,6 +1,6 @@
-rc = "rc18"
+rc = "rc19"
 
-
+import polars as pl
 
 import time
 start = time.time()
@@ -27,37 +27,38 @@ def check_stuff(polars_df, name=None):
 
 	if 'collection' in polars_df.columns:
 		assert polars_df.schema['collection'] is not Ranchero.pl.List(Ranchero.pl.List(Ranchero.pl.Utf8))
-		Ranchero.NeighLib.print_only_where_col_not_null(polars_df, 'collection')
-		Ranchero.NeighLib.print_value_counts(polars_df, ['collection'])
-		assert Ranchero.NeighLib.get_null_count_in_column(polars_df, 'collection') != 0
+		#assert Ranchero.NeighLib.get_null_count_in_column(polars_df, 'collection') != 0
 	else:
 		print("collection not in polars_df")
 
 	if 'isolation_source' in polars_df.columns:
 		assert polars_df.schema['isolation_source'] is not Ranchero.pl.Utf8
 		print(f"isolation_source has type {polars_df.schema['isolation_source']}")
-		Ranchero.NeighLib.print_only_where_col_not_null(polars_df, 'isolation_source')
+		Ranchero.NeighLib.print_value_counts(polars_df, ['isolation_source'])
 	else:
 		print("isolation_source not in polars_df")
 
 	if 'primary_search' in polars_df.columns:
 		assert polars_df.schema['primary_search'] is not Ranchero.pl.Utf8
 		print(f"primary_search has type {polars_df.schema['primary_search']}")
-		Ranchero.NeighLib.print_only_where_col_not_null(polars_df, 'primary_search')
 	else:
 		print("primary_search not in polars_df")
 
-	if 'date_collected' in polars_df.columns:
-		Ranchero.NeighLib.print_a_where_b_equals_these(polars_df, 'pheno_ETHAMBUTOL', 'sample_index', ['SAMEA2534071', 'SAMEA104600139', 'SAMEA2535090'], alsoprint=['pheno_ETHAMBUTOL', 'pheno_source'])
+	Ranchero.NeighLib.print_a_where_b_equals_these(polars_df, 'pheno_ETHAMBUTOL', 'sample_index', ['SAMEA2534071', 'SAMEA104600139', 'SAMEA2535090'], alsoprint=['pheno_ETHAMBUTOL', 'pheno_source'])
 
 	# location
 	assert 'geoloc_info' not in polars_df.columns
 	assert 'geoloc_name' not in polars_df.columns
 	#Ranchero.NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_index', list_to_match=['ERR046972', 'ERR2884698', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
-	if len(Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'country', 'continent')) > 0:
+	if Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'country', 'continent').shape[0] > 0:
 		print("Found countries without continents")
 		Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'country', 'continent')
 		exit(1)
+	# this isn't a good check, because some samples genuinely are ambiguous
+	#if Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'region', 'country').shape[0] > 0:
+	#	print("Found regions without countries")
+	#	Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'region', 'country')
+	#	exit(1)
 	if 'country' in polars_df.columns:
 		if Ranchero._NeighLib.get_count_of_x_in_column_y(polars_df, 'Ivory Coast', 'country') > 0:
 			print("Found non-ISO Ivory Coast in country column")
@@ -68,17 +69,20 @@ def check_stuff(polars_df, name=None):
 		print(f"{null_continent} nulls in continent")
 		print(f"{null_country} nulls in country")
 		print(f"{null_region} nulls in region")
+		Ranchero.NeighLib.print_value_counts(polars_df, ['continent'])
+		Ranchero.NeighLib.print_value_counts(polars_df, ['country'])
 	
 	# host
 	if 'host_commonname' in polars_df.columns:
-		if len(Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'host_commonname', 'host_confidence')) > 0:
+		if Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'host_commonname', 'host_confidence').shape[0] > 0:
 			print("Found host common names with no host confidence")
 			Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'host_commonname', 'host_confidence')
 			exit(1)
-		if len(Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'host_scienname', 'host_confidence')) > 0:
+		if Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'host_scienname', 'host_confidence').shape[0] > 0:
 			print("Found host scientific names with no host confidence")
 			Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'host_scienname', 'host_confidence')
 			exit(1)
+		print(f"Found {polars_df.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts")
 	
 	# taxoncore
 	if 'clade' in polars_df.columns:
@@ -113,7 +117,6 @@ def check_stuff(polars_df, name=None):
 		null_strain = Ranchero.NeighLib.get_count_of_x_in_column_y(polars_df, None, 'strain')
 		print(f"{null_strain} nulls in strain")
 	
-	
 	# date
 	if 'date_sequenced' in polars_df.columns:
 		null_dateseq = Ranchero.NeighLib.get_count_of_x_in_column_y(polars_df, None, 'date_sequenced')
@@ -134,14 +137,13 @@ def check_stuff(polars_df, name=None):
 def inital_file_parse():
 	#we don't immediately rancheroize as this is faster (probably)
 	start, tba6 = time.time(),Ranchero.from_bigquery("./inputs/BQ/tba6_no_tax_table_bq_2024-09-19.json_modified.json")
-	print(f"Parsed tba6 file from bigquery in {time.time() - start:.4f} seconds")  # should be under five minutes for tba5, less for tba6
+	print(f"Parsed tba6 file from bigquery in {time.time() - start:.4f} seconds")
 	start, tba6 = time.time(), Ranchero.drop_non_tb_columns(tba6)
-	#tba6 = tba6.drop(['center_name', 'insdc_center_name_sam']) # these are a pain in the neck to standardize and not necessary for the tree
-	tba6 = tba6.drop(['insdc_center_name_sam']) # fine, we'll leave one of them in... but we're not standardizing it, no sir!
+	tba6 = tba6.drop(['insdc_center_name_sam']) # this and 'center_name' are a nightmare to standardize so we'll just leave one of them as-is
 	print(f"Dropped non-TB-related columns in {time.time() - start:.4f} seconds")
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, f"tba6_no_nonsense_{rc}.tsv")
+	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_BigQuery_raw_{rc}_p1.tsv") # previously "tba6 no nonsense"
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
 
 	# initial rancheroize
@@ -163,11 +165,11 @@ def inital_file_parse():
 	Ranchero.NeighLib.report(tba6)
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, f"tba6_standardized_{rc}.tsv")
+	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_BigQuery_standardized_{rc}_p2.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
 	check_stuff(tba6, "tba6 in memory")
 	print("Reading disk:")
-	what_we_just_wrote = Ranchero.from_tsv(f"tba6_standardized_{rc}.tsv", auto_standardize=False)
+	what_we_just_wrote = Ranchero.from_tsv(f"Mycobacterium_genus_BigQuery_standardized_{rc}_p2.tsv", auto_standardize=False)
 	check_stuff(what_we_just_wrote, "tba6 on disk")
 	what_we_just_wrote = None
 	gc.collect()
@@ -175,10 +177,7 @@ def inital_file_parse():
 
 def inject_metadata(tba6):
 	check_stuff(tba6)
-	# DEBUG DEBUG DEBUG
-	#tba6 = Ranchero.add_column_with_this_value(tba6, "collection", "") # THIS MIGHT BE THE CAUSE FOR THE SLOWDOWN
-	tba6 = Ranchero.add_column_with_this_value(tba6, "collection", None) # POSSIBLE WORKAROUND
-	# FOR NOW WE ARE BLOCKING THE BIOPROJECT INJECTOR
+	tba6 = Ranchero.add_column_with_this_value(tba6, "collection", None)
 
 	bioproject_injector = Ranchero.injector_from_tsv("./inputs/overrides/injector_with_shorthands.tsv")
 	bovis_time = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB18668 - good.tsv")
@@ -188,6 +187,10 @@ def inject_metadata(tba6):
 	PRJNA575883p2 = Ranchero.injector_from_tsv("./inputs/overrides/PRJNA575883p2.tsv")
 	imrl = Ranchero.injector_from_tsv("./inputs/overrides/IMRL/IMRL.csv")
 	fran_SRA_dates = Ranchero.injector_from_tsv("./inputs/overrides/fran_ERR_date_only.tsv")
+	PRJEB7056 = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB7056.tsv")
+
+	# PRJNA235618 is goofy because its samples are definitely in the dataset but its accession doesn't show up in the BQ metadata at all
+	PRJNA235618 = Ranchero.injector_from_tsv("./inputs/overrides/PRJNA235618.tsv")
 
 	# I've already verified that injecting per-biosample vs per-bioproject doesn't make a difference in output, at least
 	# when it comes to BioProject PRJEB2138 getting set to Russia 
@@ -202,6 +205,8 @@ def inject_metadata(tba6):
 	tba6 = Ranchero.inject_metadata(tba6, PRJNA575883p2, overwrite=True)
 	tba6 = Ranchero.inject_metadata(tba6, imrl, overwrite=True)
 	tba6 = Ranchero.inject_metadata(tba6, fran_SRA_dates, overwrite=True)
+	tba6 = Ranchero.inject_metadata(tba6, PRJEB7056, overwrite=True)
+	tba6 = Ranchero.inject_metadata(tba6, PRJNA235618, overwrite=True)
 
 	print(f"{_b_}Injected metadata in {time.time() - start:.4f} seconds{_bb_}")
 	null = Ranchero._NeighLib.get_count_of_x_in_column_y(tba6, None, 'country')
@@ -211,7 +216,7 @@ def inject_metadata(tba6):
 	check_stuff(tba6, "tba6 after injectors in memory")
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, f"tba6_injected_{rc}.tsv")
+	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_injections_{rc}_p3.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
 	return tba6
 
@@ -328,7 +333,7 @@ def run_merges(tba6):
 	check_stuff(merged)
 
 	start = time.time()
-	Ranchero.to_tsv(merged, f"./merged_by_run_{rc}.tsv")
+	Ranchero.to_tsv(merged, f"./Mycobacterium_genus_run-based_metadata_{rc}_p4.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
 	return merged
 
@@ -342,12 +347,10 @@ def sample_index_merges(merged_runs):
 	start = time.time()
 	merged_flat = Ranchero.hella_flat(merged)
 	merged_by_sample = Ranchero.run_index_to_sample_index(merged_flat)
-	#Ranchero.to_tsv(merged_by_sample, f"./merged_per_sample_not_flat_{rc}.tsv")
 	merged_by_sample = Ranchero.hella_flat(merged_by_sample)
 	print(f"{_b_}Converted run indeces to sample indeces in {time.time() - start:.4f} seconds{_bb_}")
-	Ranchero.to_tsv(merged_by_sample, f"./merged_per_sample_{rc}.tsv")
+	Ranchero.to_tsv(merged_by_sample, f"./Mycobacterium_genus_swapped_index_{rc}_p5.tsv")
 	
-	#Ranchero.NeighLib.print_value_counts(merged_by_sample, ['clade', 'organism', 'lineage', 'strain'])
 	Ranchero.NeighLib.print_value_counts(merged_by_sample, ['clade', 'organism', 'lineage'])
 	check_stuff(merged_by_sample)
 
@@ -408,8 +411,9 @@ def sample_index_merges(merged_runs):
 	print(f"{_b_}Processing Standford{_bb_}")
 	standford_1 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.from_tsv("./inputs/standford/max_standford_YYYY-MM.tsv")))
 	standford_2 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.from_tsv("./inputs/standford/max_standford_YYYY-MM-DD.tsv")))
-	standford_3 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.from_tsv("./inputs/standford/max_standford_DD-MM-YYYY.tsv"))) # this one should NOT overwrite left
+	standford_3 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.from_tsv("./inputs/standford/max_standford_MM-DD-YYYY.tsv"), in_format="MM/DD/YYYY")) # this one should NOT overwrite left
 	standford_4 = Ranchero.standardize_everything(Ranchero.from_tsv("./inputs/standford/max_standford_slashdates.tsv")) # ditto
+	standford_5 = Ranchero.standardize_countries(Ranchero.cleanup_dates(Ranchero.from_tsv("./inputs/standford/max_standford_DD.MM.YYYY.tsv"), in_format="DD.MM.YYYY")) # this one should NOT overwrite left
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_1, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=False, escalate_warnings=False)
 	print(f"Merged with standford1 in {time.time() - start:.4f} seconds")
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_2, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=False, escalate_warnings=False)
@@ -418,6 +422,8 @@ def sample_index_merges(merged_runs):
 	print(f"Merged with standford3 in {time.time() - start:.4f} seconds")
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_4, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=True, escalate_warnings=False)
 	print(f"Merged with standford4 in {time.time() - start:.4f} seconds")
+	start, merged = time.time(), Ranchero.merge_dataframes(merged, standford_5, merge_upon="sample_index", right_name="standford", indicator="collection", fallback_on_left=True, escalate_warnings=False)
+	print(f"Merged with standford5 in {time.time() - start:.4f} seconds")
 	start, merged = time.time(), Ranchero.cleanup_dates(merged)
 	print(f"Cleaned up dates so far in {time.time() - start:.4f} seconds")
 
@@ -462,20 +468,25 @@ def sample_index_merges(merged_runs):
 	print(f"{_b_}Processing inputs, outputs, denylist, and what's on the tree{_bb_}")
 	inputs = Ranchero.from_tsv("./inputs/pipeline/probable_inputs.txt", auto_rancheroize=False)
 	merged = Ranchero.merge_dataframes(merged, inputs, merge_upon="sample_index", right_name="input", indicator="collection", drop_exclusive_right=False)
-	
+	print(f"Merged with inputs list in {time.time() - start:.4f} seconds")
+
 	diffs = Ranchero.from_tsv("./inputs/pipeline/probable_diffs.txt", auto_rancheroize=False)
 	merged = Ranchero.merge_dataframes(merged, diffs, merge_upon="sample_index", right_name="diff", indicator="collection", drop_exclusive_right=False)
-	
-	tree = Ranchero.from_tsv("./inputs/pipeline/samples on tree 2024-12-12.txt", auto_rancheroize=False)
-	merged = Ranchero.merge_dataframes(merged, tree, merge_upon="sample_index", right_name="tree", indicator="collection", drop_exclusive_right=False)
-	Ranchero.NeighLib.print_value_counts(merged, ['collection'])
+	print(f"Merged with diffs list in {time.time() - start:.4f} seconds")
 
-	tbprofiler = Ranchero.from_tsv("./inputs/TBProfiler/tbprofiler_basically_everything_rancheroized.tsv")
-	tbprofiler = tbprofiler.drop(['tbprof_main_lin', 'tbprof_family', 'superbatch'])
+	tree = Ranchero.from_tsv("./ranchero_output_archive/2025-07-08-FINAL_ranchero_rc17.subset.annotated.tsv", auto_rancheroize=False, list_columns=['run_index'])
+	for column in tree.columns:
+		if column in merged and column not in ['sample_index']:
+			tree = tree.drop(column)
+	merged = Ranchero.merge_dataframes(merged, tree, merge_upon="sample_index", right_name="tree", indicator="collection", drop_exclusive_right=False)
+	print(f"Merged with pipeline information in {time.time() - start:.4f} seconds")
+
+	tbprofiler = Ranchero.from_tsv("./inputs/tbprofiler/tbprofiler_basically_everything_rancheroized_lesscolumns_FIXMISSINGDATA.tsv")
+	tbprofiler = tbprofiler.drop(['tbprof_family', 'superbatch'], strict=False)
 	merged = Ranchero.merge_dataframes(merged, tbprofiler, merge_upon="sample_index", right_name="tbprofiler", indicator="collection", drop_exclusive_right=False)
 	
 	denylist = Ranchero.from_tsv("./inputs/pipeline/denylist_2024-07-23_lessdupes.tsv", auto_rancheroize=False)
-	merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="sample_index", right_name="denylist", indicator="collection", drop_exclusive_right=False)
+	merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="sample_index", right_name="denylist", indicator="collection", drop_exclusive_right=True)
 	
 	print(f"Merged with pipeline information in {time.time() - start:.4f} seconds")
 	#Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
@@ -523,59 +534,133 @@ else:
 			merged_samps = sample_index_merges(merged_runs)
 
 # fix a BioProject-level injection
+print(f"Found {merged_samps.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts at start of main")
 merged_samps = Ranchero.inject_metadata(merged_samps, Ranchero.injector_from_tsv("./inputs/overrides/caprae_injector.tsv"), overwrite=True)
+print(f"Found {merged_samps.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts after bioproject injection")
 
+# final nonsense
+merged_samps = merged_samps.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'mbytes_sum_sum', 'geoloc_name'], strict=False)
+merged_samps = merged_samps.drop(['tbprof_rd', 'tbprof_spoligotype', 'tbprof_frac'], strict=False) # seem to be from the main lineage only, not the sublineage
+#Ranchero.NeighLib.wide_print_polars(merged_samps.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{4}")), "merged has date slashes in 2 2 4 format", ['sample_index', 'date_collected'])
 
-#Ranchero.NeighLib.print_value_counts(merged_samps, ['clade', 'organism', 'lineage', 'strain'])
-Ranchero.NeighLib.print_value_counts(merged_samps, ['clade', 'organism', 'lineage'])
-
-
-merged = merged_samps
-
-merged = merged.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'mbytes_sum_sum', 'geoloc_name'], strict=False)
-merged = merged.drop(['tbprof_rd', 'tbprof_spoligotype', 'tbprof_frac'], strict=False) # seem to be from the main lineage only, not the sublineage
-
-Ranchero.to_tsv(merged, f"./ranchero_{rc}_full_columns.tsv")
-merged = merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info'], strict=False) # for less_columns version
-
-
-merged = Ranchero.hella_flat(merged)
-Ranchero.print_schema(merged)
-
+print("---------------------- Whole-genus value counts ----------------------")
+merged = Ranchero.hella_flat(merged_samps)
 check_stuff(merged)
+print(f"Found {merged.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts in genus")
 
-print("CONTINENTS TO FIX~!!!!!!")
-Ranchero.NeighLib.print_a_where_b_is_null(merged, 'country', 'continent')
-
-Ranchero.NeighLib.print_value_counts(merged, ['sra_study'])
-Ranchero.NeighLib.print_value_counts(merged, ['libraryselection'])
 Ranchero.NeighLib.print_value_counts(merged, ['sample_source'])
 Ranchero.NeighLib.print_value_counts(merged, ['host_scienname', 'host_confidence', 'host_streetname'])
 Ranchero.NeighLib.print_value_counts(merged, ['date_collected'])
-#Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
-Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage'])
+Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
 Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
 
-Ranchero.NeighLib.report(merged)
-Ranchero.to_tsv(merged, f"./ranchero_{rc}_less_columns.tsv")
+Ranchero.to_tsv(merged, f"./Mycobacterium_genus_metadata_ranchero_{rc}-verbose.tsv")
+merged = merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info', 'collection'], strict=False)
+Ranchero.to_tsv(merged, f"./Mycobacterium_genus_metadata_ranchero_{rc}.tsv")
 
+print("---------------------- Tree-only value counts ----------------------")
+tree_only_merged = Ranchero.hella_flat(merged_samps.filter(pl.col('collection').list.contains('tree')))
+check_stuff(tree_only_merged)
+print(f"Found {merged_samps.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts on the tree")
 
-#Ranchero.NeighLib.big_print_polars(merged, "merged hosts and dates", ['sample_index', 'date_collected', 'host_scienname', 'lineage'])
-#Ranchero.NeighLib.big_print_polars(merged.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{2}")), "merged has date slashes in 2 2 2 format", ['sample_index', 'date_collected'])
-#Ranchero.NeighLib.big_print_polars(merged.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{4}")), "merged has date slashes in 2 2 4 format", ['sample_index', 'date_collected'])
+Ranchero.NeighLib.print_value_counts(tree_only_merged, ['sample_source'])
+Ranchero.NeighLib.print_value_counts(tree_only_merged, ['host_scienname', 'host_confidence', 'host_streetname'])
+Ranchero.NeighLib.print_value_counts(tree_only_merged, ['date_collected'])
+Ranchero.NeighLib.print_value_counts(tree_only_merged, ['clade', 'organism', 'lineage', 'strain'])
+Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
 
+Ranchero.to_tsv(merged, f"./2025-07-08_tree_metadata_ranchero_{rc}.tsv")
 
-exit(1)
+print(f"{_b_}Host information{_bb_}")
+has_host = tree_only_merged.select(pl.col('host_commonname').filter(pl.col('host_commonname').is_not_null()))
+human = has_host.filter(pl.col('host_commonname') == pl.lit('human'))
+cowish = has_host.filter([
+	pl.col('host_commonname').str.contains_any(['domestic cattle', 'bovine', 'gaur', 'buffalo', 'bison'])
+])
+badger = has_host.filter([
+	pl.col('host_commonname').str.contains(pl.lit('badger'))
+])
+deer = has_host.filter([
+	pl.col('host_commonname').str.contains_any(['deer', 'elk', 'moose'])
+])
+pig = has_host.filter([
+	pl.col('host_commonname').str.contains_any(['pig', 'boar'])
+])
+with pl.Config(tbl_cols=-1, tbl_rows=100):
+	print(has_host.select(pl.col('host_commonname').value_counts(sort=True)))
+	print(cowish.select(pl.col('host_commonname').value_counts(sort=True)))
+	print(deer.select(pl.col('host_commonname').value_counts(sort=True)))
+	print(pig.select(pl.col('host_commonname').value_counts(sort=True)))
+print(f"{has_host.shape[0]} ({has_host.shape[0] / tree_only_merged.shape[0] * 100 :.2f}%) of samples on the tree have any host annotation at all")
+print(f"->{human.shape[0]} ({human.shape[0] / has_host.shape[0] * 100 :.2f}%) are explictly human")
+print(f"->{cowish.shape[0]} ({cowish.shape[0] / has_host.shape[0] * 100 :.2f}%) are explictly cattle")
+print(f"->{badger.shape[0]} ({badger.shape[0] / has_host.shape[0] * 100 :.2f}%) are explictly badger")
+print(f"->{deer.shape[0]} ({deer.shape[0] / has_host.shape[0] * 100 :.2f}%) are explictly deer")
+print(f"->{pig.shape[0]} ({pig.shape[0] / has_host.shape[0] * 100 :.2f}%) are explictly pig")
 
-tree_metadata_v8_rc10 = Ranchero.from_tsv("./inputs/tree_metadata_v8_rc10.tsv")
-tree_metadata_v8_rc10 = Ranchero.rancheroize(tree_metadata_v8_rc10)
-tree_metadata_v8_rc10.drop(['BioProject', 'isolation_source', 'host']) # we are parsing these directly from SRA now
-print(f"Finished reading a bunch more metadata in  {time.time() - start:.4f} seconds")
-start = time.time()
-merged = Ranchero.merge_dataframes(merged, tree_metadata_v8_rc10, merge_upon="sample_index", right_name="tree_metadata_v8_rc10", indicator="collection", fallback_on_left=False)
-print(f"Merged with old tree metadata file in {time.time() - start:.4f} seconds")
-Ranchero.NeighLib.big_print_polars(tree_metadata_v8_rc10, "v8rc10 hosts and dates", ['sample_index', 'date_collected', 'host'])
+print(f"{_b_}date collected{_bb_}")
+has_date_collected = tree_only_merged.select(pl.col('date_collected').filter(pl.col('date_collected').is_not_null()))
+print(f"There's {has_date_collected.shape[0]} ({has_date_collected.shape[0] / tree_only_merged.shape[0] * 100 :.2f}%) samples on the final tree with a date_collected value.")
+
+print(f"{_b_}TBProfiler{_bb_}")
+print("Out of the samples on the tree, what is median and mean of the median coverage?")
+print(tree_only_merged.filter(pl.col('tbprof_median_coverage').is_not_null()).select(pl.median('tbprof_median_coverage')))
+print(tree_only_merged.filter(pl.col('tbprof_median_coverage').is_not_null()).select(pl.mean('tbprof_median_coverage')))
+
+print("What's on the tree WITHOUT TBProfiler lineage information? (sometimes tbprofiler can't assign a lineage or may assign two)")
+with pl.Config(tbl_cols=-1, tbl_rows=100):
+	lacks_tbprof_main =  tree_only_merged.filter(~pl.col('tbprof_main_lin').is_not_null()).select(['sample_index', 'tbprof_main_lin', 'tbprofiler_lineage_usher', 'lineage'])
+	print(lacks_tbprof_main.sort('lineage'))
+print("What's on the tree WITH TBProfiler lineage information? (sometimes tbprofiler can't assign a lineage or may assign two)")
+has_tbprof_main_lin = tree_only_merged.filter(pl.col('tbprof_main_lin').is_not_null()).select(['tbprof_main_lin', 'tbprofiler_lineage_usher', 'lineage'])
+has_one_tbprof_main_lin = has_tbprof_main_lin.filter(~pl.col('tbprof_main_lin').str.contains(';'))
+print(f"A total of {has_tbprof_main_lin.shape[0]} ({has_tbprof_main_lin.shape[0] / tree_only_merged.shape[0] * 100 :.2f}%) samples have TBProf lineage info")
+print(f"->Of which {has_one_tbprof_main_lin.shape[0]} ({has_one_tbprof_main_lin.shape[0] / has_tbprof_main_lin.shape[0] * 100 :.2f}% of have main lineage is True) samples have just one TBProf lineage main lineage")
+
+four = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage4')])
+two = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage2')])
+one = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage1')])
+three = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage3')])
+la1 = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('La1')])
+six = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage6')])
+five = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage5')])
+la3 = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('La3')])
+la2 = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('La2')])
+lineage7 = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage7')])
+lineage9 = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage9')])
+lineage8 = has_one_tbprof_main_lin.filter([pl.col('tbprof_main_lin') == pl.lit('lineage8')])
+
+print(f"->{four.shape[0]} ({four.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage4")
+print(f"->{two.shape[0]} ({two.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage2")
+print(f"->{one.shape[0]} ({one.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage1")
+print(f"->{three.shape[0]} ({three.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage3")
+print(f"->{la1.shape[0]} ({la1.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are La1")
+print(f"->{six.shape[0]} ({six.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage6")
+print(f"->{five.shape[0]} ({five.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage5")
+print(f"->{la3.shape[0]} ({la3.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are la3")
+print(f"->{la2.shape[0]} ({la2.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are la2")
+print(f"->{lineage7.shape[0]} ({lineage7.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage7")
+print(f"->{lineage9.shape[0]} ({lineage9.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage9")
+print(f"->{lineage8.shape[0]} ({lineage8.shape[0] / has_one_tbprof_main_lin.shape[0] * 100 :.2f}%) are lineage8")
+
+has_tbprof_dr = tree_only_merged.filter(pl.col('tbprof_drtype').is_not_null())
+print(f"{has_tbprof_dr.shape[0]}  ({has_tbprof_dr.shape[0] / tree_only_merged.shape[0] * 100 :.2f}%) samples have a tbprof dr type")
+
+sense = has_tbprof_dr.filter([pl.col('tbprof_drtype') == pl.lit('Sensitive')])
+mdr = has_tbprof_dr.filter([pl.col('tbprof_drtype') == pl.lit('MDR-TB')])
+other = has_tbprof_dr.filter([pl.col('tbprof_drtype') == pl.lit('Other')])
+prexdrtb = has_tbprof_dr.filter([pl.col('tbprof_drtype') == pl.lit('Pre-XDR-TB')])
+hr = has_tbprof_dr.filter([pl.col('tbprof_drtype') == pl.lit('HR-TB')])
+rr = has_tbprof_dr.filter([pl.col('tbprof_drtype') == pl.lit('RR-TB')])
+xdr = has_tbprof_dr.filter([pl.col('tbprof_drtype') == pl.lit('XDR-TB')])
+
+print(f"->{sense.shape[0]} ({sense.shape[0] / has_tbprof_dr.shape[0] * 100 :.2f}%) are Sensitive")
+print(f"->{other.shape[0]} ({other.shape[0] / has_tbprof_dr.shape[0] * 100 :.2f}%) are explictly other")
+print(f"->{mdr.shape[0]} ({mdr.shape[0] / has_tbprof_dr.shape[0] * 100 :.2f}%) are MDR-TB")
+print(f"->{prexdrtb.shape[0]} ({prexdrtb.shape[0] / has_tbprof_dr.shape[0] * 100 :.2f}%) are Pre-XDR-TB")
+print(f"->{hr.shape[0]} ({hr.shape[0] / has_tbprof_dr.shape[0] * 100 :.2f}%) are MDR-TB")
+print(f"->{rr.shape[0]} ({rr.shape[0] / has_tbprof_dr.shape[0] * 100 :.2f}%) are RR")
+print(f"->{xdr.shape[0]} ({xdr.shape[0] / has_tbprof_dr.shape[0] * 100 :.2f}%) are XDR-TB")
+
 
 print(f"Finished entire module in {time.time() - module_start} seconds")
-
-
