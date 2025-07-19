@@ -362,8 +362,7 @@ class ProfessionalsHaveStandards():
 			self.logging.info("Extracting host_disease...")
 			for host_disease, simplified_host_disease in sample_sources.host_disease_exact_match.items():
 				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=False, overwrite=False, remove_match_from_list=True)
-
-			# DEBUG
+			# DEBUGPRINT
 			#NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
 
 		# here's where we actually beginning handling the stuff for this actual column!
@@ -896,7 +895,7 @@ class ProfessionalsHaveStandards():
 			polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col])
 			if polars_df.schema[col] == pl.List and self.logging.getEffectiveLevel() == 10:
 				self.logging.debug(f'Found these multi-element lists in {col} after attempted flatten')
-				NeighLib.print_only_where_col_list_is_big(polars_df, col)
+				NeighLib.print_only_where_col_list_is_big(polars_df, col) # DEBUGPRINT
 				if force_strings:
 					self.logging.debug('Forcing these multi-element lists into strings')
 					polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col], force_strings=True)
