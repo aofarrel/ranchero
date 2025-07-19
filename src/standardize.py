@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime
 from src.statics import host_species, sample_sources, kolumns, countries, regions
 from .config import RancheroConfig
 import polars as pl
@@ -361,9 +362,8 @@ class ProfessionalsHaveStandards():
 			self.logging.info("Extracting host_disease...")
 			for host_disease, simplified_host_disease in sample_sources.host_disease_exact_match.items():
 				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=False, overwrite=False, remove_match_from_list=True)
-
-			# DEBUG
-			NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
+			# DEBUGPRINT
+			#NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
 
 		# here's where we actually beginning handling the stuff for this actual column!
 		for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
@@ -544,8 +544,14 @@ class ProfessionalsHaveStandards():
 		polars_df = self.unmask_mice(self.unmask_badgers(polars_df))
 		return polars_df
 
-	def cleanup_dates(self, polars_df, keep_only_bad_examples=False, err_on_list=True, force_strings=True):
+	def cleanup_dates(self, polars_df, keep_only_bad_examples=False, err_on_list=True, force_strings=True, in_format=None):
 		"""
+		Cleans up dates into ISO format.
+		You can specify an input format if you know ALL dates in the dataframe conform to it. Currently implemented formats:
+
+		"DD.MM.YYYY" (must be zero-padded)
+		"MM/DD/YYYY" (does not need to be zero-padded)
+
 		Notes:
 		* keep_only_bad_examples is for debugging; it effectively hides dates that are probably good
 		* len_bytes() is way faster than len_chars()
@@ -557,7 +563,7 @@ class ProfessionalsHaveStandards():
 			if polars_df.schema['date_collected'] == pl.List:
 				if err_on_list:
 					self.logging.error("Tried to flatten date_collected, but there seems to be some rows with unique values.")
-					self.logging.error(NeighLib.get_rows_where_list_col_more_than_one_value(polars_df, 'date_collected').select([NeighLib.get_index_column(polars_df), 'date_collected']))
+					print(NeighLib.get_rows_where_list_col_more_than_one_value(polars_df, 'date_collected').select([NeighLib.get_index_column(polars_df), 'date_collected']))
 					exit(1)
 				else:
 					self.logging.warning("Tried to flatten date_collected, but there seems to be some rows with unique values. Will convert to string. This may be less accurate.")
@@ -569,69 +575,127 @@ class ProfessionalsHaveStandards():
 				pl.col("date_collected").cast(pl.Utf8).alias("date_collected")
 			)
 
-		# YYYY/YYYY
-		polars_df = polars_df.with_columns(
-			pl.when((pl.col('date_collected').str.len_bytes() == 9)
-			.and_(pl.col('date_collected').str.count_matches("/") == 1))
-			.then(None).otherwise(pl.col('date_collected')).alias("date_collected")
-		)
+		if in_format == None:
 
-		# YYYY/YYYY/YYYY
-		polars_df = polars_df.with_columns(
-			pl.when((pl.col('date_collected').str.len_bytes() == 14)
-			.and_(pl.col('date_collected').str.count_matches("/") == 2))
-			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
-		)
-
-		# YYYY/YYYY/YYYY/YYYY
-		polars_df = polars_df.with_columns(
-			pl.when((pl.col('date_collected').str.len_bytes() == 19)
-			.and_(pl.col('date_collected').str.count_matches("/") == 3))
-			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
-		)
-		
-		# YYYY/MM or MM/YYYY
-		polars_df = polars_df.with_columns(
-			pl.when((pl.col('date_collected').str.len_bytes() == 7)
-			.and_(pl.col('date_collected').str.count_matches("/") == 1))
-			.then(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]', 0)).otherwise(pl.col('date_collected')).alias("date_collected")
-		)
-
-		# MM/DD/YYYY or DD/MM/YYYY (ambigious, so just get year)
-		polars_df = polars_df.with_columns(
-			pl.when((pl.col('date_collected').str.len_bytes() == 10)
-				.and_(
-					(pl.col('date_collected').str.count_matches("/") == 2)
-					.or_(pl.col('date_collected').str.count_matches("-") == 2)
-				)
+			# "YYYY/YYYY" --> null
+			polars_df = polars_df.with_columns(
+				pl.when((pl.col('date_collected').str.len_bytes() == 9)
+				.and_(pl.col('date_collected').str.count_matches("/") == 1))
+				.then(None).otherwise(pl.col('date_collected')).alias("date_collected")
 			)
-			.then(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]', 0)).otherwise(pl.col('date_collected')).alias("date_collected")
-		)
 
-		# YYYY-MM/YYYY-MM
-		polars_df = polars_df.with_columns([
-			pl.when((pl.col('date_collected').str.len_bytes() == 15)
-			.and_(pl.col('date_collected').str.count_matches("/") == 1)
-			.and_(pl.col('date_collected').str.count_matches("-") == 2))
-			.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
-		])
+			# "YYYY/YYYY/YYYY" --> null
+			polars_df = polars_df.with_columns(
+				pl.when((pl.col('date_collected').str.len_bytes() == 14)
+				.and_(pl.col('date_collected').str.count_matches("/") == 2))
+				.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
+			)
 
-		# YYYY-MM-DDT00:00:00Z
-		polars_df = polars_df.with_columns([
-			pl.when((pl.col('date_collected').str.len_bytes() == 20)
-			.and_(pl.col('date_collected').str.count_matches("Z") == 1)
-			.and_(pl.col('date_collected').str.count_matches(":") == 2))
-			.then(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]', 0)).otherwise(pl.col('date_collected')).alias("date_collected"),
-		])
+			# "YYYY/YYYY/YYYY/YYYY" --> null
+			polars_df = polars_df.with_columns(
+				pl.when((pl.col('date_collected').str.len_bytes() == 19)
+				.and_(pl.col('date_collected').str.count_matches("/") == 3))
+				.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
+			)
+			
+			# "YYYY/MM" or "MM/YYYY" --> YYYY
+			polars_df = polars_df.with_columns(
+				pl.when((pl.col('date_collected').str.len_bytes() == 7)
+				.and_(pl.col('date_collected').str.count_matches("/") == 1))
+				.then(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]', 0)).otherwise(pl.col('date_collected')).alias("date_collected")
+			)
 
-		# YYYY-MM-DD/YYYY-MM-DD
-		polars_df = polars_df.with_columns(
-			pl.when((pl.col('date_collected').str.len_bytes() == 21))
-			.then(None)
-			.otherwise(pl.col('date_collected'))
-			.alias("date_collected"),
-		)
+			# "MM/DD/YYYY" or "DD/MM/YYYY"  --> YYYY
+			polars_df = polars_df.with_columns(
+				pl.when((pl.col('date_collected').str.len_bytes() == 10)
+					.and_(
+						(pl.col('date_collected').str.count_matches("/") == 2)
+						.or_(pl.col('date_collected').str.count_matches("-") == 2)
+					)
+				)
+				.then(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]', 0)).otherwise(pl.col('date_collected')).alias("date_collected")
+			)
 
+			# "YYYY-MM/YYYY-MM" --> null
+			polars_df = polars_df.with_columns([
+				pl.when((pl.col('date_collected').str.len_bytes() == 15)
+				.and_(pl.col('date_collected').str.count_matches("/") == 1)
+				.and_(pl.col('date_collected').str.count_matches("-") == 2))
+				.then(None).otherwise(pl.col('date_collected')).alias("date_collected"),
+			])
+
+			# "YYYY-MM-DDT00:00:00Z"  --> YYYY-MM-DD
+			polars_df = polars_df.with_columns([
+				pl.when((pl.col('date_collected').str.len_bytes() == 20)
+				.and_(pl.col('date_collected').str.count_matches("Z") == 1)
+				.and_(pl.col('date_collected').str.count_matches(":") == 2))
+				.then(pl.col('date_collected').str.extract(r'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]', 0)).otherwise(pl.col('date_collected')).alias("date_collected"),
+			])
+
+			# "YYYY-MM-DD/YYYY-MM-DD"  --> null
+			polars_df = polars_df.with_columns(
+				pl.when((pl.col('date_collected').str.len_bytes() == 21))
+				.then(None)
+				.otherwise(pl.col('date_collected'))
+				.alias("date_collected"),
+			)
+		
+		elif in_format == "DD.MM.YYYY":
+			# All values MUST be zero-padded!
+			# Polars regex doesn't support capture groups, so we have to use three expressions here.
+			polars_df = polars_df.with_columns([
+
+				pl.when(pl.col("date_collected").is_not_null())
+				.then(pl.col("date_collected").str.extract(r"^(\d{2})", 1))
+				.otherwise(None)
+				.alias("TEMP_month"),
+
+				pl.when(pl.col("date_collected").is_not_null())
+				.then(pl.col("date_collected").str.extract(r"^\d{2}\.(\d{2})", 1))
+				.otherwise(None)
+				.alias("TEMP_day"),
+
+				pl.when(pl.col("date_collected").is_not_null())
+				.then(pl.col("date_collected").str.extract(r"(\d{4})$", 1))
+				.otherwise(None)
+				.alias("TEMP_year"),
+
+				])
+
+			polars_df = polars_df.with_columns(
+				pl.when(pl.col("TEMP_year").is_not_null())
+				.then(pl.concat_str([
+					pl.col("TEMP_year"),
+					pl.lit("-"),
+					pl.col("TEMP_month"),
+					pl.lit("-"),
+					pl.col("TEMP_day"),
+				]))
+				.otherwise(pl.col("date_collected"))
+				.alias("date_collected")
+			).drop(["TEMP_month", "TEMP_day", "TEMP_year"])
+
+		elif in_format == "MM/DD/YYYY":
+			# This avoids strftime() to avoid platform-specific zero-padding nightmares.
+			def datetime_parser(DD_slash_MM_slash_YYYY):
+				if DD_slash_MM_slash_YYYY is None:
+					return None
+				parts = DD_slash_MM_slash_YYYY.strip().split("/")
+				if len(parts) == 3:
+					try:
+						month, day, year = [int(p) for p in parts]
+						return str(datetime(year, month, day).date().isoformat())
+					except Exception as e:
+						self.logging.debug(f"Failed to convert: raw={DD_slash_MM_slash_YYYY!r}, parsed={parts!r}, day={day}, month={month}, year={year}, error={e}")
+						return None
+				return None
+
+			polars_df = polars_df.with_columns(
+				pl.col("date_collected").map_elements(datetime_parser, return_dtype=pl.Utf8)
+			)
+			
+
+		# handle known nonsense
 		polars_df = polars_df.with_columns(
 			pl.when((pl.col('date_collected') == '0')
 				.or_(pl.col('date_collected') == '0000')
@@ -645,8 +709,7 @@ class ProfessionalsHaveStandards():
 
 		if 'sample_index' in polars_df.columns:
 			polars_df = polars_df.with_columns(
-				pl.when((pl.col('date_collected') == '0')
-					.or_(pl.col('sample_index') == 'SAMEA5977381') # 2025/2026
+				pl.when((pl.col('sample_index') == 'SAMEA5977381') # 2025/2026
 					.or_(pl.col('sample_index') == 'SAMEA5977380') # 2025/2026
 				)
 				.then(None)
@@ -830,10 +893,11 @@ class ProfessionalsHaveStandards():
 		polars_df = polars_df.drop(['taxoncore_list', 'taxoncore_str', 'i_group', 'i_lineage', 'i_organism', 'i_strain'])
 		for col in ['clade', 'organism', 'lineage', 'strain']:
 			polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col])
-			if polars_df.schema[col] == pl.List:
-				# DEBUG
-				NeighLib.print_only_where_col_list_is_big(polars_df, col)
+			if polars_df.schema[col] == pl.List and self.logging.getEffectiveLevel() == 10:
+				self.logging.debug(f'Found these multi-element lists in {col} after attempted flatten')
+				NeighLib.print_only_where_col_list_is_big(polars_df, col) # DEBUGPRINT
 				if force_strings:
+					self.logging.debug('Forcing these multi-element lists into strings')
 					polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col], force_strings=True)
 
 		return polars_df
