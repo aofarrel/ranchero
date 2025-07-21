@@ -518,15 +518,15 @@ if start_from_scratch:
 	merged_samps = sample_index_merges(merged_runs)
 else:
 	if inject:
-		print("Reading from tba6_standardized.tsv")
-		tba6_standardized = Ranchero.from_tsv("tba6_standardized.tsv", auto_standardize=False)
+		print(f"Reading from Mycobacterium_genus_BigQuery_standardized_{rc}_p2.tsv")
+		tba6_standardized = Ranchero.from_tsv(f"Mycobacterium_genus_BigQuery_standardized_{rc}_p2.tsv", auto_standardize=False)
 		tba6_injected = inject_metadata(tba6_standardized)
 		merged_runs = run_merges(tba6_injected)
 		merged_samps = sample_index_merges(merged_runs)
 	else:
 		if do_run_index_merges:
-			print("Reading from tba6_injected.tsv")
-			tba6_injected = Ranchero.from_tsv("tba6_injected.tsv", auto_standardize=False)
+			print(f"Reading from Mycobacterium_genus_injections_{rc}_p3.tsv")
+			tba6_injected = Ranchero.from_tsv("Mycobacterium_genus_injections_{rc}_p3.tsv", auto_standardize=False)
 			merged_runs = run_merges(tba6_injected)
 			merged_samps = sample_index_merges(merged_runs)
 		else:
