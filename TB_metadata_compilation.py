@@ -575,7 +575,7 @@ Ranchero.NeighLib.print_value_counts(tree_only_merged, ['country', 'continent', 
 
 Ranchero.to_tsv(tree_only_merged, f"./2025-07-08_tree_metadata_ranchero_{rc}-verbose.tsv")
 concise = tree_only_merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info', 'collection'], strict=False)
-Ranchero.to_tsv(concise, f"./Mycobacterium_genus_metadata_ranchero_{rc}-concise.tsv")
+Ranchero.to_tsv(concise, f"./2025-07-08_tree_metadata_ranchero_{rc}-concise.tsv")
 
 
 
