@@ -92,9 +92,10 @@ class Merger:
 
 		# we expect n_rows_merged = intersection_values + exclusive_left_values + exclusive_right_values
 		if n_rows_merged == n_rows_expected:
+			self.logging.debug("Did not find any unexpected rows")
 			return
 		else:
-			print("-------")
+			self.logging.debug("-------")
 			self.logging.debug(f"Expected {n_rows_expected} rows in merged dataframe but got {n_rows_merged}")
 			if right_name_in_this_column is not None:
 				self.logging.debug("%s n_rows_right (%s exclusive)" % (n_rows_right, len(exclusive_right_values)))
@@ -113,12 +114,12 @@ class Merger:
 			duplicated_indices = merged_df.filter(pl.col(merge_upon).is_duplicated())
 			if len(duplicated_indices) > 0:
 				self.logging.error(f"Found {len((duplicated_indices).unique())} duplicated values in column {merge_upon}! This indicates a merge failure.")
-				print(duplicated_indices.unique().select(merge_upon))
+				self.logging.error(duplicated_indices.unique().select(merge_upon))
 				exit(1)
 			else:
 				self.logging.info(f"Right-hand dataframe appears to have added {n_rows_expected - n_rows_merged} new samples.")
 				self.logging.info(f"(Expected {n_rows_expected} rows, got {n_rows_merged}, found no duplicate values in {merge_upon})")
-			print("-------")
+			self.logging.debug("-------")
 
 	def merge_polars_dataframes(self, 
 		left: pl.dataframe.frame.DataFrame, 
@@ -149,12 +150,9 @@ class Merger:
 		if indicator is _DEFAULT_TO_CONFIGURATION:
 			indicator = self.cfg.indicator_column
 
-		#if _cfg_dupe_index_handling == 'allow':
-		#	self.logging.warning("You have set the dataframe to allow duplicate indeces. This may cause unexpected behavior when merging dataframes.")
 		left = NeighLib.check_index(NeighLib.drop_null_columns(left), force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon)
 		right = NeighLib.check_index(NeighLib.drop_null_columns(right), force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon)
 
-		# Check for B.S.
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:
 				raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in {name} dataframe")
@@ -168,6 +166,8 @@ class Merger:
 				else:
 					print(df.filter(pl.col(merge_upon).is_null()))
 				raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
+
+		# right/left-hand dataframe's index's values (SRR16156818, SRR12380906, etc) ONLY -- all other columns excluded
 		assert left.schema[merge_upon] == right.schema[merge_upon]
 		left_values, right_values = left[merge_upon], right[merge_upon]
 
@@ -217,6 +217,7 @@ class Merger:
 				left = left.with_columns(pl.lit(left_name).alias(indicator))
 			else:
 				self.logging.debug("--> Already an indicator in left")
+				
 			right = right.with_columns(pl.lit(right_name).alias(indicator))
 			n_cols_right = right.shape[1]
 			n_cols_left = left.shape[1]
@@ -264,9 +265,10 @@ class Merger:
 				if left_column in right.columns:
 					merged_columns.append(f"\n\t* {left_column}")
 
-					# already handled drop_zone earlier
+					if left_column in drop_zone.silly_columns:
+						left, right = left.drop(left_column), right.drop(left_column)
 
-					if left_column in kolumns.list_throw_error:
+					elif left_column in kolumns.list_throw_error:
 						if left.schema[left_column] == pl.List or right.schema[left_column] == pl.List:
 							if bad_list_error:
 								self.logging.error(f'{left_column} is marked as "error if becomes a list when merging" but is already a list in {left_name} and/or {right_name}!')
@@ -284,20 +286,20 @@ class Merger:
 
 							# let merge_right_columns() handle it... or rename the shared column so they aren't shared anymore?
 
-						# This section looks like nonsense but it is ESSENTIAL given just how annoying concat_list() can get!!
-						# Previously we tried something like this:
-						#small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
-						#small_merge = small_left.join(small_right, merge_upon, how="outer_coalesce")
-						#small_merge = small_merge.with_columns(concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls())
-						#small_merge = small_merge.drop(left_column).drop(f"{left_column}_right").rename({"concat_list": left_column})
-						#left, right = left.drop(left_column), right.drop(left_column) # prevent merge right columns from running after full merge
-						#left = left.join(small_merge, merge_upon, how='outer_coalesce')
-						# ...but it uses concat_list() too early, which results in nulls propagating before drop_nulls() can save us.
 						else:
+							# This section looks like nonsense but it is ESSENTIAL given just how annoying concat_list() can get!!
+							# Previously we tried something like this:
+							#    small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
+							#    small_merge = small_left.join(small_right, merge_upon, how="outer_coalesce")
+							#    small_merge = small_merge.with_columns(concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls())
+							#    small_merge = small_merge.drop(left_column).drop(f"{left_column}_right").rename({"concat_list": left_column})
+							#    left, right = left.drop(left_column), right.drop(left_column) # prevent merge right columns from running after full merge
+							#    left = left.join(small_merge, merge_upon, how='outer_coalesce')
+							# But that uses concat_list() too early, which results in nulls propagating before drop_nulls() can save us.
 							self.logging.debug(f"* {left_column}: LIST | SING")
 							right_column = f"{left_column}_right"
 							assert right_column not in left.columns # shouldn't exist until after small_merge is created
-							
+
 							# Let's say merge_upon = "sample_index", left_column = "foo", right_column = "foo_right"
 							# Create small_merge dataframe by merging left and right upon "sample_index". This
 							# creates a new dataframe with columns "sample_index", "foo", and "foo_right".
@@ -306,8 +308,8 @@ class Merger:
 								.join(right.select([merge_upon, left_column]), on=merge_upon, how="full", coalesce=True)
 							)
 							if drop_exclusive_right and left.shape[0] != small_merge.shape[0]:
-								self.logging.warning("drop_exclusive_right, but small_merge and left have different lengths")
-								self.logging.warning("this might indicate a merge failure and/or duplicated indeces, but will attempt to continue")
+								self.logging.warning("drop_exclusive_right = True, but small_merge and left have different lengths")
+								self.logging.warning("This might indicate a merge failure and/or duplicated indeces, but will attempt to continue")
 
 							# Wherever left column (list) is null, cast the right column (str) to list and use that
 							# value for new column "{left_column}_nullfilled_with_right_col".
@@ -389,6 +391,13 @@ class Merger:
 							small_merge = small_merge.drop([f"{left_column}_nullfilled_with_empty_str", f"{right_column}_nullfilled_with_left_col", right_column, left_column])	
 							left, right = left.drop(left_column), right.drop([left_column])
 							left = left.join(small_merge, on=merge_upon, how="full", coalesce=True).rename({"merged": left_column})
+							###self.logging.warning("Merging a singular left column with a list right column is untested")
+							###small_left, small_right = left.select([merge_upon, left_column]), right.select([merge_upon, left_column])
+							###small_merge = small_left.join(small_right, merge_upon, how="outer_coalesce")
+							###small_merge = small_merge.with_columns(concat_list=pl.concat_list([left_column, f"{left_column}_right"]).list.drop_nulls())
+							###small_merge = small_merge.drop(left_column).drop(f"{left_column}_right").rename({"concat_list": left_column})
+							###left, right = left.drop(left_column), right.drop(left_column) # prevent merge right columns from running after full merge
+							###left = left.join(small_merge, merge_upon, how='outer_coalesce')
 						else:
 							self.logging.debug(f"* {left_column}: SING | SING")
 				else:
@@ -418,73 +427,3 @@ class Merger:
 		self.logging.debug("Trying to null newly created empty lists...")
 		merged_dataframe = NeighLib.null_lists_of_len_zero(merged_dataframe)
 		return merged_dataframe
-
-	def concat_list_no_prop_nulls(polars_df, left_column, right_column):
-		""" 
-
-		UNFINISHED
-
-		You have a dataframe you already merged on some column. You now have two columns,
-		foo and foo_right, that you want to merge into a single list column. Ideally you'd use
-		concat_list(), but for some reason that propagates nulls (ex: 1 + pl. Null = pl.Null).
-		This function basically replaces concat_list() with a bunch of polars expressions that
-		will avoid propagating nulls.
-		Designed for:
-		* left_column is list of str, right_column is str
-		* left_column is str, right_column is list of str
-		"""
-		if polars_df.schema[left_column] == polars_df.schema[right_column]:
-			raise ValueError(f"Not implemented on columns of the same datatype (both left and right are {polars_df.schema[left_column]})")
-		
-		# figure out which one is the list and which one is singular
-		if polars_df.schema[right_column] == pl.List:
-			list_column = right_column
-			singular_column = left_column
-		else:
-			list_column = left_column
-			singular_column = right_column
-		assert polars_df.dtypes[singular_column] == polars_df.dtypes[list_column].inner
-
-		# figure out the nullfill type
-		# str: empty string
-		# float: nan (untested but shouldn't propagate)
-		# int: nan, but only after casting everything to float
-		# boolean: .......uhhhhhhhhhhhhhhhhhhhhhhhhhhhh 2 idk
-		match polars_df.schema[singular_column]:
-			case pl.Utf8:
-				empty = ""
-			case pl.Float64:
-				empty = np.nan
-
-		# Wherever list is null, cast the singular column to list and use that value for new column.
-		# Otherwise (ie when list column is not null), keep that value for the new column.
-		polars_df = polars_df.with_columns(
-			pl.when(pl.col(right_column).is_null())   
-			.then(pl.col(left_column).cast(pl.List(str)))
-			.otherwise(pl.col(right_column)) 
-			.alias(f"{right_column}_nullfilled_with_left_col")
-		)
-		# Now that the right (list) column has had as many nulls removed as possible, we want to remove nulls 
-		# from the left (str) column, because nulls in the left column would also cause issues with concat_list.
-		polars_df = polars_df.with_columns(
-			pl.when(pl.col(left_column).is_null())   
-			.then(pl.lit(""))
-			.otherwise(pl.col(left_column)) 
-			.alias(f"{left_column}_nullfilled_with_empty_str"),
-		)
-
-		# Only now is polars_df safe to use pl.concat_list() without worrying about nulls propagating.
-		polars_df = small_merge.with_columns(
-			merged=pl.concat_list([f"{left_column}_nullfilled_with_empty_str", f"{right_column}_nullfilled_with_left_col"])
-			.list.unique().list.drop_nulls()
-		)
-
-		# Remove empty strings from the list
-		polars_df = polars_df.with_columns(
-			pl.col("merged").list.eval(
-				pl.element().filter(pl.element().str.len_chars() > 0)
-			)
-		)
-		return polars_df.drop([f"{left_column}_nullfilled_with_empty_str", f"{right_column}_nullfilled_with_left_col", right_column, left_column])	
-
-
