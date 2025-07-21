@@ -1,4 +1,4 @@
-rc = "rc17½"
+rc = "rc17½½"
 
 import polars as pl
 
@@ -477,6 +477,7 @@ def sample_index_merges(merged_runs):
 	tree = Ranchero.from_tsv("./ranchero_output_archive/2025-07-08-FINAL_ranchero_rc17.subset.annotated.tsv", auto_rancheroize=False, list_columns=['run_index'])
 	for column in tree.columns:
 		if column in merged and column not in ['sample_index']:
+			# coinfection and tbprofiler_lineage_usher will get added too
 			tree = tree.drop(column)
 	merged = Ranchero.merge_dataframes(merged, tree, merge_upon="sample_index", right_name="tree", indicator="collection", drop_exclusive_right=False)
 	print(f"Merged with pipeline information in {time.time() - start:.4f} seconds")
@@ -529,8 +530,8 @@ else:
 			merged_runs = run_merges(tba6_injected)
 			merged_samps = sample_index_merges(merged_runs)
 		else:
-			print("Reading from merged_by_run.tsv")
-			merged_runs = Ranchero.from_tsv("merged_by_run.tsv", auto_standardize=False)
+			print(f"Reading from Mycobacterium_genus_run-based_metadata_{rc}_p4.tsv")
+			merged_runs = Ranchero.from_tsv(f"Mycobacterium_genus_run-based_metadata_{rc}_p4.tsv", auto_standardize=False)
 			merged_samps = sample_index_merges(merged_runs)
 
 # fix a BioProject-level injection
@@ -539,9 +540,12 @@ merged_samps = Ranchero.inject_metadata(merged_samps, Ranchero.injector_from_tsv
 print(f"Found {merged_samps.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts after bioproject injection")
 
 # final nonsense
+merged_samps = merged_samps.rename({'lineage': 'literature_lineage'})
+merged_samps = merged_samps.rename({'tbprofiler_lineage_usher': 'usher_lineage_from_tbprofiler'})
 merged_samps = merged_samps.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'mbytes_sum_sum', 'geoloc_name'], strict=False)
 merged_samps = merged_samps.drop(['tbprof_rd', 'tbprof_spoligotype', 'tbprof_frac'], strict=False) # seem to be from the main lineage only, not the sublineage
-#Ranchero.NeighLib.wide_print_polars(merged_samps.filter(pl.col("date_collected").str.contains(r"\d{2}/\d{2}/\d{4}")), "merged has date slashes in 2 2 4 format", ['sample_index', 'date_collected'])
+merged_samps = merged_samps.drop(['mbases_sum', 'bases_sum', 'bytes_sum'], strict=False) # often inaccurate
+
 
 print("---------------------- Whole-genus value counts ----------------------")
 merged = Ranchero.hella_flat(merged_samps)
@@ -551,12 +555,12 @@ print(f"Found {merged.filter(pl.col('host_commonname') == pl.lit('human')).shape
 Ranchero.NeighLib.print_value_counts(merged, ['sample_source'])
 Ranchero.NeighLib.print_value_counts(merged, ['host_scienname', 'host_confidence', 'host_streetname'])
 Ranchero.NeighLib.print_value_counts(merged, ['date_collected'])
-Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'lineage', 'strain'])
+Ranchero.NeighLib.print_value_counts(merged, ['clade', 'organism', 'literature_lineage', 'strain'])
 Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
 
 Ranchero.to_tsv(merged, f"./Mycobacterium_genus_metadata_ranchero_{rc}-verbose.tsv")
-merged = merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info', 'collection'], strict=False)
-Ranchero.to_tsv(merged, f"./Mycobacterium_genus_metadata_ranchero_{rc}.tsv")
+concise = merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info', 'collection'], strict=False)
+Ranchero.to_tsv(concise, f"./Mycobacterium_genus_metadata_ranchero_{rc}-concise.tsv")
 
 print("---------------------- Tree-only value counts ----------------------")
 tree_only_merged = Ranchero.hella_flat(merged_samps.filter(pl.col('collection').list.contains('tree')))
@@ -566,10 +570,15 @@ print(f"Found {merged_samps.filter(pl.col('host_commonname') == pl.lit('human'))
 Ranchero.NeighLib.print_value_counts(tree_only_merged, ['sample_source'])
 Ranchero.NeighLib.print_value_counts(tree_only_merged, ['host_scienname', 'host_confidence', 'host_streetname'])
 Ranchero.NeighLib.print_value_counts(tree_only_merged, ['date_collected'])
-Ranchero.NeighLib.print_value_counts(tree_only_merged, ['clade', 'organism', 'lineage', 'strain'])
-Ranchero.NeighLib.print_value_counts(merged, ['country', 'continent', 'region'])
+Ranchero.NeighLib.print_value_counts(tree_only_merged, ['clade', 'organism', 'literature_lineage', 'strain'])
+Ranchero.NeighLib.print_value_counts(tree_only_merged, ['country', 'continent', 'region'])
 
-Ranchero.to_tsv(merged, f"./2025-07-08_tree_metadata_ranchero_{rc}.tsv")
+Ranchero.to_tsv(tree_only_merged, f"./2025-07-08_tree_metadata_ranchero_{rc}-verbose.tsv")
+concise = tree_only_merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info', 'collection'], strict=False)
+Ranchero.to_tsv(concise, f"./Mycobacterium_genus_metadata_ranchero_{rc}-concise.tsv")
+
+
+
 
 print(f"{_b_}Host information{_bb_}")
 has_host = tree_only_merged.select(pl.col('host_commonname').filter(pl.col('host_commonname').is_not_null()))
@@ -609,10 +618,10 @@ print(tree_only_merged.filter(pl.col('tbprof_median_coverage').is_not_null()).se
 
 print("What's on the tree WITHOUT TBProfiler lineage information? (sometimes tbprofiler can't assign a lineage or may assign two)")
 with pl.Config(tbl_cols=-1, tbl_rows=100):
-	lacks_tbprof_main =  tree_only_merged.filter(~pl.col('tbprof_main_lin').is_not_null()).select(['sample_index', 'tbprof_main_lin', 'tbprofiler_lineage_usher', 'lineage'])
-	print(lacks_tbprof_main.sort('lineage'))
+	lacks_tbprof_main =  tree_only_merged.filter(~pl.col('tbprof_main_lin').is_not_null()).select(['sample_index', 'tbprof_main_lin', 'usher_lineage_from_tbprofiler', 'literature_lineage'])
+	print(lacks_tbprof_main.sort('literature_lineage'))
 print("What's on the tree WITH TBProfiler lineage information? (sometimes tbprofiler can't assign a lineage or may assign two)")
-has_tbprof_main_lin = tree_only_merged.filter(pl.col('tbprof_main_lin').is_not_null()).select(['tbprof_main_lin', 'tbprofiler_lineage_usher', 'lineage'])
+has_tbprof_main_lin = tree_only_merged.filter(pl.col('tbprof_main_lin').is_not_null()).select(['tbprof_main_lin', 'usher_lineage_from_tbprofiler', 'literature_lineage'])
 has_one_tbprof_main_lin = has_tbprof_main_lin.filter(~pl.col('tbprof_main_lin').str.contains(';'))
 print(f"A total of {has_tbprof_main_lin.shape[0]} ({has_tbprof_main_lin.shape[0] / tree_only_merged.shape[0] * 100 :.2f}%) samples have TBProf lineage info")
 print(f"->Of which {has_one_tbprof_main_lin.shape[0]} ({has_one_tbprof_main_lin.shape[0] / has_tbprof_main_lin.shape[0] * 100 :.2f}% of have main lineage is True) samples have just one TBProf lineage main lineage")
