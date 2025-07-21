@@ -1067,8 +1067,7 @@ class NeighLib:
 				dtype = polars_df.schema[col]
 				col_dtype[col] = dtype
 		
-		for col, datatype in col_dtype.items():
-			#self.logging.debug(f"Evaulating on {col} of type {datatype}") # summary table at the end should suffice
+		for col, datatype in col_dtype.items(): # TYPES DO NOT UPDATE AUTOMATICALLY!
 			
 			if col in drop_zone.silly_columns:
 				polars_df.drop(col)
@@ -1077,12 +1076,18 @@ class NeighLib:
 			
 			if datatype == pl.List and datatype.inner != datetime.datetime:
 
+				if polars_df.schema[col] != pl.List:
+					# fixes issues with the 'strain' column previously being a list
+					self.logging.debug(f"{col} was previously a list, but isn't one any longer (this should happen with taxoncore columns as they are delisted all at once)")
+					continue
+
 				try:
+					# since already handled stuff that were already delisted earlier, this should only fire if it's a list of nulls
 					polars_df = polars_df.with_columns(pl.col(col).list.drop_nulls())
 				except Exception:
 					self.logging.error(f"{col} has type {datatype} but is acting like it isn't a list -- is it full of nulls?")
 					self.logging.error(polars_df.select(col))
-					exit(1)
+					exit(1) # might be overkill
 
 				if col in kolumns.equivalence['run_index'] and index_column in kolumns.equivalence['sample_index']:
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'skipped (runs in samp-indexed df)'})
@@ -1093,6 +1098,7 @@ class NeighLib:
 					continue
 
 				elif col in kolumns.special_taxonomic_handling:
+					
 					# First attempt to flatten ALL taxoncore stuff (yes, this will get repeated per col in kolumns.special_taxonomic_handling, too bad)
 					for kolumn in kolumns.special_taxonomic_handling:
 						if kolumn in polars_df.columns and polars_df.schema[kolumn] == pl.List:
@@ -1101,11 +1107,11 @@ class NeighLib:
 							polars_df = self.drop_nulls_from_possible_list_column(polars_df, kolumn)
 							current_dataframe_height = polars_df.shape[1]
 							assert dataframe_height == current_dataframe_height
-
 							polars_df = self.coerce_to_not_list_if_possible(polars_df, kolumn, index_column, prefix_arrow=True)
+					
 					if polars_df.schema[col] == pl.List: # since it might not be after coerce_to_not_list_if_possible()
-						#long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
-						long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage']) # TODO: BAD WORKAROUND
+						long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
+						#long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage']) # TODO: BAD WORKAROUND
 						if len(long_boi) > 0:
 							# TODO: more rules could be added, and this is a too TB specific, but for my purposes it's okay for now
 							if col == 'organism' and polars_df.schema['organism'] == pl.List:
@@ -1152,10 +1158,10 @@ class NeighLib:
 								# We'll treat every remaining conflict as invalid and null it 
 								polars_df = polars_df.with_columns(pl.when((pl.col('lineage').list.len() > 1)).then(None).otherwise(pl.col("lineage")).alias('lineage'))
 							
-							#long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
-							long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage']) # TODO BAD WORKAROUND
-							print(f"After delongating {col}...")
-							print(long_boi)
+							if self.logging.getEffectiveLevel() == 10:
+								long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(self.valid_cols(long_boi, ['sample_index', 'clade', 'organism', 'lineage', 'strain']))
+								self.logging.debug(f"Non-1 {col} values after attempting to de-long them")
+								self.logging.debug(long_boi)
 							polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
 						else:
 							self.logging.debug(f"Taxoncore column {col} will not be adjusted further")
@@ -1204,8 +1210,12 @@ class NeighLib:
 				elif col in kolumns.list_fallback_or_null:
 					# If this had happened during a merge of two dataframes, we would be falling back on one df or the other. But here, we
 					# don't know what value to fall back upon, so it's better to just null this stuff.
-					self.logging.warning(f"{col}\n-->[kolumns.list_fallback_or_null] Expected {col} to only have one non-null per sample, but that's not the case. Will null those bits.")
-					polars_df = polars_df.with_columns(pl.col(col).list.unique())
+					polars_df = polars_df.with_columns(pl.col(col).list.unique()) # just in case sure
+					bad_ones = polars_df.filter(pl.col(col).list.len() > 1)
+					self.logging.warning(f"{col}\n-->[kolumns.list_fallback_or_null] Expected {col} to only have one non-null per sample, but found {bad_ones.shape[0]} conflicts (will be nulled).")
+					if self.logging.getEffectiveLevel() == 10:
+						print_cols = self.valid_cols(bad_ones, ['sample_index', 'run_index', col, 'continent' if col != 'continent' else 'country'])
+						self.super_print_pl(bad_ones.select(print_cols), "Conflicts")
 					polars_df = polars_df.with_columns([
 						pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
 					])
@@ -1397,6 +1407,9 @@ class NeighLib:
 					return valid_rows
 			else:
 				continue
+		# double check no funny business
+		duplicates = polars_df.filter(polars_df[index_column].is_duplicated())
+		assert polars_df.filter(polars_df[index_column].is_duplicated()).shape[0] == 0
 		return polars_df
 
 	def drop_non_tb_columns(self, polars_df):
@@ -1542,6 +1555,9 @@ class NeighLib:
 
 	def tsv_value_counts(self, polars_df, vcount_column, path):
 		self.polars_to_tsv(polars_df.select([pl.col(vcount_column).value_counts(sort=True)]).unnest(vcount_column), path, null_value='null')
+
+	def multiply_and_trim(self, col: str) -> pl.Expr:
+		return (pl.col(col) * 100).round(3).cast(pl.Float64)
 
 	def polars_to_tsv(self, polars_df, path: str, null_value=''):
 		df_to_write = self.drop_null_columns(polars_df)
