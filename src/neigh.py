@@ -1210,22 +1210,33 @@ class NeighLib:
 				elif col in kolumns.list_fallback_or_null:
 					# If this had happened during a merge of two dataframes, we would be falling back on one df or the other. But here, we
 					# don't know what value to fall back upon, so it's better to just null this stuff.
-					polars_df = polars_df.with_columns(pl.col(col).list.unique()) # just in case sure
+					polars_df = polars_df.with_columns(pl.col(col).list.unique())
 					bad_ones = polars_df.filter(pl.col(col).list.len() > 1)
-					self.logging.warning(f"{col}\n-->[kolumns.list_fallback_or_null] Expected {col} to only have one non-null per sample, but found {bad_ones.shape[0]} conflicts (will be nulled).")
-					if self.logging.getEffectiveLevel() == 10:
-						print_cols = self.valid_cols(bad_ones, ['sample_index', 'run_index', col, 'continent' if col != 'continent' else 'country'])
-						self.super_print_pl(bad_ones.select(print_cols), "Conflicts")
-					polars_df = polars_df.with_columns([
-						pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
-					])
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
-					#assert len(self.get_rows_where_list_col_more_than_one_value(polars_df, col, False)) == 0 # beware: https://github.com/pola-rs/polars/issues/19987
-					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set-and-shrink (!!!WARNING!!)'})
-					if hard_stop:
-						exit(1)
+					if len(bad_ones) > 1:
+						self.logging.warning(f"{col}\n-->[kolumns.list_fallback_or_null] Expected {col} to only have one non-null per sample, but found {bad_ones.shape[0]} conflicts (will be nulled).")
+						if self.logging.getEffectiveLevel() == 10:
+							print_cols = self.valid_cols(bad_ones, ['sample_index', 'run_index', col, 'continent' if col != 'continent' else 'country'])
+							self.super_print_pl(bad_ones.select(print_cols), "Conflicts")
+						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+						polars_df = polars_df.with_columns(
+							pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
+						)
+						#assert len(self.get_rows_where_list_col_more_than_one_value(polars_df, col, False)) == 0 # beware: https://github.com/pola-rs/polars/issues/19987
+						if hard_stop:
+							exit(1)
+						else:
+							what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set-and-shrink (!!!WARNING!!)'})
+							continue
 					else:
-						continue
+						self.logging.debug(f"{col}\n-->[kolumns.list_fallback_or_null] {col} is type list, but it seems all lists have a len of 1 or 0")
+						non_nulls_in_this_column = polars_df.select(pl.count(col)).item() # only counts non-nulls, see https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.count.html
+						# do not run pl.when(col).list.len() <= 1 expression here, that doesn't work for some reason
+						polars_df = polars_df.with_columns(
+							pl.when(pl.col(col).list.len() <= 1).then(pl.col(col).first()).otherwise(None).alias(col)
+						)
+						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+						assert polars_df.select(pl.count(col)).item() == non_nulls_in_this_column
+
 				else:
 					self.logging.warning(f"{col}-->Not sure how to handle, will treat it as a set")
 					polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))

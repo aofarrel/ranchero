@@ -71,7 +71,7 @@ class FileReader():
 				dict_list.append(clean_row)
 		return dict_list
 
-	def from_run_selector(self, csv, drop_columns=list(), check_index=_cfg_check_index, auto_rancheroize=_cfg_auto_rancheroize):
+	def polars_from_ncbi_run_selector(self, csv, drop_columns=list(), check_index=_cfg_check_index, auto_rancheroize=_cfg_auto_rancheroize):
 		"""
 		1. Read CSV
 		2. Drop columns in drop_columns, if any
@@ -113,8 +113,8 @@ class FileReader():
 		auto_standardize = self._sentinal_handler(auto_standardize)
 		ignore_polars_read_errors = self._sentinal_handler(ignore_polars_read_errors)
 
-		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, glob=glob,
-								null_values=null_values, ignore_errors=ignore_polars_read_errors)
+		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, 
+			ignore_errors=ignore_polars_read_errors, glob=glob)
 		if len(drop_columns) != 0:
 			polars_df = polars_df.drop(drop_columns)
 			self.logging.info(f"Dropped {drop_columns}")
@@ -129,8 +129,8 @@ class FileReader():
 				)
 
 		if explode_upon != None:
-			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True),
-															delimiter=explode_upon, drop_new_non_unique=check_index)
+			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), 
+				delimiter=explode_upon, drop_new_non_unique=check_index)
 		if check_index: NeighLib.check_index(polars_df)
 		if auto_rancheroize: 
 			self.logging.info("Rancheroizing dataframe from TSV...")
@@ -364,7 +364,7 @@ class FileReader():
 			return NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by('run_index').agg(
 				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != 'run_index']
 			))
-	
+
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
 		with open(bq_file, 'r') as in_file:
@@ -417,9 +417,7 @@ class FileReader():
 		
 		self.logging.info(f"Normalizing {attributes_rows} rows (this might take a while)...")
 		just_attributes_df = pl.json_normalize(pandas_attributes_series, strict=False, max_level=1, infer_schema_length=100000)
-
-		assert polars_df.shape[0] == just_attributes_df.shape[0], f"Polars dataframe has {polars_df.shape[0]} rows, "
-		"but normalized attributes we want to horizontally combine it with has {just_attributes_df.shape[0]} rows" 
+		assert polars_df.shape[0] == just_attributes_df.shape[0], f"Polars dataframe has {polars_df.shape[0]} rows, but normalized attributes we want to horizontally combine it with has {just_attributes_df.shape[0]} rows" 
 
 		if self.logging.getEffectiveLevel() == 10: self.logging.info("Concatenating to the original dataframe...")
 		if collection_date_sam_workaround and 'collection_date_sam' in polars_df.columns:
@@ -492,6 +490,7 @@ class FileReader():
 		"""
 		At the cost of a slower initial process, this ultimately saves 10-20 seconds upon being flattened.
 		"""
+		self.logging.debug("Using some tricks...")
 		non_index_columns = [col for col in polars_df.columns if col not in [run_index, sample_index]]
 		listbusters, listmakers, listexisters = [], [], [col for col, dtype in polars_df.schema.items() if (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8)]
 		
@@ -525,8 +524,9 @@ class FileReader():
 			])
 		)
 
-		NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
-		NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
+		if self.logging.getEffectiveLevel() == 10:
+			NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
+			NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
 
 		return grouped_df_
 
@@ -551,13 +551,13 @@ class FileReader():
 		[SRR126]        | SAMN3        | [bar]
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
+		NeighLib.check_index(polars_df, manual_index_column=run_index)
 		assert sample_index in polars_df.columns
 		assert run_index in polars_df.columns
 		self.logging.debug(f"Sample index {sample_index} is in columns, and so is run index {run_index}")
 
 		self.logging.debug("Before changing the dataframe, null counts in each column are as follows:")
 		self.logging.debug(polars_df.null_count())
-
 		duplicated_samples = polars_df.filter(pl.col(run_index).is_duplicated())
 		if duplicated_samples.shape[0] > 0:
 			if drop_bad_news:
@@ -580,7 +580,6 @@ class FileReader():
 
 		self.logging.debug("After check_index(), null counts in each column are as follows:")
 		self.logging.debug(polars_df.null_count())
-
 		nulls_in_sample_index = polars_df.with_columns(pl.when(
 			pl.col(sample_index).is_null())
 			.then(pl.col(run_index))
@@ -595,7 +594,6 @@ class FileReader():
 					To drop these in-place instead of erroring, set drop_bad_news to True. Here's {run_index} where {sample_index} is null:""")
 				NeighLib.super_print_pl(nulls_in_sample_index)
 				exit(1)
-
 		self.logging.debug("After handling of nulls in sample index, null counts in each column are as follows:")
 		self.logging.debug(polars_df.null_count())
 
@@ -603,15 +601,7 @@ class FileReader():
 			self.logging.debug("Rancheroizing run-indexed dataframe")
 			polars_df = NeighLib.rancheroize_polars(polars_df) # runs check_index()
 		else:
-			self.logging.debug("NOT rancheroizing run-indexed dataframe")
 			NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
-
-		self.logging.debug("After rancheroize (or not), null counts in each column are as follows:")
-		self.logging.debug(polars_df.null_count())
-
-		# TODO: REALLY BAD WORKAROUND!!!
-		if 'strain' in polars_df:
-			polars_df = polars_df.drop('strain')
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		polars_df = NeighLib.null_lists_of_len_zero(
@@ -619,10 +609,6 @@ class FileReader():
 				self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)
 			)
 		)
-
-		self.logging.debug("After null lists of len zero, null counts in each column are as follows:")
-		self.logging.debug(polars_df.null_count())
-
 		duplicated_samples = polars_df.filter(pl.col(sample_index).is_duplicated())
 		if duplicated_samples.shape[0] > 0:
 			if drop_bad_news:
@@ -633,11 +619,6 @@ class FileReader():
 					To drop these in-place instead of erroring, set drop_bad_news to True. Here's {run_index} where {sample_index} is null:""")
 				NeighLib.super_print_pl(duplicated_samples)
 				exit(1)
-
-		self.logging.debug("At end of this function, null counts in each column are as follows")
-		self.logging.debug(polars_df.null_count())
-		self.logging.debug("Returning...")
-
 		return polars_df
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search_and_host_info=True):

@@ -34,7 +34,7 @@ translate_HPRC_IDs = _NeighLib.translate_HPRC_IDs
 
 from_tsv = _FileReader.polars_from_tsv
 from_bigquery = _FileReader.polars_from_bigquery
-from_run_selector = _FileReader.from_run_selector
+from_run_selector = _FileReader.polars_from_ncbi_run_selector
 from_efetch = _FileReader.from_efetch
 from_edirect = _FileReader.from_efetch # might as well sure
 fix_json = _FileReader.fix_bigquery_file
