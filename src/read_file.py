@@ -116,6 +116,8 @@ class FileReader():
 
 		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, 
 			ignore_errors=ignore_polars_read_errors, glob=glob)
+		if index is not None:
+			polars_df = polars_df.index.set_index(index)
 		if len(drop_columns) != 0:
 			polars_df = polars_df.drop(drop_columns)
 			self.logging.info(f"Dropped {drop_columns}")

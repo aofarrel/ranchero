@@ -2,8 +2,9 @@
 
 import os
 import re
-import polars as pl
+import weakref
 import datetime
+import polars as pl
 from src.statics import kolumns, drop_zone, null_values, HPRC_sample_ids
 from polars.testing import assert_series_equal
 import polars.selectors as cs
@@ -27,6 +28,46 @@ _SENTINEL_TO_CONFIG = {
 	_cfg_indicator_column: "indicator_column",
 	_cfg_rm_not_pared_illumina: "rm_not_pared_illumina",
 }
+
+# We want some functions to be aware of a dataframe's "index" column. An index column (as
+# Ranchero defines it):
+# 	* column that already exists in the dataframe
+#	* has no null values
+#	* unique across all rows
+#	* has type string
+# This is NOT the same as polars.DataFrame.with_row_index(), which is just unsigned ints.
+# For various reasons we're trying to use polar's API to extend functionality.
+# pl.Dataframe is unhashable, so we can't use a pl.Dataframe as a key in WeakKeyDictionary()
+# TODO: It seems like it might be tricky to make this consistent.
+_index_registry = {}
+_df_weakrefs = weakref.WeakValueDictionary()
+
+@pl.api.register_dataframe_namespace("index")
+class IndexedDataframe:
+	def __init__(self, df: pl.DataFrame) -> None:
+		self._df = df
+		self._df_id = id(df)
+		if _df_weakrefs.get(self._df_id) is not self._df: # TODO: does this if statement allow for stale refs?
+			_df_weakrefs[self._df_id] = df
+
+	def set_index(self, index_column: str) -> pl.DataFrame:
+		if index_column is None:
+			raise ValueError("Why are you setting the index to None?") # TODO: make this a warning once I make sure all functions are converted properly
+		if index_column not in self._df.columns:
+			raise ValueError(f"Column {index_column} not in DataFrame.")
+		_index_registry[self._df_id] = index_column
+		_df_weakrefs[self._df_id] = self._df  # refresh ref
+		print(f"Assigned {self._df.shape[0]}x{self._df.shape[1]} df to id {self._df_id} and its index to {index_column}")
+		return self._df
+
+	def get_index(self) -> str | None:
+		global _df_weakrefs
+		if _df_weakrefs.get(self._df_id) is not self._df:
+			return None  # stale ID reused, or different object
+		return _index_registry.get(self._df_id)
+
+	def has_index(self) -> bool:
+		return self.get_index() is not None
 
 class NeighLib:
 	def __init__(self, configuration: RancheroConfig = None):
@@ -131,6 +172,8 @@ class NeighLib:
 		sample_matches = [col for col in sample_indeces if col in polars_df.columns]
 		run_indeces = kolumns.equivalence['run_index']
 		run_matches = [col for col in run_indeces if col in polars_df.columns]
+
+		print(polars_df.index.get_index())
 
 		# more than one sample index, arbitrary number of run indeces
 		if len(sample_matches) > 1:
@@ -442,6 +485,7 @@ class NeighLib:
 		Turns stuff like "not collected" and "n/a" into pl.Null values, per null_values.py,
 		and nulls lists that have a length of zero
 		"""
+		stored_index_column = self.index_handler_no_specify(polars_df)
 		all_cols = only_these_columns if only_these_columns is not None else polars_df.columns
 		if type(all_cols) == str: # idk man im tired
 			all_cols = [all_cols]
@@ -455,6 +499,7 @@ class NeighLib:
 		# first, null list columns of length 0
 		self.logging.debug("First pass of nulling lists of len zero")
 		polars_df = self.null_lists_of_len_zero(polars_df)
+		polars_df.index.set_index(stored_index_column)
 
 		# use contains_any() for the majority of checks, as it is much faster than iterating through a list + contains()
 		# the downside of contains_any() is that it doesn't allow for regex
@@ -486,7 +531,9 @@ class NeighLib:
 		
 		# do this one more time since we may have dropped some values
 		self.logging.debug("Second pass of nulling lists of len zero")
+		polars_df.index.set_index(stored_index_column) # to prevent null_lists_of_len_zero() setting index to None
 		polars_df = self.null_lists_of_len_zero(polars_df)
+		polars_df.index.set_index(stored_index_column)
 		return polars_df
 
 	def mark_rows_with_value(self, polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
@@ -928,9 +975,8 @@ class NeighLib:
 			elif check_index:
 				assert self.get_null_count_in_column(polars_df, self.get_index_column(polars_df)) == 0
 
-		print(index)
 		if flatten:
-			polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False) # this makes merging better for "geo_loc_name_sam"
+			polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False, force_index=polars_df.index.get_index()) # this makes merging better for "geo_loc_name_sam"
 		if disallow_right:
 			assert len([col for col in polars_df.columns if col.endswith("_right")]) == 0, "Found columns with _right in their name, indicating a merge failure"
 		if self.cfg.paired_illumina_only:
@@ -1037,10 +1083,10 @@ class NeighLib:
 		If force_strings, any remaining columns that are still lists are forced into strings.
 		"""
 		# Do not run check index first, as it will break when this is run right after run-to-sample conversion
-		if force_index is None:
-			index_column = self.get_index_column(polars_df)
+		if force_index is None and polars_df.index.get_index() is None:
+			index = self.get_index_column(polars_df)
 		else:
-			index_column = force_index
+			index = force_index
 
 		null_counts_before = polars_df.filter(pl.col(col).null_count() > 0 for col in polars_df.columns)
 		if null_counts_before.shape[0] == 0:
@@ -1051,6 +1097,7 @@ class NeighLib:
 
 		self.logging.debug("Recursively unnesting lists...")
 		polars_df = self.flatten_nested_list_cols(polars_df)
+		polars_df.index.set_index(index)
 		self.logging.debug("Unnested all list columns. Index seems okay.")
 
 		null_counts_after = polars_df.filter(pl.col(col).null_count() > 0 for col in polars_df.columns)
@@ -1088,12 +1135,13 @@ class NeighLib:
 				try:
 					# since already handled stuff that were already delisted earlier, this should only fire if it's a list of nulls
 					polars_df = polars_df.with_columns(pl.col(col).list.drop_nulls())
+					polars_df.index.set_index(index)
 				except Exception:
 					self.logging.error(f"{col} has type {datatype} but is acting like it isn't a list -- is it full of nulls?")
 					self.logging.error(polars_df.select(col))
 					exit(1) # might be overkill
 
-				if col in kolumns.equivalence['run_index'] and index_column in kolumns.equivalence['sample_index']:
+				if col in kolumns.equivalence['run_index'] and index in kolumns.equivalence['sample_index']:
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'skipped (runs in samp-indexed df)'})
 					continue
 				
@@ -1107,11 +1155,14 @@ class NeighLib:
 					for kolumn in kolumns.special_taxonomic_handling:
 						if kolumn in polars_df.columns and polars_df.schema[kolumn] == pl.List:
 							polars_df = polars_df.with_columns(pl.col(kolumn).list.unique())
+							polars_df.index.set_index(index)
 							dataframe_height = polars_df.shape[1]
 							polars_df = self.drop_nulls_from_possible_list_column(polars_df, kolumn)
+							polars_df.index.set_index(index)
 							current_dataframe_height = polars_df.shape[1]
 							assert dataframe_height == current_dataframe_height
-							polars_df = self.coerce_to_not_list_if_possible(polars_df, kolumn, index_column, prefix_arrow=True)
+							polars_df = self.coerce_to_not_list_if_possible(polars_df, kolumn, index, prefix_arrow=True)
+							polars_df.index.set_index(index)
 					
 					if polars_df.schema[col] == pl.List: # since it might not be after coerce_to_not_list_if_possible()
 						long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
@@ -1166,7 +1217,7 @@ class NeighLib:
 								long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(self.valid_cols(long_boi, ['sample_index', 'clade', 'organism', 'lineage', 'strain']))
 								self.logging.debug(f"Non-1 {col} values after attempting to de-long them")
 								self.logging.debug(long_boi)
-							polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+							polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index, prefix_arrow=True)
 						else:
 							self.logging.debug(f"Taxoncore column {col} will not be adjusted further")
 				
@@ -1199,7 +1250,7 @@ class NeighLib:
 						pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
 					])
 					print(f"-->Set null in conflicts, now trying to delist") if self.logging.getEffectiveLevel() == 10 else None
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'null conflicts'})
 					continue
 				
@@ -1207,7 +1258,7 @@ class NeighLib:
 					print(f"{col}\n-->[kolumns.list_to_set_uniq]") if self.logging.getEffectiveLevel() == 10 else None
 					polars_df = polars_df.with_columns(pl.col(col).list.unique())
 					print("-->Used uniq, now trying to delist") if self.logging.getEffectiveLevel() == 10 else None
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set-and-shrink'})
 					continue
 					
@@ -1221,7 +1272,7 @@ class NeighLib:
 						if self.logging.getEffectiveLevel() == 10:
 							print_cols = self.valid_cols(bad_ones, ['sample_index', 'run_index', col, 'continent' if col != 'continent' else 'country'])
 							self.super_print_pl(bad_ones.select(print_cols), "Conflicts")
-						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index, prefix_arrow=True)
 						polars_df = polars_df.with_columns(
 							pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
 						)
@@ -1244,7 +1295,7 @@ class NeighLib:
 				else:
 					self.logging.warning(f"{col}-->Not sure how to handle, will treat it as a set")
 					polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set (no rules)'})
 					continue
 
@@ -1257,6 +1308,7 @@ class NeighLib:
 		
 		if force_strings:
 			if just_these_columns is None:
+				polars_df.index.set_index(index)
 				polars_df = self.stringify_all_list_columns(polars_df)
 			else:
 				for column in just_these_columns:
@@ -1266,6 +1318,7 @@ class NeighLib:
 		if self.logging.getEffectiveLevel() <= 10:
 			NeighLib.super_print_pl(report, "Finished flattening list columns. Results:")
 		self.logging.debug("Returning flattened dataframe")
+		polars_df.index.set_index(index)
 		return polars_df
 
 	def rstrip(self, polars_df, column, strip_char=" "):
@@ -1427,14 +1480,26 @@ class NeighLib:
 		assert polars_df.filter(polars_df[index_column].is_duplicated()).shape[0] == 0
 		return polars_df
 
+	def index_handler_no_specify(self, polars_df):
+		# Used to handle functions that do not take in an index, but if a dataframe does have an index, it should be
+		# reapplied after the dataframe is mutated (or rather, after a new dataframe object overwrites it)
+		return polars_df.index.get_index()
+
 	def drop_non_tb_columns(self, polars_df):
+		stored_index_column = self.index_handler_no_specify(polars_df)
 		dont_drop_these = [col for col in polars_df.columns if col not in drop_zone.clearly_not_tuberculosis]
-		return polars_df.select(dont_drop_these)
+		polars_df = polars_df.select(dont_drop_these)
+		polars_df.index.set_index(stored_index_column)
+		return polars_df
 
 	def drop_known_unwanted_columns(self, polars_df):
-		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.silly_columns])
+		stored_index_column = self.index_handler_no_specify(polars_df)
+		polars_df = polars_df.select([col for col in polars_df.columns if col not in drop_zone.silly_columns])
+		polars_df.index.set_index(stored_index_column)
+		return polars_df
 
 	def flatten_one_nested_list_col(self, polars_df, column):
+		stored_index_column = self.index_handler_no_specify(polars_df)
 		polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
 		if polars_df[column].schema == pl.List(pl.List):
 			polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten().drop_nulls()))
@@ -1442,16 +1507,19 @@ class NeighLib:
 			#polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
 		if polars_df[column].schema == pl.List(pl.List):
 			polars_df = self.flatten_one_nested_list_col(polars_df, column) # this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
+		polars_df.index.set_index(stored_index_column)
 		return polars_df
 
 	def flatten_nested_list_cols(self, polars_df):
 		"""There are other ways to do this, but this one doesn't break the schema, so we're sticking with it"""
+		stored_index_column = self.index_handler_no_specify(polars_df)
 		nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
 		for col in nested_lists:
 			self.logging.debug(f"Unnesting {col}")
 			polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
 			polars_df = self.flatten_one_nested_list_col(polars_df, col) # this is already recursive
-		return(polars_df)
+		polars_df.index.set_index(stored_index_column)
+		return polars_df
 
 	def cast_to_string(self, polars_df, column):
 		"""
@@ -1463,6 +1531,7 @@ class NeighLib:
 		* ["bizz"] --> "bizz"
 		* ["foo", "bar"] --> "foo"
 		"""
+		pass
 
 
 	def encode_as_str(self, polars_df, column, L_bracket='[', R_bracket=']'):
