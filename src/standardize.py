@@ -1149,7 +1149,7 @@ class ProfessionalsHaveStandards():
 		])
 		NeighLib.print_only_where_col_not_null(polars_df, 'region_as_list')
 		#polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['region_as_list'])
-		polars_df = NeighLib.stringify_one_list_column(polars_df, 'region_as_list')
+		polars_df = NeighLib.encode_as_str(polars_df, 'region_as_list')
 		polars_df = polars_df.with_columns(pl.coalesce(["region", "region_as_list"]).alias("neo_region"))
 		polars_df = polars_df.drop(['region', 'region_as_list', 'geoloc_info'])
 		polars_df = polars_df.rename({'neo_region': 'region'})

@@ -912,19 +912,23 @@ class NeighLib:
 			.select("BioProject").unique().to_series().to_list()
 		)
 	
-	def rancheroize_polars(self, polars_df, drop_non_mycobact_columns=True, nullify=True, flatten=True, disallow_right=True, check_index=True, norename=False, drop_unwanted_columns=True):
+	def rancheroize_polars(self, polars_df, drop_non_mycobact_columns=True, nullify=True, flatten=True, disallow_right=True, check_index=True, norename=False, drop_unwanted_columns=True, index=None):
 		self.logging.debug(f"Dataframe shape before rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
 		if drop_unwanted_columns:
 			polars_df = self.drop_known_unwanted_columns(polars_df)
-		self.get_null_count_in_column(polars_df, self.get_index_column(polars_df), warn=True, error=True)
 		if drop_non_mycobact_columns:
 			polars_df = self.drop_non_tb_columns(polars_df)
-
-		# BEWARE!
 		if nullify:
 			polars_df = self.drop_null_columns(self.nullify(polars_df))
-			self.get_null_count_in_column(polars_df, self.get_index_column(polars_df), warn=True, error=True)
+			
+			# check we didn't mess with the index
+			if check_index and index is not None:
+				assert index in polars_df.columns
+				assert self.get_null_count_in_column(polars_df, index) == 0
+			elif check_index:
+				assert self.get_null_count_in_column(polars_df, self.get_index_column(polars_df)) == 0
 
+		print(index)
 		if flatten:
 			polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False) # this makes merging better for "geo_loc_name_sam"
 		if disallow_right:
@@ -1256,7 +1260,7 @@ class NeighLib:
 				polars_df = self.stringify_all_list_columns(polars_df)
 			else:
 				for column in just_these_columns:
-					polars_df = self.stringify_one_list_column(polars_df, column)
+					polars_df = self.encode_as_str(polars_df, column)
 		
 		report = pl.DataFrame(what_was_done)
 		if self.logging.getEffectiveLevel() <= 10:
@@ -1431,43 +1435,42 @@ class NeighLib:
 		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.silly_columns])
 
 	def flatten_one_nested_list_col(self, polars_df, column):
+		polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
 		if polars_df[column].schema == pl.List(pl.List):
 			polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten().drop_nulls()))
+			#polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten())) # might leave hanging nulls (does earlier drop_nulls fix this though?)
+			#polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
 		if polars_df[column].schema == pl.List(pl.List):
-			polars_df = self.flatten_one_nested_list_col(polars_df, column)
+			polars_df = self.flatten_one_nested_list_col(polars_df, column) # this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
 		return polars_df
-
 
 	def flatten_nested_list_cols(self, polars_df):
 		"""There are other ways to do this, but this one doesn't break the schema, so we're sticking with it"""
 		nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
-
-		self.logging.debug(f"Nested lists: {nested_lists}")
-
-		with pl.Config(tbl_cols=-1, tbl_rows=20, fmt_str_lengths=200, fmt_table_cell_list_len=10):
-			for col in nested_lists:
-				self.logging.debug(f"unnesting {col}")
-				#if col not in self.get_valid_id_columns(polars_df):
-					#self.print_only_where_col_list_is_big(polars_df, col)
-
-				polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
-				
-				polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten().drop_nulls()))
-				#polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten())) # leaves a bunch of hanging nulls
-				#polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
-
-				#if col not in self.get_valid_id_columns(polars_df):
-				#	self.logging.debug(f"after flatten")
-				#	self.print_only_where_col_list_is_big(polars_df, col)
-		
-		# this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
-		remaining_nests = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
-		if len(remaining_nests) != 0:
-			self.logging.debug("Recursively flattening...")
-			polars_df = self.flatten_nested_list_cols(polars_df)
+		for col in nested_lists:
+			self.logging.debug(f"Unnesting {col}")
+			polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
+			polars_df = self.flatten_one_nested_list_col(polars_df, col) # this is already recursive
 		return(polars_df)
 
-	def stringify_one_list_column(self, polars_df, column, L_bracket='[', R_bracket=']'):
+	def cast_to_string(self, polars_df, column):
+		"""
+		''Cast'' a list column into a string. Unlike encode_as_str(), brackets will not be added, nor will elements besides
+		the first (0th) member of a list be perserved (unless that member is a null, because we drop nulls from lists first)
+
+		* [] --> null
+		* [null] --> null
+		* ["bizz"] --> "bizz"
+		* ["foo", "bar"] --> "foo"
+		"""
+
+
+	def encode_as_str(self, polars_df, column, L_bracket='[', R_bracket=']'):
+		""" Unnests list/object data (but not the way explode() does it) so it can be writen to CSV format
+		Originally based on deanm0000's code, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
+
+		LIMITATIONS: This may not work as expected on pl.List(pl.Null). You may also see oddities on some pl.Object types.
+		"""
 		self.logging.debug(f"Forcing column {column} into a string")
 		assert column in polars_df.columns # throws an error because it's a series now?
 		datatype = polars_df.schema[column]
@@ -1484,8 +1487,7 @@ class NeighLib:
 			)
 			return polars_df
 		
-		# pl.Int doesn't exist and pl.List(int) doesn't seem to work, so we'll take the silly route
-		elif datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64):
+		elif datatype in [pl.List(pl.Int8), pl.List(pl.Int16), pl.List(pl.Int32), pl.List(pl.Int64), pl.List(pl.Float64)]:
 			polars_df = polars_df.with_columns((
 				pl.lit(L_bracket)
 				+ pl.col(column).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
@@ -1500,50 +1502,22 @@ class NeighLib:
 			).alias(col))
 			return polars_df
 
+		elif datatype == pl.List(pl.Datetime(time_unit='us', time_zone='UTC')):
+			polars_df = polars_df.with_columns((
+				pl.col(col).map_elements(lambda s: "[" + ", ".join(f"{item}" for item in sorted(s)) + "]" if isinstance(s, set) else str(s), return_dtype=str)
+			).alias(col))
+
+		elif datatype == pl.Utf8:
+			self.logging.debug(f"Called encode_as_str() on {column}, which already has pl.Utf8 type. Doing nothing...")
+			return polars_df
+
 		else:
 			raise ValueError(f"Tried to make {column} into a string column, but we don't know what to do with type {datatype}")
 
 	def stringify_all_list_columns(self, polars_df):
-		""" Unnests list/object data (but not the way explode() does it) so it can be writen to CSV format
-		Heavily based on deanm0000 code, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
-
-		LIMITATIONS: This may not work as expected on pl.List(pl.Null). You may also see oddities on some pl.Object types.
-		"""
 		self.logging.debug(f"Forcing ALL list columns into strings")
 		for col, datatype in polars_df.schema.items():
-			if datatype == pl.List(pl.String):
-				polars_df = polars_df.with_columns(
-					pl.when(pl.col(col).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
-					.then(pl.col(col).list.eval(pl.element()).list.join(""))
-					.otherwise(
-						pl.lit("[")
-						+ pl.col(col).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
-						+ pl.lit("]")
-					).alias(col)
-				)
-
-			# pl.Int doesn't exist and pl.List(int) doesn't seem to work, so we'll take the silly route
-			elif (datatype == pl.List(pl.Int8) or datatype == pl.List(pl.Int16) or datatype == pl.List(pl.Int32) or datatype == pl.List(pl.Int64) or datatype == pl.List(pl.Float64)):
-				polars_df = polars_df.with_columns((
-					pl.lit("[")
-					+ pl.col(col).list.eval(pl.lit("'") + pl.element().cast(pl.String) + pl.lit("'")).list.join(",")
-					+ pl.lit("]")
-				).alias(col))
-			
-			# This makes assumptions about the structure of the object and may not be universal
-			elif datatype == pl.Object:
-				polars_df = polars_df.with_columns((
-					pl.col(col).map_elements(lambda s: "{" + ", ".join(f"{item}" for item in sorted(s)) + "}" if isinstance(s, set) else str(s), return_dtype=str)
-				).alias(col))
-
-			elif datatype == pl.List(pl.Datetime(time_unit='us', time_zone='UTC')):
-				polars_df = polars_df.with_columns((
-					pl.col(col).map_elements(lambda s: "[" + ", ".join(f"{item}" for item in sorted(s)) + "]" if isinstance(s, set) else str(s), return_dtype=str)
-				).alias(col))
-
-			else:
-				continue
-
+			polars_df = self.encode_as_str(polars_df, col)
 		return polars_df
 
 	def add_column_of_just_this_value(self, polars_df, column, value):

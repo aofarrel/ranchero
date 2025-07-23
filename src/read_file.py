@@ -92,6 +92,7 @@ class FileReader():
 		return polars_df
 
 	def polars_from_tsv(self, tsv, delimiter='\t', drop_columns=list(), explode_upon=None,
+		index=None,
 		glob=True,
 		list_columns=None,
 		auto_parse_dates=_cfg_auto_parse_dates,
@@ -131,10 +132,11 @@ class FileReader():
 		if explode_upon != None:
 			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), 
 				delimiter=explode_upon, drop_new_non_unique=check_index)
-		if check_index: NeighLib.check_index(polars_df)
+		if check_index: NeighLib.check_index(polars_df, manual_index_column=index)
 		if auto_rancheroize: 
 			self.logging.info("Rancheroizing dataframe from TSV...")
-			polars_df = NeighLib.rancheroize_polars(polars_df)
+			print(index)
+			polars_df = NeighLib.rancheroize_polars(polars_df, index=index)
 			if auto_standardize:
 				self.logging.info("Standardizing dataframe from TSV...")
 				polars_df = Standardizer.standardize_everything(polars_df)
