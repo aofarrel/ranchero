@@ -119,6 +119,10 @@ class FileReader():
 		if len(drop_columns) != 0:
 			polars_df = polars_df.drop(drop_columns)
 			self.logging.info(f"Dropped {drop_columns}")
+
+		if index is not None:
+			polars_df = NeighLib.mark_index(polars_df, index)
+			index = NeighLib.get_index(polars_df, index)
 		
 		if list_columns is not None:
 			for column in list_columns:
@@ -130,12 +134,13 @@ class FileReader():
 				)
 
 		if explode_upon != None:
+			# TODO: this function call had column=NeighLib.get_index_column(polars_df, quiet=True) but I'm not sure why we
+			# would want the quiet version, since it wouldn't return a str during error cases...
 			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), 
 				delimiter=explode_upon, drop_new_non_unique=check_index)
-		if check_index: NeighLib.check_index(polars_df, manual_index_column=index)
-		if auto_rancheroize: 
+		if check_index: NeighLib.check_index(polars_df)
+		if auto_rancheroize:
 			self.logging.info("Rancheroizing dataframe from TSV...")
-			print(index)
 			polars_df = NeighLib.rancheroize_polars(polars_df, index=index)
 			if auto_standardize:
 				self.logging.info("Standardizing dataframe from TSV...")
