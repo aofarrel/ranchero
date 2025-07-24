@@ -149,9 +149,12 @@ class Merger:
 		assert n_cols_left != 0 and n_cols_right != 0
 		if indicator is _DEFAULT_TO_CONFIGURATION:
 			indicator = self.cfg.indicator_column
+		left, right = NeighLib.drop_null_columns(left), NeighLib.drop_null_columns(right)
 
-		left = NeighLib.check_index(NeighLib.drop_null_columns(left), force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon)
-		right = NeighLib.check_index(NeighLib.drop_null_columns(right), force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon)
+		# merge_upon is not necessarily the index of either dataframe, but in the short term we want it to act like one (that is to say, fully
+		# unique, no nulls, etc)
+		left = NeighLib.check_index(left, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True)
+		right = NeighLib.check_index(right, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True)
 
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:

@@ -101,7 +101,6 @@ class NeighLib:
 
 	def has_multiple_index_columns(self, polars_df: pl.DataFrame):
 		if len([col for col in polars_df.columns if col.startswith(INDEX_PREFIX)]) > 1:
-			print([col for col in polars_df.columns if col.startswith(INDEX_PREFIX)])
 			return True
 		return False
 
@@ -127,7 +126,8 @@ class NeighLib:
 			manual_index_column=None, 
 			force_NCBI_runs=_cfg_force_SRR_ERR_DRR_run_index, 
 			force_BioSamples=_cfg_force_SAMN_SAME_SAMD_sample_index,
-			dupe_index_handling=_cfg_dupe_index_handling
+			dupe_index_handling=_cfg_dupe_index_handling,
+			allow_bad_name=False
 			):
 		"""
 		Check a polars dataframe's apparent index, which is expected to be either run accessions or sample accessions, for the following issues:
@@ -140,8 +140,6 @@ class NeighLib:
 		dupe_index_handling = self._sentinal_handler(dupe_index_handling)
 		force_NCBI_runs = self._sentinal_handler(force_NCBI_runs)
 		force_BioSamples = self._sentinal_handler(force_BioSamples)
-
-		print(polars_df)
 
 		if self.has_multiple_index_columns(polars_df):
 			if try_to_fix:
@@ -165,9 +163,13 @@ class NeighLib:
 					self.logging.error(f"Manual index column set to {manual_index_column}, but that column isn't in the dataframe! (it may already be marked as an index column though, try running with try_to_fix=True)")
 					raise ValueError(f"Manual index column set to {manual_index_column}, but that column isn't in the dataframe! (it may already be marked as an index column though, try running with try_to_fix=True)")
 			elif manual_index_column != self.get_index(polars_df, guess=False):
-				self.logging.error(f"manual_index_column={manual_index_column} but dataframe already has supposed index {self.get_index(polars_df, guess=False)}")
-				raise ValueError(f"manual_index_column={manual_index_column} but dataframe already has supposed index {self.get_index(polars_df, guess=False)}")
-			index_to_check = manual_index_column # no need to mark it, it's already marked
+				if not allow_bad_name: # for merge_upon checks, etc
+					self.logging.error(f"manual_index_column={manual_index_column} but dataframe already has supposed index {self.get_index(polars_df, guess=False)}")
+					raise ValueError(f"manual_index_column={manual_index_column} but dataframe already has supposed index {self.get_index(polars_df, guess=False)}")
+				self.logging.warning(f"You're checking {manual_index_column} as if it were an index, but index column {self.get_idnex(polars_df, guess=False)} also exists. I'll allow it, reluctantly.")
+				index_to_check = manual_index_column # no need to mark it, it's already marked
+			else:
+				index_to_check = manual_index_column
 		else:
 			if self.has_one_index_column(polars_df):
 				index_to_check = self.get_index(polars_df, guess=False)
@@ -180,13 +182,12 @@ class NeighLib:
 				else:
 					index_to_check = self.get_index(polars_df, guess=False)
 					assert index_to_check is not None
-		print(polars_df)
 
 		assert index_to_check is not None
-		assert index_to_check.startswith(INDEX_PREFIX)
-		print(polars_df.schema)
 		assert polars_df.schema[index_to_check] == pl.Utf8
-		assert self.get_index(polars_df) == index_to_check
+		if not allow_bad_name:
+			assert index_to_check.startswith(INDEX_PREFIX)
+			assert self.get_index(polars_df) == index_to_check
 
 		# check for leading and lagging whitespace -- note that this check is a little slow, and the fix is VERY slow
 		#if polars_df.filter(pl.col(index_to_check).str.starts_with(" ")).size[0] != 0:
@@ -203,15 +204,15 @@ class NeighLib:
 		if nulls > 0:
 			self.logging.warning(f"Dropped {nulls} row(s) with null value(s) in index column {index_to_check}")
 			polars_df = polars_df.filter(pl.col(index_to_check).is_not_null())
-			nulls = self.get_null_count_in_column(polars_df, self.get_index(polars_df, guess=False), warn=False, error=False)
+			nulls = self.get_null_count_in_column(polars_df, index_to_check, warn=False, error=False)
 			if nulls > 0:
-				self.logging.error(f"Failed to remove null values from index column {self.get_index(polars_df, guess=False)}")
+				self.logging.error(f"Failed to remove null values from index column {index_to_check}")
 				raise ValueError
 		
 		# check for duplicates
 		# TODO: dupe_index_handling should probably align with try_to_fix behavior
-		assert polars_df.schema[self.get_index(polars_df, guess=False)] == pl.Utf8  # in case entire column got nulled and datatype became pl.Null
-		duplicate_df = polars_df.filter(polars_df[self.get_index(polars_df, guess=False)].is_duplicated())
+		assert polars_df.schema[index_to_check] == pl.Utf8  # in case entire column got nulled and datatype became pl.Null
+		duplicate_df = polars_df.filter(polars_df[index_to_check].is_duplicated())
 		n_dupe_indeces = len(duplicate_df)
 		#if len(polars_df) != len(polars_df.unique(subset=[index_to_check], keep="any")):
 		if n_dupe_indeces > 0:
