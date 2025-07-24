@@ -235,7 +235,9 @@ class Merger:
 			self.logging.debug("These dataframes do not have any non-index columns in common.")
 			if n_cols_right == n_cols_left:
 				initial_merge = left.sort(merge_upon).merge_sorted(right.sort(merge_upon), merge_upon).unique().sort(merge_upon)
-				self.logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {initial_merge.shape[0]} rows (difference: {initial_merge.shape[0] - n_rows_left})")
+				infostr1 = f"Merged a {n_rows_left}x{n_cols_left} df with a {n_rows_right}x{n_cols_right} df upon {merge_upon}. "
+				infostr2 = f"Final dataframe is {initial_merge.shape} and index {NeighLib.get_index(initial_merge)}.  "
+				self.logging.info(infostr1 + infostr2)
 				merged_dataframe = initial_merge
 			else:
 				merged_dataframe = left.join(right, merge_upon, how="outer_coalesce").unique()
@@ -416,9 +418,11 @@ class Merger:
 			really_merged_no_dupes = really_merged.unique() # this doesn't actually help with duplicate indeces
 			duplicated_indices = really_merged_no_dupes.filter(pl.col(merge_upon).is_duplicated())
 			assert duplicated_indices.shape[0] == 0 # TODO: unless we allow dupes in index i guess
-			self.logging.info(f"""Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe.
-			Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})
-			The columns that were merged were:{''.join(thing for thing in merged_columns)}""")
+
+			infostr1 = f"Merged a {n_rows_left}x{n_cols_left} df with a {n_rows_right}x{n_cols_right} df upon {merge_upon}. "
+			infostr2 = f"Final dataframe is {really_merged_no_dupes.shape} and index {NeighLib.get_index(really_merged_no_dupes)}. "
+			infostr3 = f"The columns that were merged were:{''.join(thing for thing in merged_columns)}"
+			self.logging.info(infostr1 + infostr2 + infostr3)
 			merged_dataframe = really_merged_no_dupes
 
 		self.logging.debug("Checking merged dataframe for unexpected rows...")
