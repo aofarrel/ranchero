@@ -78,7 +78,7 @@ class NeighLib:
 					return col
 			raise ValueError("We thought there was an index, but can't find a column with the index prefix!")
 		if guess:
-			return guess_index_column(self, polars_df)
+			return self.guess_index_column(polars_df)
 		return None
 
 	def get_index_subname(self, polars_df: pl.DataFrame) -> str | None:
@@ -578,17 +578,20 @@ class NeighLib:
 			print(polars_df)
 
 	@staticmethod
-	def super_print_pl(polars_df, header, select=None):
+	def super_print_pl(polars_df, header, select=None, str_len=45):
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
+		try:
+			polars_df = polars_df.fill_null("-")
+		except Exception: # TODO: be more specific, it's some kind of polars type error
+			self.logging.warning("Cannot fill null values with strings; print below may have empty row")
 		if select is not None:
 			valid_selected_columns = [col for col in select if col in polars_df.columns]
-			print(valid_selected_columns)
-			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
+			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=str_len, fmt_table_cell_list_len=10):
 				print(polars_df.select(valid_selected_columns))
 		else:
-			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
+			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=str_len, fmt_table_cell_list_len=10):
 				print(polars_df)
 
 	def print_schema(self, polars_df):
@@ -756,6 +759,10 @@ class NeighLib:
 		polars_df = self.null_lists_of_len_zero(polars_df)
 		return polars_df
 
+	def assert_no_list_columns(self, polars_df: pl.DataFrame):
+		list_cols = [name for name, dtype in polars_df.schema.items() if isinstance(dtype, pl.List)]
+		assert not list_cols, f"Found list columns: {list_cols}"
+
 	def mark_rows_with_value(self, polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
 		#polars_df = polars_df.with_columns(pl.lit("").alias(new_column))
 		polars_df = polars_df.with_columns(
@@ -844,7 +851,7 @@ class NeighLib:
 				combined_dict[d['k']] = d['v']
 		return combined_dict
 
-	def try_nullfill(self, polars_df, left_col, right_col):
+	def try_nullfill_left(self, polars_df, left_col, right_col):
 		before = self.get_null_count_in_column(polars_df, left_col, warn=False)
 		if polars_df.schema[left_col] is pl.List or before <= 0:
 			self.logging.debug(f"{left_col} is a list or has no nulls, will not nullfill")
@@ -980,7 +987,7 @@ class NeighLib:
 					pl.when((pl.col(right_col) != pl.col(left_col)).and_(pl.col(right_col).is_not_null())).then(pl.col(right_col)).otherwise(pl.col(left_col)).alias(left_col)
 				])
 			else:
-				polars_df = self.try_nullfill(polars_df, left_col, right_col)[0]
+				polars_df = self.try_nullfill_left(polars_df, left_col, right_col)[0]
 				polars_df = polars_df.with_columns([
 					pl.when((pl.col(right_col) != pl.col(left_col)).and_(pl.col(right_col).is_not_null()).and_(pl.col(left_col).is_not_null())).then(pl.col(right_col)).otherwise(None).alias(right_col),
 				])
@@ -1054,15 +1061,17 @@ class NeighLib:
 
 			# in all other cases, try nullfilling
 			#else:
-			if polars_df.schema[base_col] == pl.List(pl.Boolean) or polars_df.schema[base_col] == pl.List(pl.Boolean):
+			if polars_df.schema[base_col] == pl.List(pl.Boolean) or polars_df.schema[right_col] == pl.List(pl.Boolean):
 				polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[base_col, right_col], force_index=index_column)
 				if polars_df.schema[base_col] == pl.List(pl.Boolean) or polars_df.schema[base_col] == pl.List(pl.Boolean):
 					self.logging.warning("List of booleans detected and cannot be flattened! Nulls may propagate!")
 			else:
-				polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col)
+				polars_df, nullfilled = self.try_nullfill_left(polars_df, base_col, right_col)
 			try:
 				# TODO: this breaks in situations like when we add Brites before Bos, since Brites has three run accessions with no sample_index,
 				# resulting in assertionerror but no printed conflicts
+
+				# BE AWARE THAT THIS WILL FIRE IF ONE OF THEM HAS NULL VALUES WHERE THE OTHER DOES NOT
 				assert_series_equal(polars_df[base_col], polars_df[right_col].alias(base_col))
 				polars_df = polars_df.drop(right_col)
 				self.logging.debug(f"All values in {base_col} and {right_col} are the same after an filling in each other's nulls. Dropped {right_col}.")
@@ -1073,8 +1082,13 @@ class NeighLib:
 			# everything past this point in this for loop only fires if the assertion error happened!
 			if base_col in kolumns.list_throw_error:
 				self.logging.error(f"[kolumns.list_throw_error] {base_col} --> Fatal error. There should never be lists in this column.")
-				print_cols = [base_col, right_col, index_column, self.cfg.indicator_column] if self.cfg.indicator_column in polars_df.columns else [base_col, right_col, index_column]
-				self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(print_cols), f"conflicts")
+				print_cols = [base_col, right_col, index_column]
+				#print_cols = [base_col, right_col, index_column, self.cfg.indicator_column] if self.cfg.indicator_column in polars_df.columns else [base_col, right_col, index_column]
+				if len(polars_df.filter(pl.col(base_col) != pl.col(right_col))) == 0:
+					self.logging.error("All conflicts seem to be due to null values")
+					assert_series_equal(polars_df[base_col], polars_df[right_col].alias(base_col)) # this will provide more helpful output than super_print_pl
+				else:
+					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(print_cols), f"conflicts")
 				exit(1)
 
 			elif base_col in kolumns.special_taxonomic_handling:
@@ -1179,32 +1193,72 @@ class NeighLib:
 			.select("BioProject").unique().to_series().to_list()
 		)
 	
-	def rancheroize_polars(self, polars_df, drop_non_mycobact_columns=True, nullify=True, flatten=True, disallow_right=True, check_index=True, norename=False, drop_unwanted_columns=True, index=None):
+	def rancheroize_polars(self, polars_df:  pl.DataFrame,
+			drop_non_mycobact_columns=True,
+			nullify=True,
+			flatten=True,
+			disallow_right=True,
+			check_index=True,
+			norename=False,
+			drop_unwanted_columns=True,
+			index=None,         # name of column NOT in dataframe you want to rename the index to, ex "__index__runacc"
+			rename_index=None): # name of column NOT in dataframe you want to rename the index to, ex "__index__runacc"
+		# Examples of how index and rename_index work together:
+		# If dataframe has columns ['run', 'BioSample', 'date_collected'] and you call rancheroize_polars(index="run", rename_index="__index__runacc",
+		# the 'run' column will be renamed to '__index__runacc' and '__index__runacc' will act as your index.
+		#
+		# If you are going to be swapping your dataframe's index at some point, or running any group_by() stuff on it, it's
+		# highly recommended your index columns be either {INDEX_PREFIX}_run or  {INDEX_PREFIX}_sample as ranchero has special handling
+		# to help keep BioSamples and runs working as expecting -- so, if your input dataframe has the aforementioned columns,
+		# it's best to rancheroize_polars(index='run', rename_index='__index__run') if INDEX_PREFIX=='__index__'.
+		#
+		# You can use rename_index to force an index that doesn't start with INDEX_PREFIX but this isn't recommended as some ranchero
+		# functions depend on knowing what a dataframe's index is.
 		self.logging.debug(f"Dataframe shape before rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
+		self.logging.debug(f"Dataframe has these columns before rancheroizing: {polars_df.columns}")
 		
-		# A rancheroized dataframe should always have some kind of index
+		# A rancheroized dataframe should always have some kind of index. This one might have one already.
 		if not self.has_one_index_column(polars_df):
 			polars_df = self.strip_index_marker(polars_df) # in case has_one_index_column() returned false because there was more than one index
-			if index is not None:
-				polars_df = self.mark_index(polars_df, index)
-				index = self.get_index(polars_df, guess=True) # sets it to the marked __index__ name
-			else:
+			if index is None or index == '':
+				self.logging.warning("Guessing the index...")
 				index = self.get_index(polars_df, guess=True)
+			else:
+				index = index.removeprefix(INDEX_PREFIX) # for consistency in case the user (me) goofs when calling the function
+			polars_df = self.mark_index(polars_df, index)
+		elif index is not None and index != '': # and self.has_one_index_column(polars_df) is true
+			current_index = self.get_index(polars_df, guess=False)
+			if current_index != index and current_index.removeprefix(INDEX_PREFIX) != index:
+				if not defined(rename_index):
+					errorL1 = f"Attempted to rancheroize dataframe with pre-existing index {current_index}, but was told index = {index}"
+					errorL2 = "and no value was given for rename_index.\nIf you want to rename the index of an existing dataframe,"
+					errorL3 = "either do so before calling rancheroize() or define rename_index when calling rancheroize().\n"
+					errorL4 = "If you want to swap from a run-based index to a sample-based index, use run_to_sample_index()."
+					self.logging.error(errorL1+errorL2+errorL3+errorL4)
+					raise ValueError
+			polars_df = polars_df.rename({current_index: rename_index})
+			if not rename_index.startswith(INDEX_PREFIX):
+				polars_df = self.mark_index(polars_df, rename_index)
+		index = self.get_index(polars_df, guess=False) # necessary whether or not it was defined already!! if already defined this will update to the marked index
 		
+		if rename_index is not None and rename_index != '':
+			if rename_index not in polars_df.columns: # we may have renamed it already!
+				if not rename_index.startswith(INDEX_PREFIX):
+					self.logging.warning(f"Renaming index ({index}) to {rename_index} which doesn't start with INDEX_PREFIX ({INDEX_PREFIX}) and therefore may not be properly tracked")
+				polars_df = polars_df.rename({index: rename_index})
+				index = rename_index
 		if drop_unwanted_columns:
 			polars_df = self.drop_known_unwanted_columns(polars_df)
 		if drop_non_mycobact_columns:
 			polars_df = self.drop_non_tb_columns(polars_df)
 		if nullify:
 			polars_df = self.drop_null_columns(self.nullify(polars_df))
-			
-			# check we didn't mess with the index
+			# check we didn't mess with the index, which can happen with null stuff
 			if check_index and index is not None:
 				assert index in polars_df.columns
 				assert self.get_null_count_in_column(polars_df, index) == 0
 			elif check_index:
 				assert self.get_null_count_in_column(polars_df, self.guess_index_column(polars_df)) == 0
-
 		if flatten:
 			polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False) # this makes merging better for "geo_loc_name_sam"
 		if disallow_right:
@@ -1250,22 +1304,7 @@ class NeighLib:
 		self.logging.debug("Checking index...")
 		polars_df = self.check_index(polars_df)
 		self.logging.debug(f"Dataframe shape after rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
-
-
-
-		# DEBUG REMOVE
-		"""
-		if 'clade' in polars_df.columns:
-			null_clade = self.get_count_of_x_in_column_y(polars_df, None, 'clade')
-			if null_clade > 0:
-				print("Found null values for clade at bottom of rancheroize")
-				self.print_value_counts(polars_df, ['clade'])
-				exit(1)
-		else:
-			print("clade not in polars df at end of rancheroize")
-		"""
-
-
+		self.logging.debug(f"Dataframe has these columns after rancheroizing: {polars_df.columns}")
 
 		return polars_df
 
@@ -1282,8 +1321,8 @@ class NeighLib:
 
 	def coerce_to_not_list_if_possible(self, polars_df, column, prefix_arrow=False):
 		arrow = '-->' if prefix_arrow else ''
-		if self.get_index_name() is not None:
-			assert column != self.get_index_name()
+		if self.get_index_subname(polars_df) is not None:
+			assert column != self.get_index_subname(polars_df)
 		if polars_df.schema[column] == pl.List:
 			if len(self.get_rows_where_list_col_more_than_one_value(polars_df, column)) == 0:
 				print(f"{arrow}Can delist") if self.logging.getEffectiveLevel() == 10 else None
