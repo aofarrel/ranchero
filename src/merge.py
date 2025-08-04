@@ -268,7 +268,7 @@ class Merger:
 			for left_column in yargh:
 				assert f"{merge_upon}_right" not in left.columns
 				if left_column in right.columns:
-					merged_columns.append(f"\n\t* {left_column}")
+					merged_columns.append(left_column)
 
 					if left_column in drop_zone.silly_columns:
 						left, right = left.drop(left_column), right.drop(left_column)
@@ -417,14 +417,22 @@ class Merger:
 			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings, force_index=force_index)
 			really_merged_no_dupes = really_merged.unique() # this doesn't actually help with duplicate indeces
 			duplicated_indices = really_merged_no_dupes.filter(pl.col(merge_upon).is_duplicated())
-			assert duplicated_indices.shape[0] == 0 # TODO: unless we allow dupes in index i guess
-
-			infostr1 = f"Merged a {n_rows_left}x{n_cols_left} df with a {n_rows_right}x{n_cols_right} df upon {merge_upon}. "
-			infostr2 = f"Final dataframe is {really_merged_no_dupes.shape} and index {NeighLib.get_index(really_merged_no_dupes)}. "
-			infostr3 = f"The columns that were merged were:{''.join(thing for thing in merged_columns)}"
-			self.logging.info(infostr1 + infostr2 + infostr3)
+			assert duplicated_indices.shape[0] == 0 # TODO: unless we allow dupes in index i guess?? why would we do that though
 			merged_dataframe = really_merged_no_dupes
 
+			# print stats
+			left_added_columns = [thing for thing in left.columns if thing not in merged_columns]
+			rite_added_columns = [thing for thing in right.columns if thing not in merged_columns]
+			infostr1 = f"Merged a {n_rows_left}x{n_cols_left} df with a {n_rows_right}x{n_cols_right} df upon {merge_upon}. "
+			infostr2 = f"Final dataframe is {merged_dataframe.shape} and index {NeighLib.get_index(merged_dataframe)}. "
+			infostr3 = f"The columns that were merged were: "
+			infostr4 = f"\n\t* {'\n\t* '.join(thing for thing in merged_columns)}"
+			infostr5 = f"\nThe left dataframe added {len(left_added_columns)} columns: "
+			infostr6 = f"\n\t* {'\n\t* '.join(left_added_columns)}"
+			infostr7 = f"\nThe right dataframe added {len(rite_added_columns)} columns: "
+			infostr8 = f"\n\t* {'\n\t* '.join(rite_added_columns)}"
+			self.logging.info(infostr1 + infostr2 + infostr3 + infostr4 + infostr5 + infostr6 + infostr7 + infostr8)
+			
 		self.logging.debug("Checking merged dataframe for unexpected rows...")
 		self.check_if_unexpected_rows(merged_dataframe, merge_upon=merge_upon, 
 			intersection_values=intersection_values, exclusive_left_values=exclusive_left_values, exclusive_right_values=exclusive_right_values, 
