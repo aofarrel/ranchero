@@ -718,7 +718,7 @@ class ProfessionalsHaveStandards():
 			)
 
 		if 'date_collected_year' in polars_df.columns:
-			polars_df = NeighLib.try_nullfill(polars_df, 'date_collected', 'date_collected_year')[0]
+			polars_df = NeighLib.try_nullfill_left(polars_df, 'date_collected', 'date_collected_year')[0]
 			polars_df.drop('date_collected_year')
 
 		# this is going to be annoying to handle properly and might not ever be helpful -- low priority TODO
@@ -755,8 +755,8 @@ class ProfessionalsHaveStandards():
 				.then(pl.lit('badger'))
 				.otherwise(pl.col('host_commonname'))
 				.alias('host_commonname')
-			])
-		return polars_df.drop('anonymised_badger_id_sam')
+			]).drop('anonymised_badger_id_sam')
+		return polars_df
 
 	def unmask_mice(self, polars_df):
 		if 'mouse_strain_sam' in polars_df.columns:
@@ -775,8 +775,8 @@ class ProfessionalsHaveStandards():
 				.then(pl.lit('Mus musculus'))
 				.otherwise(pl.col('host_scienname'))
 				.alias('host_scienname')
-			])
-		return polars_df.drop('mouse_strain_sam')
+			]).drop('mouse_strain_sam')
+		return polars_df
 
 	# because polars runs with_columns() matches in parallel, this is probably the most effecient way to do this. but having four functions for it is ugly.
 	def taxoncore_GO(self, polars_df, match_string, i_group, i_organism, exact=False):
