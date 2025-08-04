@@ -3,11 +3,14 @@ import polars as pl
 from contextlib import suppress
 import os
 import csv
+from tqdm import tqdm
 from collections import OrderedDict # dictionaries are ordered in Python 3.7+, but OrderedDict has a better popitem() function we need
 from src.statics import kolumns, null_values
 from .config import RancheroConfig
 from . import _NeighLib as NeighLib
 from . import _Standardizer as Standardizer
+
+barformat = '{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'
 
 # my crummy implementation of https://peps.python.org/pep-0661/
 globals().update({f"_cfg_{name}": object() for name in [
@@ -179,8 +182,12 @@ class FileReader():
 		Because:
 		* The XML header shouldn't be repeated
 		* Having multiple packages of multiple experiments really isn't helpful for our purposes
-		* More newlines = easier to navigate in certain text editors
+		* More newlines = easier to navigate in text editors
+
+		This also attempts to handle the additional weirdness of non-efetch XMLs from web-view SRA, but this isn't
+		deeply tested. Use at your own risk!
 		'''
+		self.logging.info("Reformatting XML file...")
 		out_file_path = f"{os.path.splitext(efetch_xml)[0]}_modified.xml"
 		remove_lines = ['<!DOCTYPE EXPERIMENT_PACKAGE_SET>\n',
 						'<?xml version="1.0" encoding="UTF-8"  ?>\n', # two spaces
@@ -188,7 +195,8 @@ class FileReader():
 						'<EXPERIMENT_PACKAGE_SET>\n',
 						'</EXPERIMENT_PACKAGE_SET>\n',
 						'  </EXPERIMENT_PACKAGE_SET>\n',
-						'  <EXPERIMENT_PACKAGE_SET>\n'
+						'  <EXPERIMENT_PACKAGE_SET>\n',
+						'<?xml version="1.0" ?>\n' # seems to only exist in XMLs from web-view, not efetch
 		]
 
 		with open(efetch_xml, 'r') as in_file:
@@ -201,25 +209,100 @@ class FileReader():
 		else:
 			likely_one_line_per_experiment_package_set = False
 
-
 		with open(out_file_path, 'w') as out_file:
 			out_file.write('<?xml version="1.0" encoding="UTF-8"  ?>\n')
 			if not likely_one_line_per_experiment_package_set:
 				out_file.write('<!DOCTYPE EXPERIMENT_PACKAGE_SET>\n')
 			out_file.write('<EXPERIMENT_PACKAGE_SET>\n')
-			for line in nice_lines:
-				if likely_one_line_per_experiment_package_set:
+			if likely_one_line_per_experiment_package_set:
+				for line in nice_lines:
 					line = line.removesuffix('\n') # to make handling next removesuffix() easier
 					line = line.removesuffix('</EXPERIMENT_PACKAGE_SET>')
 					experiment_packages = line.split('<EXPERIMENT_PACKAGE>')
 					for i, experiment in enumerate(experiment_packages):
 						if experiment != '':
 							out_file.write('<EXPERIMENT_PACKAGE>'+experiment+'\n')
-				else:
-					out_file.write(line)
+			else:
+				# there are multiple "experiment package sets", and any one of them may have
+				# any number of "experiments"
+				for line in nice_lines:
+					experiment_packages = line.split('<EXPERIMENT_PACKAGE>')
+					for i, experiment in enumerate(experiment_packages):
+						if experiment != '': # the 0th value is usually an empty string
+							out_file.write('<EXPERIMENT_PACKAGE>'+experiment+'\n')
 			out_file.write('</EXPERIMENT_PACKAGE_SET>\n')
 		self.logging.warning(f"Reformatted XML saved to {out_file_path}")
 		return out_file_path
+
+	def handle_run_accession_dictionary(self, run_accession_dictionary, BioSample):
+		# This should probably only be called by from_efetch()
+		SRR_id = run_accession_dictionary['@accession']
+		alias = run_accession_dictionary['@alias']
+
+		# these ones aren't always present, but if they are, might as well get their data
+		try:
+			total_spots = run_accession_dictionary['@total_spots']
+		except KeyError:
+			total_spots = None
+		try:
+			total_bases = run_accession_dictionary['@total_bases']
+		except KeyError:
+			total_bases = None
+		try:
+			# NOT ORIGINAL SUBMITTED FILE SIZE BYTES! CAN BE AN ORDER OF MAG SMALLER!
+			archive_data_bytes = run_accession_dictionary['@size']
+		except KeyError:
+			archive_data_bytes = None
+
+		submitted_files, submitted_file_sizes_bytes, submitted_file_sizes_gibi = list(), list(), list()
+		for file_dict in run_accession_dictionary['SRAFiles']['SRAFile']:
+			filename = file_dict['@filename']
+			file_bytes = int(file_dict['@size'])
+			file_gibi = file_bytes / (1024 ** 3)
+			if filename != SRR_id: # exclude the .srr file (which has no extension here for some reason)
+				submitted_files.append(filename)
+				submitted_file_sizes_bytes.append(file_bytes)
+				submitted_file_sizes_gibi.append(file_gibi)
+		
+		blessed_dictionary = {
+			'SRR_id': SRR_id,
+			'BioSample': BioSample,
+			'submitted_files': submitted_files,
+			'submitted_files_bytes': submitted_file_sizes_bytes,
+			'submitted_files_gibytes': submitted_file_sizes_gibi,
+			'alias': alias, 
+			'total_bases': total_bases,
+			'archive_data_bytes': archive_data_bytes,
+		}
+		
+		# if there is RUN_ATTRIBUTES, check its structure, then use it
+		# NOTE: For some reason, all runs in efetch XMLs seem to have RUN_ATTRIBUTES, while only some runs
+		# in an NCBI-web-view-derived XML will have them. I haven't tested this extensively though, maybe
+		# eukaryotes will be Built Different as it were...
+		if 'RUN_ATTRIBUTES' in run_accession_dictionary.keys():
+			self.logging.debug(f"Found RUN_ATTRIBUTES for {SRR_id}")
+			assert type(run_accession_dictionary['RUN_ATTRIBUTES']) == dict
+			assert len(run_accession_dictionary['RUN_ATTRIBUTES']) == 1
+
+			# data that comes from efetch will have structure ['RUN_SET']['RUN']['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']
+			# where that last one is a python list of key-value dictionaries, which seem analogous to the j_attr stuff
+			# you get from BigQuery
+			if type(run_accession_dictionary['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']) == list: # of k-v dictionaries
+				attributes = run_accession_dictionary['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']
+				normalized_attr = pl.json_normalize(attributes, max_level=1)
+				pivoted = normalized_attr.transpose(header_name="VALUE", column_names="TAG")
+				blessed_dataframe = pl.concat([pl.DataFrame(blessed_dictionary), pivoted], how='horizontal')
+
+			# data that comes from web-SRA will eliminate the middleman somewhat and instead give you a
+			# dictionary directly, rather than faffing about with a list of k-v dictionaries
+			else:
+				attributes = pl.DataFrame(run_accession_dictionary['RUN_ATTRIBUTES']['RUN_ATTRIBUTE'])
+				blessed_dataframe = pl.concat([pl.DataFrame(blessed_dictionary), attributes], how='horizontal')
+		else:
+			self.logging.debug(f"No RUN_ATTRIBUTES found for {SRR_id} (this is fine but we may be missing some metadata)")
+			blessed_dataframe = pl.DataFrame(blessed_dictionary)
+		self.logging.debug(f"Processed {SRR_id} from {BioSample}")
+		return blessed_dataframe
 
 	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=_cfg_check_index):
 		"""
@@ -262,10 +345,10 @@ class FileReader():
 		#	 					'@bases': '10705886485',
 		#	 					'@spots': '500788',
 		#	 					'@bytes': '4550349867', 
-		#	 					'RUN': dict with keys:  @accession, @alias, @total_spots, @total_bases, @size,
+		#	 					'RUN': dict(*) with keys:  @accession, @alias, @total_spots, @total_bases, @size,
 		#												@load_done, @published, @is_public, @cluster_name,
 		#  												@has_taxanalysis, @static_data_available, IDENTIFIERS,
-		# 												EXPERIMENT_REF, RUN_ATTRIBUTES, pool, SRAFiles, CloudFiles,
+		# 												EXPERIMENT_REF, RUN_ATTRIBUTES(**), pool, SRAFiles, CloudFiles,
 		# 												Statistics, Databases, Bases
 		#	 				}
 		#				}
@@ -282,82 +365,89 @@ class FileReader():
 		#		]
 		# 	}
 		# }
+		# CAVEATS:
+		#     (*)  RUN is sometimes a list of dictionaries if dealing with a multi-run BioSample
+		#     (**) RUN_ATTRIBUTES sometimes is missing if from web-view
+		#
 		# This is, as the name implies, extremely cursed, so we'll try to make this make a bit more sense.
 		# It appears that every "actual_experiment" contains one run accession and one BioSample. This means
 		# we are basically indexed by run accession (SRR), and that BioSamples can be repeated.
 		blessed_dataframes = list()
+		run_attributes_present = None # TODO: make this a bool flag for preventing constant debug prints?
 		assert len(cursed_dictionary) == 1
 		for EXPERIMENT_PACKAGE_SET, EXPERIMENT_PACKAGE in cursed_dictionary.items():
+			print("for EXPERIMENT_PACKAGE_SET, EXPERIMENT_PACKAGE")
 			assert EXPERIMENT_PACKAGE_SET == "EXPERIMENT_PACKAGE_SET"
 			assert type(EXPERIMENT_PACKAGE) == dict
 			assert list(EXPERIMENT_PACKAGE.keys()) == ["EXPERIMENT_PACKAGE"]
 			for list_of_experiments in EXPERIMENT_PACKAGE.values():
 				assert type(list_of_experiments) == list
-				for actual_experiment in list_of_experiments:
+				for actual_experiment in tqdm(list_of_experiments, desc="Processing 'experiments''", ascii='➖🌱🐄', bar_format=barformat):
 					assert type(actual_experiment) == dict
 					if len(actual_experiment) == 7 or len(actual_experiment) == 6: # whether or not "Pool" is present
 						
 						# TODO: DDBJ/ENA data probably have additional external IDs and will need special handling
 
-						# checks for data structure
 						assert len(actual_experiment['RUN_SET']) == 5
-						assert type(actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']) == dict
-						assert len(actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']) == 1
-						assert type(actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']) == list # of k-v dictionaries
 
-						# get information that's always there
-						BioSample = (actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']['#text'])
-						SRR_id = actual_experiment['RUN_SET']['RUN']['@accession']
-						alias = actual_experiment['RUN_SET']['RUN']['@alias']
+						# External IDs sometimes fall into the common issue of "making a list of two-element dictionaries, each with
+						# the same keys, when you could have just made one dictionary using the keys as ACTUAL KEYS." For some reason,
+						# efetch XMLs seem to only put BioSamples here (so this is always just one dictionary) but web-view XMLS may
+						# decide to put GEO accessions here, which turns actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID'] into
+						# a list of dictionaries.
+
+						# {'@namespace': 'BioSample', '#text': 'SAMN18577972'}
+						if type(actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']) == dict:
+							BioSample = (actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']['#text'])
 						
-						# these ones aren't always present
-						try:
-							total_spots = actual_experiment['RUN_SET']['RUN']['@total_spots']
-						except KeyError:
-							total_spots = None
-						try:
-							total_bases = actual_experiment['RUN_SET']['RUN']['@total_bases']
-						except KeyError:
-							total_bases = None
-						try:
-							# NOT ORIGINAL SUBMITTED FILE SIZE BYTES! CAN BE AN ORDER OF MAG SMALLER!
-							archive_data_bytes = actual_experiment['RUN_SET']['RUN']['@size']
-						except KeyError:
-							archive_data_bytes = None
+						# [{'@namespace': 'BioSample', '#text': 'SAMN18577972'}, {'@namespace': 'GEO', '#text': 'GSM5221531'}]
+						elif type(actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']) == list:
+							BioSample = "COULDNT_PARSE_BIOSAMPLE"
+							for two_element_dictionary in actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']:
+								if two_element_dictionary['@namespace'] == 'BioSample':
+									BioSample = two_element_dictionary['#text']
+
+						# should never happen
+						else:
+							self.logging.error("Couldn't parse external identifiers!")
+							self.logging.error(f"Identifiers dictionary: {actual_experiment['SAMPLE']['IDENTIFIERS']}")
+							self.logging.error(f"External identifers: {actual_experiment['SAMPLE']['IDENTIFIERS']['EXTERNAL_ID']}")
+							raise TypeError
+
+						# This seems to *always* be the case when dealing with XMLs from efetch, and when dealing with
+						# one-run-accession-per-BioSample cases within XMLs from web-view
+						if type(actual_experiment['RUN_SET']['RUN']) == dict:
+							run_accession_dictionary = actual_experiment['RUN_SET']['RUN']
+							blessed_dataframe = self.handle_run_accession_dictionary(run_accession_dictionary, BioSample)
+							blessed_dataframes.append(blessed_dataframe)
 						
-						# these are analogous to (but may not be equivalent to) the j_attr stuff you get from BigQuery
-						attributes = actual_experiment['RUN_SET']['RUN']['RUN_ATTRIBUTES']['RUN_ATTRIBUTE']
-						normalized_attr = pl.json_normalize(attributes, max_level=1)
-						pivoted = normalized_attr.transpose(header_name="VALUE", column_names="TAG")
+						# This is a BioSample with multiple run accessions, each one getting its own dictionary. Why
+						# this doesn't happen when dealing with multiple-run-accession-BioSamples with efetch XMLs, idk...
+						# I assume they're "indexed" by run accession, and web-view is "indexed" by BioSample?
+						elif type(actual_experiment['RUN_SET']['RUN']) == list:
+							for run_accession_dictionary in actual_experiment['RUN_SET']['RUN']:
+								blessed_dataframe = self.handle_run_accession_dictionary(run_accession_dictionary, BioSample)
+								blessed_dataframes.append(blessed_dataframe)
 						
-						submitted_files, submitted_file_sizes_bytes, submitted_file_sizes_gibi = list(), list(), list()
-						for file_dict in actual_experiment['RUN_SET']['RUN']['SRAFiles']['SRAFile']:
-							filename = file_dict['@filename']
-							file_bytes = int(file_dict['@size'])
-							file_gibi = file_bytes / (1024 ** 3)
-							if filename != SRR_id: # exclude the .srr file (which has no extension here for some reason)
-								submitted_files.append(filename)
-								submitted_file_sizes_bytes.append(file_bytes)
-								submitted_file_sizes_gibi.append(file_gibi)
+						# This should never happen!
+						else:
+							self.logging.error("If this is public, open-access data from NCBI, please open a GitHub issue with this output:")
+							self.logging.error(f"actual_experiment['RUN_SET']['RUN'] (type: {type(actual_experiment['RUN_SET']['RUN'])}")
+							self.logging.error(actual_experiment['RUN_SET']['RUN'])
+							raise TypeError
 						
-						blessed_dictionary = {
-							'SRR_id': SRR_id,
-							'BioSample': BioSample,
-							'submitted_files': submitted_files,
-							'submitted_files_bytes': submitted_file_sizes_bytes,
-							'submitted_files_gibytes': submitted_file_sizes_gibi,
-							'alias': alias, 
-							'total_bases': total_bases,
-							'archive_data_bytes': archive_data_bytes,
-						}
-						blessed_dataframe = pl.concat([pl.DataFrame(blessed_dictionary), pivoted], how='horizontal')
-						blessed_dataframes.append(blessed_dataframe)
 					else:
 						self.logging.error("Expected 6 or 7 keys per experiment dictionary, found... not that")
 						for thing in actual_experiment:
 							self.logging.error(thing)
 						exit(1)
-		blessed_dataframe = pl.concat(blessed_dataframes, how='diagonal').rename({'SRR_id': 'run_index', 'BioSample': 'sample_index'})
+		blessed_dataframe = pl.concat(blessed_dataframes, how='diagonal')
+		NeighLib.super_print_pl(blessed_dataframe.select(['SRR_id', 'BioSample', 'TAG', 'VALUE']), "XML as converted")
+		# TODO: add check for BioSample containing 'COULDNT_PARSE_BIOSAMPLE'
+		blessed_dataframe = blessed_dataframe.rename({'BioSample': 'sample_index', 'SRR_id': 'run_index'})
+		#if blessed_dataframe.select(pl.col('SRR_id').n_unique() != pl.col('SRR_id').len()):
+		#	self.logging.warning("Found non-unique values for SRR_id") # TODO: err if not index by file
+
 		if index_by_file:
 			if group_by_file:
 				blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by("submitted_files").agg(
@@ -370,7 +460,7 @@ class FileReader():
 			# TODO: sum() submitted_file_sizes
 			return NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by('run_index').agg(
 				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != 'run_index']
-			))
+			), force_index='run_index')
 
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
@@ -388,7 +478,7 @@ class FileReader():
 		return out_file_path
 
 
-	def polars_from_bigquery(self, bq_file, drop_columns=list(), normalize_attributes=True):
+	def polars_from_bigquery(self, bq_file, drop_columns=list(), normalize_attributes=True, rancheroize=_cfg_auto_rancheroize):
 		""" 
 		1. Reads a bigquery JSON into a polars dataframe
 		2. (optional) Splits the attributes columns into new columns (combines fixing the attributes column and JSON normalizing)
@@ -409,6 +499,11 @@ class FileReader():
 
 		if normalize_attributes and "attributes" in polars_df.columns:  # if column doesn't exist, return false
 			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df)
+		print(polars_df.columns)
+		if self._sentinal_handler(rancheroize):
+			polars_df = NeighLib.rancheroize_polars(polars_df, index='acc', rename_index='__index__run')
+		if self._sentinal_handler(_cfg_auto_standardize):
+			polars_df = Standardizer.standardize_everything(polars_df)
 		return polars_df
 
 
