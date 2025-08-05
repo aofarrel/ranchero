@@ -107,6 +107,7 @@ species = {
 	'Kobus ellipsiprymnus waterbuck': ['Kobus ellipsiprymnus', 3, "waterbuck"],
 	
 	'Lama glama': ['Lama glama', 3, "llama"],
+	'Locustana pardilana': ['Locustana pardilana', 3, "brown locust"],
 	'Loxodonta': ['Loxodonta sp.', 2,"African elephant"],
 	'Lutra lutra': ['Lutra lutra', 3, "Eurasian otter"],
 	'Lycaon pictus': ['Lycaon pictus', 3, "African wild dog"],

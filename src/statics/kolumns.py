@@ -106,7 +106,7 @@ list_to_set_uniq = [
 	'host_info',
 	'pheno_source',
 	'primary_search',
-	'region_as_list',
+	'geoloc_info_unhandled',
 	'run_index',
 	'sra_study',
 	'libraryselection',
