@@ -10,6 +10,7 @@
 sample_sources_I_should_hope_so = [
 
 	# Candida
+	'auris',
 	'Fungal isolate',
 	'fungal strain',
 	'fungal cell',
@@ -62,6 +63,7 @@ sample_sources_otherwise_unhelpful  = [
 	'Pulmonary tuberculosis',
 	'strain',
 	'Specimen',
+	'Systemic',
 	'TBM',
 	'tuberculosis',
 	'veracruz', # location
@@ -72,9 +74,11 @@ sample_sources_nonspecific = sample_sources_I_should_hope_so + sample_sources_no
 
 sample_source_exact_match = {
 	'BAL': 'bronchoalveolar lavage',
+	'Bed': 'environmental (bed)',
 	'bronchial': 'bronchial (unspecified)',
 	'Clinical': 'clinical (unspecified)',
 	'CSF': 'cerebrospinal fluid',
+	'CVC': 'central venous catheter',
 	'Culture': 'culture',
 	'Hospitol': 'hospital', # common typo
 	'laboratory': 'laboratory-obtained strain',
@@ -115,28 +119,47 @@ if_this_and_that_then = [
 	['(?i)cow', '(?i)feces', 'feces (bovine)'],
 	['(?i)FFPE', '(?i)skin', 'FFPE block (skin)'],
 
-	['(?i)ascit', '(?i)fluid', 'ascitic fluid'],
+	['(?i)ascit', '(?i)fluid', 'peritoneal fluid (ascitic)'],
 ]
 
 # These are considered mutually exclusive, and whichever ones are listed first will take precident
+# This means, generally speaking, we want more specific first and less specific last... with the
+# exception of things that are likely in silico or experimental evolution, as those ones are often
+# not appropriate to include in later analysis
 sample_source = {
 	
 	# simulated/in silico matches should ALWAYS be done first, as there are many reasons you may not want
 	# them in your analysis (no shade to the submitters of course it's just not appropriate for some things)
-	'simulated': 'simulated/in silico',
-	'silico': 'simulated/in silico',
-	'simulated/in silico': 'simulated/in silico', # bring over matches from earlier into the correct column
+	'simulated': 'in silico',
+	'silico': 'in silico',
+	'simulated/in silico': 'in silico', # bring over matches from earlier into the correct column
 
 	# edited/experimental evolution
-	'transformant': 'transformant',
-	'edited': 'transformant',
+	'transformant': 'experimental transformant',
+	'edited': 'experimental transformant',
+	'in vitro evolution': 'experimental evolution (in vitro)',
+	'Laboratory experiment': 'experimental (unspecified)',
+	'laboratory evolution': 'experimental evolution',
 
+	# tubes
+	'nephrostomy': 'nephrostomy',
+	'tracheostomy': 'tracheostomy',
+	'cholecystostomy': 'cholecystostomy',
+	'exit site (dialysis)': 'dialysis exit site',
+	'dialysis catheter': 'catheter (dialysis)',
+	'Catheter': 'catheter',
+	'Catheter Tip': 'catheter',
+	'Driveline': 'driveline',
+
+	# miscellanous highly specific stuff
 	'Archaeological': 'archaeological',
+	'biofilm': 'biofilm',
 
 
 	### The Fluid Zone ###
-	# Does not include "pus" as that's a common word ending
-
+	# ascitic/peritoneal fluid (ascitic is already covered in if-and-then)
+	'Intra-abdominal fluid': 'peritoneal fluid',
+	'Peritoneal fluid': 'peritoneal fluid',
 	# BAL and friends -- BAL is too generic on its own
 	'BRL': 'bronchoalveolar lavage',
 	'BALF': 'bronchoalveolar lavage',
@@ -190,27 +213,13 @@ sample_source = {
 	'urine': 'urine',
 	'Urine, Clean Catch': 'urine',
 	'Uriine': 'urine',
-	# phlegm
+	# other fun fluids
+	'ear discharge': 'ear discharge',
 	'phlegm': 'phlegm',
-	# dialysates
 	'Peritoneal dialysate': 'dialysate (peritoneal)',
+	'dialysate': 'dialysate',
 
-	# tubes
-	'nephrostomy': 'nephrostomy',
-	'tracheostomy': 'tracheostomy',
-	'cholecystostomy': 'cholecystostomy',
-	'exit site (dialysis)': 'dialysis exit site',
-	'dialysis catheter': 'catheter (dialysis)',
-	'Catheter': 'catheter',
-	'Catheter Tip': 'catheter',
-	'Driveline': 'driveline',
-
-	# organs / body parts
-	'bone': 'bone',
-	'homogenized mouse spleen': 'homogenized mouse spleens', # standardize singular/plural
-	'lung': 'lung',
-	'skin': 'skin',
-	'epidermis': 'skin',
+	# candida-specific body parts, in a specific body part
 	'Nares/Axilla': 'nares and/or axilla',
 	'Nares/Axilla/Groin': 'nares/axilla/groin',
 	'axilla and groin': 'axilla and groin', # very common for Candida
@@ -221,21 +230,29 @@ sample_source = {
 	'groin': 'groin',
 	'Scrotal': 'groin (scrotum)',
 	'nares': 'nares',
+
+	# organs / body parts
+	'brain': 'brain',
+	'Intra-abdominal tissue': 'intra-abdominal tissue',
+	'bone': 'bone',
+	'Coccyx': 'coccyx',
+	'knee': 'knee',
+	'spine': 'spine',
+	'homogenized mouse spleen': 'homogenized mouse spleens', # standardize singular/plural
+	'lung': 'lung',
+	'skin': 'skin',
+	'epidermis': 'skin',
 	'abdomen': 'abdomen',
 	'flank': 'flank',
 	'Thigh': 'thigh',
 	'Vaginal': 'vaginal',
-	'Conjunctiva': 'conjunctiva',
+	'Conjunctiva': 'eye (conjunctiva)',
 	'breast': 'breast',
 	'rectal': 'rectal',
 	'Toenail': 'foot (toenail)', # toe handled in last section
-
-	'biofilm': 'biofilm',
 	
 	# lab stuff
-	'Laboratory experiment': 'laboratory, experimental evolution',
-	'laboratory evolution': 'laboratory, experimental evolution',
-	'laboratory reference strain': 'laboratory strain ("reference", may or may not be H37Rv)',
+	'laboratory reference strain': 'laboratory strain ("reference")',
 	'Laboratory obtained strain': 'laboratory strain (unspecified)',
 	'Lab strain': 'laboratory strain (unspecified)',
 	'laboratory strain': 'laboratory strain (unspecified)',
@@ -282,6 +299,7 @@ sample_source = {
 	'muscle': 'muscle',
 
 	# i dont even want to know
+	'Drainage': 'drainage',
 	'excreted bodily substance': 'excreted bodily substance (unspecified)',
 	'body fluid': 'bodily fluid (unspecified)',
 	'fluid': 'fluid (unspecified)',
@@ -289,16 +307,7 @@ sample_source = {
 	# lungscore?
 	'PULMONARY': 'pulmonary',
 
-	# culture stuff -- should be done last, as many pathogens are "culture from X body part"
-	'lawn on agar plate': 'culture (lawn/sweep)',
-	'sweep': 'culture (lawn/sweep)',
-	'single colony': 'culture (single colony)',
-	'single cell': 'single cell',
-	'in vitro': 'culture (unspecified)',
-	'in-vitro': 'culture (unspecified)',
-	'bacterial suspension': 'culture (unspecified)',
-
-	# environemntal -- for MTBC, basically all "farm" stuff is tissue samples, but that may not be the case for other stuff
+	# environmental -- for MTBC, basically all "farm" stuff is tissue samples, but that may not be the case for other stuff
 	'soil': 'environmental (soil)',
 	'river sediment': 'environmental (river sediment)',
 	'air from': 'environmental (air)',
@@ -310,16 +319,19 @@ sample_source = {
 	'Negative Control': 'negative control',
 	'PCR product': 'PCR product',
 
+	### Everything here is last for good reason ###
+
 	# short words that could match something else by mistake
+	'bile': 'bile',
 	'ear': 'ear',
+	'eye': 'eye',
 	'foot': 'foot',
-	'toe': 'foot (toe)',
 	'heel': 'foot (heel)',
 	'leg': 'leg',
-	'CSF': 'cerebrospinal fluid',
+	'Lip': 'lip',
 	'Ostomy': 'ostomy',
-	'bile': 'bile',
-	'eye': 'eye',
+	'toe': 'foot (toe)',
+	'back': 'back',
 
 	# super generic
 	'clinical strain': 'clinical strain',
@@ -331,6 +343,17 @@ sample_source = {
 	'culture': 'culture',
 	'Environmental': 'environmental',
 	'Biopsy': 'biopsy',
+	'Secretion': 'secretion',
+	'swab': 'swab',
+
+	# culture stuff -- should be done last, as many pathogens are "culture from X body part"
+	'lawn on agar plate': 'culture (lawn/sweep)',
+	'sweep': 'culture (lawn/sweep)',
+	'single colony': 'culture (single colony)',
+	'single cell': 'single cell',
+	'in vitro': 'culture (unspecified)',
+	'in-vitro': 'culture (unspecified)',
+	'bacterial suspension': 'culture (unspecified)',
 	
 }
 
