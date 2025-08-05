@@ -3,3 +3,4 @@ polars==1.16.0
 pyarrow
 tqdm
 xmltodict
+pyyaml

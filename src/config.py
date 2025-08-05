@@ -1,34 +1,120 @@
 import os
 import csv
+import sys
 import json
 import logging
 import polars as pl
 import tqdm
+import yaml
+from typing import Literal, TypedDict
+loggerhead = {10: "DEBUG", 20: "INFO", 30: "WARN", 40: "ERROR"}
+
+# This takes a lot of inspiration from how polars handles configuration,
+# but I'm still not happy with it (nor does it actually enforce types).
+
+if sys.version_info >= (3, 10):
+	from typing import TypeAlias
+else:
+	from typing_extensions import TypeAlias
+
+# valid options for dupe_index_handling
+DupeIndexOptions: TypeAlias = Literal[
+	"error",
+	"verbose_error", 
+	"warn",
+	"verbose_warn",
+	"silent",
+	"allow",
+	"dropall"
+]
+
+# valid options for host_info_handling
+HostInfoOptions: TypeAlias = Literal[
+	"dictionary",
+	"drop",
+	"options"
+]
+
+class ConfigParameters(TypedDict):
+	read_file: dict
+	check_index: bool
+	dupe_index_handling: DupeIndexOptions
+	force_SRR_ERR_DRR_run_index: bool
+	force_SAMN_SAME_SAMD_sample_index: bool
+	host_info_handling: HostInfoOptions
+	indicator_column: str
+	intermediate_files: bool
+	loglevel: int
+	mycobacterial_mode: bool
+	paired_illumina_only: bool
+	polars_normalize: bool
+	rm_phages: bool
+	unwanted: bool
+
+	# not sure if this is how I want to handle this...
+	taxoncore_ruleset: None
+
+class ReadFileParameters(TypedDict):
+	auto_cast_types: bool
+	auto_parse_dates: bool
+	auto_rancheroize: bool
+	auto_standardize: bool
+	ignore_polars_read_errors: bool
 
 class RancheroConfig:
 
-	def print_config(self):
+	# this isn't a replacement for proper type checking
+	def is_in_ReadFileParameters(self, key) -> bool:
+		return key in ReadFileParameters.__annotations__
+	def is_in_ConfigParameters(self, key) -> bool:
+		return key in ConfigParameters.__annotations__
+
+	def print_config_raw(self) -> None:
+		print(self.__dict__)
+
+	def print_config(self) -> None:
+		this_config = self.__dict__.copy()
 		print("Configuration:")
-		for keys, values in self.__dict__.items():
+		for keys, values in this_config.items():
 			if keys == "unwanted":
-				# print the "unwanted" dictionary in a pretty way
 				for keys, values in self.unwanted.items():
-					print(f"Unwanted {keys}: {values}")
+					print(f"* Unwanted {keys}: {values}")
+			elif keys == 'read_file':
+				print("File read options:")
+				for k, v in self.read_file.items():
+					print(f"--> {k}: {v}")
+			elif keys == 'taxoncore_ruleset' and this_config['taxoncore_ruleset'] is not None:
+				print(f"* {keys}: Initialized with {len(this_config['taxoncore_ruleset'])} values")
+			elif keys == 'loglevel':
+				print(f"* {keys}: {values} ({loggerhead[values]})")
+			elif keys == 'logger': # redundant
+				pass
 			else:
-				print(f"{keys}: {values}")
+				print(f"* {keys}: {values}")
 
-	def print_config_dataframe(self):
-		# does not save the dataframe, as we don't want to have to update this df constantly
-		# TODO: this doesn't handle self.unwanted properly
-		stuff = self.__dict__.copy()
-		for keys in stuff:
-			if keys == 'taxoncore_ruleset' and stuff['taxoncore_ruleset'] is not None:
-				print(f"⋆ {keys}: Initialized with {len(stuff['taxoncore_ruleset'])} values")
-			else:
-				print(f"⋆ {keys}: {stuff[keys]}")
+	def read_config(self, path=None):
+		# Just reads the file, doesn't actually set anything in and of itself
+		if path is None:
+			path = "./src/config.yaml"
+		with open(path, 'r') as file:
+			config = yaml.safe_load(file)
+		typed_config: ConfigParameters = config # doesn't enforce typing in and of itself
+		for keys in typed_config:
+			assert self.is_in_ConfigParameters(keys)
+		return typed_config
 
-	def read_config(self, config_file: str):
-		raise ValueErrror("Reading configuration files currently isn't implemented!")
+	def set_config(self, overrides):
+		for option, value in overrides.items():
+			# TODO: actually implement this
+			#if option not in ConfigParameters:
+			#	raise ValueError(f"Option {option!r} doesn't exist")
+			setattr(self, option, value)
+
+	def override_config(self, overrides) -> None:
+		for option, value in overrides.items():
+			if not hasattr(self, option):
+				raise ValueError(f"Option {option!r} doesn't exist")
+			getattr(self, option)(value)
 
 	def prepare_taxoncore_dictionary(self, tsv='./src/statics/taxoncore_v4.tsv'):
 		if os.path.isfile(tsv):
@@ -59,83 +145,6 @@ class RancheroConfig:
 				self.logger.warning(f"""Found neither taxoncore TSV nor generated dictionary at {tsv} 
 					(workdir: {os.getcwd()}). Certain functions will not work.""")
 				return None
-		
-
-	def _make_default_config(self):
-		""" Creates a default configuration, called by __init__"""
-
-		# Automatically cast types when reading a file
-		self.auto_cast_types = True
-
-		# Automatically parse dates when reading a file
-		self.auto_parse_dates = False
-
-		# Automatically rancheroize dataframes upon file read
-		self.auto_rancheroize = True
-
-		# Automatically standardize dataframes upon file read (dataframe must be rancheroized)
-		self.auto_standardize = True
-
-		# When doing things that might modify the index, check it for integrity/lack of duplicates
-		self.check_index = True
-
-		# Values in run_index column must start with SRR, ERR, or DRR
-		self.force_SRR_ERR_DRR_run_index = True
-
-		# Values in sample_index column must start with SAMN, SAME, or SAMD
-		self.force_SAMN_SAME_SAMD_sample_index = False
-
-		# How to handle columns relating to host information found in "attrs" in BQ JSONs, which are much less useful
-		# if they had been combined into a single column like we would locational data n stuff, but can add a ton of
-		# columns with barely any filled-in values
-		#   dictionary: Create a single 'host_info' column with a list(dict()) of key-value pairs
-		#   drop: Drop them
-		#   columns: Treat like anything else in attrs -- each key becomes its own column
-		# What we consider to be "host information columns" is defined in kolumns.host_info
-		self.host_info_behavior = 'drop'
-
-		# Ignore polars read errors when parsing a file -- recommended to keep this as true
-		self.ignore_polars_read_errors = True
-
-		# Indicator column when merging dataframes
-		self.indicator_column = 'collection'
-
-		# Write intermediate files to the disk
-		self.intermediate_files = False
-
-		# Log level -- logging.DEBUG = 10, logging.INFO = 20, etc
-		self.loglevel = logging.INFO
-
-		# If 'platform' and 'layout' columns exist and have type pl.Utf8 (string), remove all samples that aren't
-		# "PAIRED" for 'layout' and "ILLUMINA" for 'platform'
-		self.paired_illumina_only = False
-
-		# Try to (mostly) use polars when normalizing the dataframe
-		self.polars_normalize = True
-
-		# How to handle duplicate values when running check_index().
-		#
-		# - error: Throw a fatal error that includes the number of duplicate values
-		# - verbose_error: As error, but attempt to print all duplicated values, and dump a TSV
-		# - warn: pl.DataFrame.unique(subset=[index_column], keep='any') + print a non-fatal warning
-		# - verbose_warn: As warn, but attempt to print all duplicated values, and dump a TSV
-		# - silent: pl.DataFrame.unique(subset=[index_column], keep='any') + print to logging.debug
-		# - allow: Allow duplicate values. NOT RECOMMENDED; THIS WILL BREAK MERGING DATAFRAMES! Will print a warning!
-		# - dropall: pl.DataFrame.unique(subset=[index_column], keep='none') + warn
-		self.dupe_index_handling = 'warn'
-
-		# Try to remove phages when standardizing taxonomic information
-		self.rm_phages = True
-
-		# Ruleset for standardizing taxonomic information -- updated by self.prepare_taxoncore_dictionary(),
-		# so leave this as None here
-		self.taxoncore_ruleset = None
-
-		# When column equals key, filter out rows that have anything in that key's value list
-		self.unwanted = {
-			"assay_type": ['Tn-Seq', 'ChIP-Seq'],
-			"platform": None
-		}
 
 	def _setup_logger(self):
 		"""Sets up a logger instance"""
@@ -151,7 +160,8 @@ class RancheroConfig:
 
 	def __init__(self):
 		""" Creates a fallback configuration if read_config() isn't run"""
-		self._make_default_config()
+		defaults = self.read_config()
+		self.set_config(defaults)
 		self.logger = self._setup_logger()
 		self.taxoncore_ruleset = self.prepare_taxoncore_dictionary()
-		self.print_config_dataframe()
+		#self.print_config_raw()

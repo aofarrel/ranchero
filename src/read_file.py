@@ -50,6 +50,11 @@ class FileReader():
 		"""Handles "allow overriding config" variables in function calls"""
 		if arg in _SENTINEL_TO_CONFIG:
 			config_attr = _SENTINEL_TO_CONFIG[arg]
+			if RancheroConfig.is_in_ReadFileParameters(self, config_attr):
+				read_file_dictionary = getattr(self.cfg, 'read_file')
+				check_me = read_file_dictionary[config_attr]
+				assert check_me != arg, f"Configuration for '{config_attr}' is invalid or uninitialized"
+				return check_me
 			check_me = getattr(self.cfg, config_attr)
 			assert check_me != arg, f"Configuration for '{config_attr}' is invalid or uninitialized"
 			return check_me
@@ -486,12 +491,12 @@ class FileReader():
 		"""
 		try:
 			polars_df = pl.read_json(bq_file)
-			if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"{bq_file} has {polars_df.width} columns and {len(polars_df)} rows")
+			self.logging.debug(f"{bq_file} has {polars_df.width} columns and {len(polars_df)} rows")
 		except pl.exceptions.ComputeError:
 			self.logging.warning("Caught exception reading JSON file. Attempting to reformat it...")
 			try:
 				polars_df = pl.read_json(self.fix_bigquery_file(bq_file))
-				if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Fixed input file has {polars_df.width} columns and {len(polars_df)} rows")
+				self.logging.debug(f"Fixed input file has {polars_df.width} columns and {len(polars_df)} rows")
 			except pl.exceptions.ComputeError:
 				self.logging.error("Caught exception reading JSON file after attempting to fix it. Giving up!")
 				exit(1)
@@ -746,6 +751,7 @@ class FileReader():
 		* verbose (set)
 		"""
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
+		thiscfg__auto_cast_types = self._sentinal_handler('auto_cast_types')
 		if keep_all_primary_search_and_host_info:  # TODO: benchmark these two options
 			if self.logging.getEffectiveLevel() == 10:
 				self.logging.info("Concatenating dictionaries with Pandas...")
@@ -760,6 +766,6 @@ class FileReader():
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts)
 		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'])
 		if rancheroize: normalized = NeighLib.rancheroize_polars(normalized)
-		if self.cfg.auto_cast_types: normalized = NeighLib.cast_politely(normalized)
+		if thiscfg__auto_cast_types: normalized = NeighLib.cast_politely(normalized)
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
 		return normalized

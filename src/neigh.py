@@ -807,17 +807,17 @@ class NeighLib:
 			if 'k' in d and 'v' in d:
 				if d['k'] == 'primary_search':
 					primary_search.add(d['v'])
-				elif self.cfg.host_info_behavior != 'columns' and d['k'] in kolumns.host_info:
+				elif self.cfg.host_info_handling != 'columns' and d['k'] in kolumns.host_info:
 					host_info.add(f"{d['k']}: {str(d['v']).lstrip('host_').rstrip('_sam').rstrip('sam_s_dpl111')}")
 				else:
 					combined_dict[d['k']] = d['v']
 		if len(primary_search) > 0:
 			combined_dict.update({"primary_search": list(primary_search)}) # convert to a list to avoid the polars column becoming type object
-		if self.cfg.host_info_behavior == 'dictionary' and len(host_info) > 0:
+		if self.cfg.host_info_handling == 'dictionary' and len(host_info) > 0:
 			combined_dict.update({"host_info": list(host_info)})
-		elif self.cfg.host_info_behavior == 'drop':
+		elif self.cfg.host_info_handling == 'drop':
 			combined_dict = {k: v for k, v in combined_dict.items() if k not in kolumns.host_info}
-		# self.cfg.host_info_behavior == 'columns' is handled automagically
+		# self.cfg.host_info_handling == 'columns' is handled automagically
 		return combined_dict
 
 	def concat_dicts_risky(dict_list: list):
