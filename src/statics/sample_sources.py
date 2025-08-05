@@ -1,60 +1,45 @@
-# NOT COMPREHENSIVE BY DESIGN
-# Only merges some extremely obvious ones
+# This is for standardizing information about what a sample comes from
 
-host_disease_exact_match = {
-	'TB': 'unspecified TB',
-	'Tuberculosis': 'unspecified TB',
-	'tuberculosis': 'unspecified TB',
-	'DOID:552': 'pneumonia',
-	'DOID:399': 'unspecified TB',
-	'DOID:2957': 'pulmonary TB',
-	'DOID:9861': 'miliary TB',
-	'DOID:4962': 'pericardial TB',
-	'DOID:106': 'pleural TB',
-	'DOID:1639': 'skeletal TB',
-	'leprosy': 'Leprosy',
-	'extra/intra - pulmonary patient': 'extra/intra-pulmonary TB',
-	'TBM': 'TB meningitis',
 
-	# extrapulmonary is sometimes written as two words, so these need to be exact matches
-	'Pulmonary': 'Pulmonary TB',
-	'PTB': 'Pulomonary TB'
-}
+# TODO: is case insensitivity not working? see fungal isolate etc
 
-host_disease = {
-	'bovine': 'bovine TB',
-	'Chronic pulmonary tuberculosis': 'pulmonary TB (chronic)',
-	'Diffuse lepromatous leprosy': 'leprosy (Lucio)',
-	'Disseminated': 'disseminated TB',
-	'Extra Pulmonary': 'extrapulmonary TB',
-	'Extrapulmonary': 'extrapulmonary TB',
-	'infiltrative': 'infiltrative TB',
-	'Lepromatous leprosy': 'leprosy (Lepromatous)',
-	'miliary': 'miliary TB',
-	'Mycobacterium tuberculosis infection': 'unspecified TB',
-	'Pericardial': 'pericardial TB',
-	'Pleural': 'pleural TB',
-	'refractory': 'refractory TB',
-	'skeletal': 'skeletal TB',
-	'Spinal': 'spinal TB',
-	'TB infection': 'unspecified TB',
-	'TB meningitis': 'TB meningitis',
-	'tuberculosis DOID:552': 'TB-associated pneumonia',
-	'Tuberculous meningitis': 'TB meningitis',
 
-	# do last to avoid matches to "extra pulmonary" and "lung infection"
-	'pulmonary': 'Pulmonary TB',
-	'Health': None,
-	'host_disease_sam': None,
-	'human': None,
-	'homo sapiens': None,
-	'infection': None,
-	'Infections Sample039': None,
-}
+# Nonspecific sample sources that are useless if you already know
+# what organism you are looking at -- consider skipping this batch
+# if you are comparing multiple genra at once, I suppose?
+sample_sources_I_should_hope_so = [
 
-sample_sources_nonspecific  = [
+	# Candida
+	'Fungal isolate',
+	'fungal strain',
+	'fungal cell',
+
+	# tuberculosis/MTBC/Mycobacterium genus
+	'DNA from M. tuberculosis',
+	'M. tuberculosis',
+	'MTB isolates',
+	'Mtb',
+	'MTBC',
+	'Mycobacterium tuberculosis complex',
+	'Mycobacterium tuberculosis',
+	'Mycobacteryum tuberculosis', # common typo
+	'H37Rv', # standardize_sample_source_as_list() will put this in taxoncore first, standardize_sample_source_as_string() will not
+]
+
+# Sample sources that almost nobody would want
+sample_sources_nonsense = [
 	'1',
 	'?',
+	'DNA',
+	'Genomic DNA',
+	'to wear a mask', # ?????????
+	'whole organism',
+	'Yes',
+]
+
+# Handled earlier in standardizer
+# TODO: Standardization should be adjustable by user here
+sample_sources_otherwise_unhelpful  = [
 	'Affedcted Herd',
 	'bacteria',
 	'bacterial cell',
@@ -62,21 +47,10 @@ sample_sources_nonspecific  = [
 	'Biological Sample',
 	'Biological sample',
 	'Bureau of Tuberculosis',
-	'DNA from M. tuberculosis',
-	'DNA',
-	'Genomic DNA',
-	'H37Rv', # standardize_sample_source_as_list() will put this in taxoncore first, standardize_sample_source_as_string() will not
 	'Homo sapiens',
 	'human',
 	'isolate frome children',
 	'Lima', # location
-	'M. tuberculosis',
-	'MTB isolates',
-	'Mtb',
-	'MTBC',
-	'Mycobacterium tuberculosis complex', # I should hope so!
-	'Mycobacterium tuberculosis',
-	'Mycobacteryum tuberculosis', # common typo
 	'na',
 	'nan',
 	'New Zealand', # location
@@ -86,24 +60,26 @@ sample_sources_nonspecific  = [
 	'Pakistan', # location
 	'PTB',
 	'Pulmonary tuberculosis',
+	'strain',
 	'Specimen',
 	'TBM',
-	'to wear a mask',
 	'tuberculosis',
 	'veracruz', # location
-	'Viet Nam',
-	'whole organism',
-	'Yes',
+	'Viet Nam', # location
 ]
+
+sample_sources_nonspecific = sample_sources_I_should_hope_so + sample_sources_nonsense + sample_sources_otherwise_unhelpful
 
 sample_source_exact_match = {
 	'BAL': 'bronchoalveolar lavage',
 	'bronchial': 'bronchial (unspecified)',
 	'Clinical': 'clinical (unspecified)',
+	'CSF': 'cerebrospinal fluid',
 	'Culture': 'culture',
 	'Hospitol': 'hospital', # common typo
 	'laboratory': 'laboratory-obtained strain',
 	'tissue': 'tissue (unspecified)',
+	'pus': 'pus',
 }
 
 if_this_and_that_then = [
@@ -113,6 +89,7 @@ if_this_and_that_then = [
 
 	# generic culture + tissue
 	['(?i)culture', '(?i)sputum', 'culture from sputum'],
+	['(?i)culture', '(?i)blood', 'culture from blood'],
 	['(?i)culture', '(?i)\bbronch.*lavage', 'culture from bronchoalveolar lavage'],
 	['(?i)culture', '(?i)cerebrospinal', 'culture from cerebrospinal fluid'],
 	['(?i)culture', '(?i)lung', 'culture from lung tissue'],
@@ -120,6 +97,11 @@ if_this_and_that_then = [
 	['(?i)culture', '(?i)feces|fecal', 'culture from feces'],
 	['(?i)culture', '(?i)liver', 'culture from liver'],
 	['(?i)culture', '(?i)eye', 'culture from eye'],
+
+	# swabs
+	['(?i)swab', '(?i)axilla/groin', 'swab - axilla and/or groin'],
+	['(?i)swab', '(?i)axilla and groin', 'swab - axilla and/or groin'],
+	['(?i)swab', '(?i)skin', 'swab - skin'],
 	
 	# everything else
 	['(?i)scrapate', '(?i)granuloma', 'scrapate of granuloma'],
@@ -136,18 +118,24 @@ if_this_and_that_then = [
 	['(?i)ascit', '(?i)fluid', 'ascitic fluid'],
 ]
 
-# These are considered mutually exclusive
+# These are considered mutually exclusive, and whichever ones are listed first will take precident
 sample_source = {
-	# do this one FIRST
-	'simulated/in silico': 'simulated/in silico', # bring over matches from earlier into the correct column
-	'lawn on agar plate': 'culture (lawn/sweep)',
-	'sweep': 'culture (lawn/sweep)',
-	'single colony': 'culture (single colony)',
-	'single cell': 'single cell',
 	
+	# simulated/in silico matches should ALWAYS be done first, as there are many reasons you may not want
+	# them in your analysis (no shade to the submitters of course it's just not appropriate for some things)
+	'simulated': 'simulated/in silico',
+	'silico': 'simulated/in silico',
+	'simulated/in silico': 'simulated/in silico', # bring over matches from earlier into the correct column
+
+	# edited/experimental evolution
+	'transformant': 'transformant',
+	'edited': 'transformant',
+
 	'Archaeological': 'archaeological',
 
+
 	### The Fluid Zone ###
+	# Does not include "pus" as that's a common word ending
 
 	# BAL and friends -- BAL is too generic on its own
 	'BRL': 'bronchoalveolar lavage',
@@ -158,8 +146,13 @@ sample_source = {
 	'bronchialLavage': 'bronchoalveolar lavage',
 	'broncho-alveolar lavage': 'bronchoalveolar lavage',
 	'Bronchio Alveolar Lavage': 'bronchoalveolar lavage',
+	'Bronch_Lav': 'bronchoalveolar lavage',
 	'bronchoalveolar lavage': 'bronchoalveolar lavage', # prevent "as reported" showing up
 	'bronchial aspirate': 'bronchoalveolar aspirate',
+	'Bronch_Asp': 'bronchoalveolar aspirate',
+	'tracheal aspirate': 'tracheal aspirate', # TODO: why is "Trachael Aspirate" not matching?
+	'Trach_Asp': 'tracheal aspirate',
+	'BRONCH_WSH': 'bronchial wash',
 	'bronchial wash': 'bronchial wash',
 	# CSF
 	'Cerebospinal fluid': 'cerebrospinal fluid',
@@ -191,23 +184,53 @@ sample_source = {
 	'synov fl': 'synovial fluid',
 	'synovial': 'synovial fluid',
 	# blood
+	'Blood C&S': 'blood (C&S)',
 	'blood': 'blood',
+	# piss
+	'urine': 'urine',
+	'Urine, Clean Catch': 'urine',
+	'Uriine': 'urine',
+	# phlegm
+	'phlegm': 'phlegm',
+	# dialysates
+	'Peritoneal dialysate': 'dialysate (peritoneal)',
 
-	# organs
+	# tubes
+	'nephrostomy': 'nephrostomy',
+	'tracheostomy': 'tracheostomy',
+	'cholecystostomy': 'cholecystostomy',
+	'exit site (dialysis)': 'dialysis exit site',
+	'dialysis catheter': 'catheter (dialysis)',
+	'Catheter': 'catheter',
+	'Catheter Tip': 'catheter',
+	'Driveline': 'driveline',
+
+	# organs / body parts
 	'bone': 'bone',
 	'homogenized mouse spleen': 'homogenized mouse spleens', # standardize singular/plural
 	'lung': 'lung',
 	'skin': 'skin',
 	'epidermis': 'skin',
+	'Nares/Axilla': 'nares and/or axilla',
+	'Nares/Axilla/Groin': 'nares/axilla/groin',
+	'axilla and groin': 'axilla and groin', # very common for Candida
+	'axilla/groin': 'axilla and/or groin', # very common for Candida
+	'Axilliae': 'axilla',
+	'axilla': 'axilla',
+	'underarm': 'axilla',
+	'groin': 'groin',
+	'Scrotal': 'groin (scrotum)',
+	'nares': 'nares',
+	'abdomen': 'abdomen',
+	'flank': 'flank',
+	'Thigh': 'thigh',
+	'Vaginal': 'vaginal',
+	'Conjunctiva': 'conjunctiva',
+	'breast': 'breast',
+	'rectal': 'rectal',
+	'Toenail': 'foot (toenail)', # toe handled in last section
 
 	'biofilm': 'biofilm',
-
-	# environemntal -- excludes "farm" as those are all tissue samples
-	'soil': 'environmental (soil)',
-	'river sediment': 'environmental (river sediment)',
-	'air from': 'environmental (air)',
-	'HCU': 'environmental (HCU)', # do BEFORE water
-	'water': 'environmental (water)',
 	
 	# lab stuff
 	'Laboratory experiment': 'laboratory, experimental evolution',
@@ -229,6 +252,7 @@ sample_source = {
 	'CaseousMasses': 'caseous mass',
 	'lesion': 'lesion',
 	'wound': 'wound',
+	'Ulcer': 'ulcer',
 	'scar': 'scar tissue',
 
 	# lymph nodes (specific)
@@ -251,40 +275,63 @@ sample_source = {
 	'feces': 'feces',
 	'animal waste': 'feces (unspecified animal)',
 	'chicken dung': 'feces (chicken)',
+	'dung': 'feces (unspecified animal)',
+
+	# muscle
+	'Psoas': 'muscle (psoas)',
+	'muscle': 'muscle',
 
 	# i dont even want to know
 	'excreted bodily substance': 'excreted bodily substance (unspecified)',
+	'body fluid': 'bodily fluid (unspecified)',
+	'fluid': 'fluid (unspecified)',
 
 	# lungscore?
 	'PULMONARY': 'pulmonary',
 
-	# do these last to avoid overwrites
-	'phlegm': 'phlegm',
-	'CSF': 'cerebrospinal fluid',
-	
+	# culture stuff -- should be done last, as many pathogens are "culture from X body part"
+	'lawn on agar plate': 'culture (lawn/sweep)',
+	'sweep': 'culture (lawn/sweep)',
+	'single colony': 'culture (single colony)',
+	'single cell': 'single cell',
 	'in vitro': 'culture (unspecified)',
 	'in-vitro': 'culture (unspecified)',
-	'clinical strain': 'clinical strain',
-	'clinical isolate': 'clinical (unspecified)',
-	'clinical sample': 'clinical (unspecified)',
-	'clinical': 'clinical (unspecified)',
-	'lawn on agar plate': 'culture (lawn/sweep)',
-	'hospital': 'clinical (unspecified)',
-	'Negative Control': 'negative control',
 	'bacterial suspension': 'culture (unspecified)',
 
-	# REALLY generic, don't even say "unspecified" here
-	'diagnostic sample': 'diagnostic sample',
+	# environemntal -- for MTBC, basically all "farm" stuff is tissue samples, but that may not be the case for other stuff
+	'soil': 'environmental (soil)',
+	'river sediment': 'environmental (river sediment)',
+	'air from': 'environmental (air)',
+	'farm': 'environmental (farm)',
+	'wastewater': 'environmental (wastewater)', # distinct from normal water, should be done before it
+	'HCU': 'environmental (HCU)',               # distinct from normal water, should be done before it
+	'water': 'environmental (water)',           # normal water
+	
+	'Negative Control': 'negative control',
+	'PCR product': 'PCR product',
+
+	# short words that could match something else by mistake
+	'ear': 'ear',
+	'foot': 'foot',
+	'toe': 'foot (toe)',
+	'heel': 'foot (heel)',
+	'leg': 'leg',
+	'CSF': 'cerebrospinal fluid',
+	'Ostomy': 'ostomy',
+	'bile': 'bile',
+	'eye': 'eye',
+
+	# super generic
+	'clinical strain': 'clinical strain',
+	'clinical isolate': 'clinical',
+	'clinical sample': 'clinical',
+	'clinical': 'clinical',
+	'hospital': 'clinical',
+	'diagnostic sample': 'clincal (diagnostic sample)',
 	'culture': 'culture',
 	'Environmental': 'environmental',
-	'Biopsy': 'biopsy'
+	'Biopsy': 'biopsy',
 	
 }
-
-# unlike the above, 
-harsh_matching = {
-	"animal": "a"
-}
-
 
 
