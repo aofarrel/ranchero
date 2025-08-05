@@ -95,7 +95,8 @@ class RancheroConfig:
 	def read_config(self, path=None):
 		# Just reads the file, doesn't actually set anything in and of itself
 		if path is None:
-			path = "./src/config.yaml"
+			path = "/Users/aofarrel/github/ranchero/src/config.yaml"
+			print("⚠️⚠️⚠️⚠️STOP USING HARDCODED PATHS FOR YOUR DEFAULTS!!⚠️⚠️⚠️⚠️")
 		with open(path, 'r') as file:
 			config = yaml.safe_load(file)
 		typed_config: ConfigParameters = config # doesn't enforce typing in and of itself

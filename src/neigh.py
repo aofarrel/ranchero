@@ -1227,7 +1227,7 @@ class NeighLib:
 				index = index.removeprefix(INDEX_PREFIX) # for consistency in case the user (me) goofs when calling the function
 			polars_df = self.mark_index(polars_df, index)
 		elif index is not None and index != '': # and self.has_one_index_column(polars_df) is true
-			current_index = self.get_index(polars_df, guess=False)
+			current_index = self.get_index(polars_df, guess=False)		
 			if current_index != index and current_index.removeprefix(INDEX_PREFIX) != index:
 				if not defined(rename_index):
 					errorL1 = f"Attempted to rancheroize dataframe with pre-existing index {current_index}, but was told index = {index}"
@@ -1236,9 +1236,9 @@ class NeighLib:
 					errorL4 = "If you want to swap from a run-based index to a sample-based index, use run_to_sample_index()."
 					self.logging.error(errorL1+errorL2+errorL3+errorL4)
 					raise ValueError
-			polars_df = polars_df.rename({current_index: rename_index})
-			if not rename_index.startswith(INDEX_PREFIX):
-				polars_df = self.mark_index(polars_df, rename_index)
+				polars_df = polars_df.rename({current_index: rename_index})
+				if not rename_index.startswith(INDEX_PREFIX):
+					polars_df = self.mark_index(polars_df, rename_index)
 		index = self.get_index(polars_df, guess=False) # necessary whether or not it was defined already!! if already defined this will update to the marked index
 		
 		if rename_index is not None and rename_index != '':
