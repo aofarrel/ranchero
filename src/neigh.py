@@ -52,24 +52,40 @@ class NeighLib:
 	# --------- INDEX FUNCTIONS --------- #
 
 	def mark_index(self, polars_df: pl.DataFrame, wannabe_index_column: str) -> pl.DataFrame:
-		if wannabe_index_column not in polars_df.columns:
-			raise ValueError(f"{wannabe_index_column} not in DataFrame")
-		marked_index = self.get_hypothetical_index_fullname(polars_df, wannabe_index_column)
-		if self.has_one_index_column(polars_df) and marked_index in polars_df.columns:
-			try:
-				self.logging.debug(f"There is already a marked index with basename {wannabe_index_column}...")
-				assert_series_equal(polars_df[wannabe_index_column].rename(marked_index), polars_df[marked_index])
-				return polars_df.drop(wannabe_index_column) # already know has exactly one index column so okay we skipped the next check
-			except AssertionError:
-				self.logging.error(f"There is already a marked index with the same basename, and its contents aren't equal to non-index {wannabe_index_column}.")
-				raise ValueError(f"There is already a marked index with the same basename, and its contents aren't equal to non-index {wannabe_index_column}.")
+		"""Attempts to mark wannabe_index_column as an index using INDEX_PREFIX, checking
+		beforehand that there isn't already a marked index
 
-		# Remove existing index designation(s) if any 
-		polars_df = polars_df.rename({
-			col: col[len(INDEX_PREFIX):] if col.startswith(INDEX_PREFIX) else col
-			for col in polars_df.columns
-		})
-		return polars_df.rename({wannabe_index_column: marked_index})
+		when wannabe_index_column == 'file', hypothetical_marked_index == '__INDEX__file'
+		when wannabe_index_column == '__INDEX__file', hypothetical_unmarked_index == 'file'
+
+		"""
+		hypothetical_marked_index = self.get_hypothetical_index_fullname(wannabe_index_column)
+		hypothetical_unmarked_index = self.get_hypothetical_index_basename(wannabe_index_column)
+
+		# is this column (or some hypothetical iteration of it) in the dataframe?
+		if wannabe_index_column not in polars_df.columns:
+			if hypothetical_marked_index not in polars_df.columns:
+				if hypothetical_unmarked_index not in polars_df.columns:
+					raise ValueError(f"{wannabe_index_column} nor {hypothetical_marked_index} nor {hypothetical_unmarked_index} in DataFrame")
+				else:
+					# this should never happen
+					raise ValueError(f"FAILURE: {wannabe_index_column} absent, {hypothetical_marked_index} absent, {hypothetical_unmarked_index} present")
+			# wannabe_index_column = 'file' and not in df, '__INDEX__file' is in df
+			if self.has_one_index_column(polars_df):
+				self.logging.debug(f"Tried to mark non-existent column {wannabe_index_column} as index, but {hypothetical_marked_index} already in dataframe")
+				return polars_df
+			else:
+				raise ValueError(f"More than one index in dataframe! Columns: {sort(polars_df.columns)}")
+		
+		# the actually normal situation - wannabe is in the df and there is currently no index
+		elif self.has_zero_index_columns(polars_df):
+			return polars_df.rename({wannabe_index_column: hypothetical_marked_index})
+		
+		# wannabe is in polars_df, but we already have at least one index -- even if that index is just the marked form of wannabe, we should not have both!
+		else:
+			assert_series_equal(polars_df[wannabe_index_column].rename(hypothetical_marked_index), polars_df[hypothetical_marked_index])
+			self.logging.warning(f"Both {wannabe_index_column} and {hypothetical_marked_index} are both already in df, but they're equal, so we'll just drop {wannabe_index_column}...")
+			return polars_df.drop(wannabe_index_column)			
 
 	def get_index(self, polars_df: pl.DataFrame, guess=False) -> str | None:
 		if self.has_one_index_column(polars_df):
@@ -87,11 +103,15 @@ class NeighLib:
 				return col[len(INDEX_PREFIX):]
 		return None
 
-	def get_hypothetical_index_fullname(self, polars_df: pl.DataFrame, wannabe_index_column: str) -> str:
+	def get_hypothetical_index_fullname(self, wannabe_index_column: str) -> str:
 		# DOES NO CHECKING (hence hypothetical)
-		if wannabe_index_column.startswith('__index__'):
+		if wannabe_index_column.startswith(INDEX_PREFIX):
 			return wannabe_index_column
 		return str(INDEX_PREFIX + wannabe_index_column)
+
+	def get_hypothetical_index_basename(self, wannabe_index_column: str) -> str:
+		# DOES NO CHECKING (hence hypothetical)
+		return str(wannabe_index_column.rstrip(INDEX_PREFIX))
 
 	def strip_index_marker(self, polars_df: pl.DataFrame) -> pl.DataFrame:
 		return polars_df.rename({
@@ -101,6 +121,11 @@ class NeighLib:
 
 	def has_multiple_index_columns(self, polars_df: pl.DataFrame):
 		if len([col for col in polars_df.columns if col.startswith(INDEX_PREFIX)]) > 1:
+			return True
+		return False
+
+	def has_zero_index_columns(self, polars_df: pl.DataFrame) -> bool:
+		if len([col for col in polars_df.columns if col.startswith(INDEX_PREFIX)]) == 0:
 			return True
 		return False
 
@@ -127,7 +152,7 @@ class NeighLib:
 			force_NCBI_runs=_cfg_force_SRR_ERR_DRR_run_index, 
 			force_BioSamples=_cfg_force_SAMN_SAME_SAMD_sample_index,
 			dupe_index_handling=_cfg_dupe_index_handling,
-			allow_bad_name=False
+			allow_bad_name=False # for merge_upon checks, etc
 			):
 		"""
 		Check a polars dataframe's apparent index, which is expected to be either run accessions or sample accessions, for the following issues:
@@ -141,6 +166,7 @@ class NeighLib:
 		force_NCBI_runs = self._sentinal_handler(force_NCBI_runs)
 		force_BioSamples = self._sentinal_handler(force_BioSamples)
 
+		# 1st check: Are there multiple marked __INDEX__ columns?
 		if self.has_multiple_index_columns(polars_df):
 			if try_to_fix:
 				# to avoid messing up checks below, this will just strip the multiple indexes and continue
@@ -150,26 +176,34 @@ class NeighLib:
 				self.logging.error("Found multiple index columns in dataframe (to try to fix, run with try_to_fix = True)")
 				raise ValueError("Found multiple index columns in dataframe (to try to fix, run with try_to_fix = True)")
 
+		# 2nd check: What actually is the index column? (a lot of checking happens in mark_index())
+		# Option A: User defined an index column manually
 		if manual_index_column is not None:
-			if manual_index_column not in polars_df.columns:
+			not_guessed_current_index = self.get_index(polars_df, guess=False)
+			if not manual_index_column.startswith(INDEX_PREFIX) and not allow_bad_name:
 				if try_to_fix:
-					if self.get_index_subname(polars_df) != manual_index_column:
-						self.logging.error(f"Manual index column set to {manual_index_column}, but that column nor {INDEX_PREFIX + manual_index_column} aren't in the dataframe!")
-						raise ValueError(f"Manual index column set to {manual_index_column}, but that column nor {INDEX_PREFIX + manual_index_column} aren't in the dataframe!")
-					fixed_manual_index = INDEX_PREFIX + manual_index_column
-					self.logging.warning(f"You wanted to check manual_index_column = {manual_index_column}, but what's in the dataframe is {fixed_manual_index}. I'll assume that's what you meant.")
-					index_to_check = fixed_manual_index # no need to mark it, it's already marked
+					polars_df = self.mark_index(polars_df, manual_index_column)
+					manual_index_column = self.get_index(polars_df, guess=False)
+					index_to_check = manual_index_column
+			
+			if manual_index_column not in polars_df.columns:
+				if try_to_fix: # whether we allow bad names or not, we gotta fix this!
+					polars_df = self.mark_index(polars_df, manual_index_column)
+					index_to_check = self.get_index(polars_df, guess=False)
 				else:
-					self.logging.error(f"Manual index column set to {manual_index_column}, but that column isn't in the dataframe! (it may already be marked as an index column though, try running with try_to_fix=True)")
 					raise ValueError(f"Manual index column set to {manual_index_column}, but that column isn't in the dataframe! (it may already be marked as an index column though, try running with try_to_fix=True)")
-			elif manual_index_column != self.get_index(polars_df, guess=False):
+			
+			# manual_index_column is in polars_df, but there is also a marked __INDEX__ that doesn't match it
+			elif manual_index_column != not_guessed_current_index and not_guessed_current_index is not None:
 				if not allow_bad_name: # for merge_upon checks, etc
-					self.logging.error(f"manual_index_column={manual_index_column} but dataframe already has supposed index {self.get_index(polars_df, guess=False)}")
-					raise ValueError(f"manual_index_column={manual_index_column} but dataframe already has supposed index {self.get_index(polars_df, guess=False)}")
-				self.logging.warning(f"You're checking {manual_index_column} as if it were an index, but index column {self.get_idnex(polars_df, guess=False)} also exists. I'll allow it, reluctantly.")
-				index_to_check = manual_index_column # no need to mark it, it's already marked
+					self.logging.error(f"manual_index_column={manual_index_column} but dataframe already has supposed index {not_guessed_current_index}")
+					raise ValueError(f"manual_index_column={manual_index_column} but dataframe already has supposed index {not_guessed_current_index}")
+				self.logging.warning(f"You're checking {manual_index_column} as if it were an index, but index column {not_guessed_current_index} also exists. I'll allow it, reluctantly.")
+				index_to_check = manual_index_column # no need to mark it, it's already marked... er, right? well, we'll check later anyway			
 			else:
 				index_to_check = manual_index_column
+			not_guessed_current_index = None
+		# Option B: User did not define an index column manually
 		else:
 			if self.has_one_index_column(polars_df):
 				index_to_check = self.get_index(polars_df, guess=False)
@@ -178,7 +212,7 @@ class NeighLib:
 					could_make_that_an_index = self.get_index(polars_df, guess=True)
 					assert could_make_that_an_index is not None
 					polars_df = self.mark_index(polars_df, could_make_that_an_index)
-					index_to_check = self.get_hypothetical_index_fullname(polars_df, could_make_that_an_index)
+					index_to_check = self.get_hypothetical_index_fullname(could_make_that_an_index)
 				else:
 					index_to_check = self.get_index(polars_df, guess=False)
 					assert index_to_check is not None

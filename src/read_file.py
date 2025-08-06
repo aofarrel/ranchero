@@ -447,25 +447,32 @@ class FileReader():
 							self.logging.error(thing)
 						exit(1)
 		blessed_dataframe = pl.concat(blessed_dataframes, how='diagonal')
-		NeighLib.super_print_pl(blessed_dataframe.select(['SRR_id', 'BioSample', 'TAG', 'VALUE']), "XML as converted")
+		if self.logging.getEffectiveLevel() == 10: NeighLib.super_print_pl(blessed_dataframe.select(NeighLib.valid_cols(blessed_dataframe, ['SRR_id', 'BioSample', 'TAG', 'VALUE'])), "XML as converted")
+		
 		# TODO: add check for BioSample containing 'COULDNT_PARSE_BIOSAMPLE'
+		
 		blessed_dataframe = blessed_dataframe.rename({'BioSample': 'sample_index', 'SRR_id': 'run_index'})
-		#if blessed_dataframe.select(pl.col('SRR_id').n_unique() != pl.col('SRR_id').len()):
-		#	self.logging.warning("Found non-unique values for SRR_id") # TODO: err if not index by file
 
 		if index_by_file:
+			blessed_dataframe = NeighLib.mark_index(blessed_dataframe.rename({'submitted_files': 'file'}), 'file')
+			file_index = NeighLib.get_index(blessed_dataframe)
 			if group_by_file:
-				blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by("submitted_files").agg(
-						[c for c in blessed_dataframe.columns if c != 'submitted_files']
-				), force_index='submitted_files')
-			if check_index: # must come AFTER the group_by option
-				blessed_dataframe = NeighLib.check_index(blessed_dataframe, manual_index_column='submitted_files')
+				blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(file_index).agg(
+						[c for c in blessed_dataframe.columns if c != file_index]
+				), force_index=file_index)
+			if check_index: blessed_dataframe = NeighLib.check_index(blessed_dataframe) # must come AFTER the group_by option 
 			return blessed_dataframe
 		else:
 			# TODO: sum() submitted_file_sizes
-			return NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by('run_index').agg(
-				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != 'run_index']
-			), force_index='run_index')
+			blessed_dataframe = NeighLib.mark_index(blessed_dataframe.rename({'run_index': 'run'}), 'run')
+			run_index = NeighLib.get_index(blessed_dataframe)
+			if blessed_dataframe.select(pl.col(run_index).n_unique() != pl.col(run_index).len()):
+				self.logging.warning(f"Found non-unique values for {run_index} (SRR_id)")
+			blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_index).agg(
+				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != run_index]
+			), force_index=run_index)
+			if check_index: blessed_dataframe = NeighLib.check_index(blessed_dataframe)
+			return blessed_dataframe
 
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
