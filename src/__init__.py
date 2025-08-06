@@ -41,6 +41,8 @@ unique_bioproject_per_center_name = _NeighLib.unique_bioproject_per_center_name
 rancheroize = _NeighLib.rancheroize_polars
 print_schema = _NeighLib.print_schema
 add_column_with_this_value = _NeighLib.add_column_of_just_this_value
+valid_cols = _NeighLib.valid_cols
+report = _NeighLib.report
 
 from_tsv = _FileReader.polars_from_tsv
 from_bigquery = _FileReader.polars_from_bigquery

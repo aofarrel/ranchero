@@ -1,6 +1,13 @@
 
 .DS_Store
-inputs/*
+inputs/BQ/*
+inputs/overrides/*
+inputs/pipeline/*
+inputs/publications/*
+inputs/standford/*
+inputs/tbprofiler/*
+inputs/test/*
+inputs/truncated/*
 Intermediate/*
 src/__pycache__/*
 src/dictionaries/__pycache__/*
@@ -23,3 +30,5 @@ RC17_summary.txt
 rc18 before index swap
 RC18_summary.txt
 ranchero_rc17_subset_just_samples_NOT_CURRENT.txt
+inputs/txid2750823.txt
+inputs/txid2750823.txt

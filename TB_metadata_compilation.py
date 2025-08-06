@@ -1,3 +1,10 @@
+# This file was used to standardize metadata for over 100,000 Mycobacterium samples.
+# It has several hard-coded links to files that are not included in the repo, because
+# some of them are from publications or are too large to fit into a standard GitHub
+# repo.
+# As such, the main use case of this file is archival and/or an example of how you
+# can combine metadata from a variety of sources using Ranchero.
+
 rc = "rc17½½"
 
 import polars as pl
@@ -44,7 +51,6 @@ def check_stuff(polars_df, name=None):
 
 	if 'collection' in polars_df.columns:
 		assert polars_df.schema['collection'] is not Ranchero.pl.List(Ranchero.pl.List(Ranchero.pl.Utf8))
-		#assert Ranchero.NeighLib.get_null_count_in_column(polars_df, 'collection') != 0
 	else:
 		print("collection not in polars_df")
 
@@ -71,11 +77,6 @@ def check_stuff(polars_df, name=None):
 		print("Found countries without continents")
 		Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'country', 'continent')
 		exit(1)
-	# this isn't a good check, because some samples genuinely are ambiguous
-	#if Ranchero.NeighLib.get_a_where_b_is_null(polars_df, 'region', 'country').shape[0] > 0:
-	#	print("Found regions without countries")
-	#	Ranchero.NeighLib.print_a_where_b_is_null(polars_df, 'region', 'country')
-	#	exit(1)
 	if 'country' in polars_df.columns:
 		if Ranchero._NeighLib.get_count_of_x_in_column_y(polars_df, 'Ivory Coast', 'country') > 0:
 			print("Found non-ISO Ivory Coast in country column")
@@ -173,11 +174,6 @@ def inital_file_parse():
 	start, tba6 = time.time(), Ranchero.drop_lowcount_columns(tba6)
 	print(f"Removed columns with few values in {time.time() - start:.4f}s seconds") # should be done last
 
-	# move to demo.py
-	#print(Ranchero.unique_bioproject_per_center_name(tba6))
-	#Ranchero.print_a_where_b_equals_this(tba6, 'region', 'country', 'CIV', valuecounts=True)
-	#Ranchero.NeighLib.print_value_counts(tba6, ['country'])
-
 	check_stuff(tba6)
 	Ranchero.NeighLib.report(tba6)
 
@@ -249,9 +245,6 @@ def run_merges(tba6):
 	shuaib_SRR = Ranchero.from_tsv("./inputs/publications/sample_indexed/Shuaib_2022 (PMC9222951)/shuaib_2022_SRR.tsv", auto_rancheroize=False, glob=False, check_index=False)
 	merged = Ranchero.standardize_countries(Ranchero.merge_dataframes(merged, shuaib_SRR, merge_upon="run_index", right_name="Shuaib_2022", indicator="collection"))
 
-	# Bos
-	#bos = Ranchero.from_tsv("./inputs/publications/Bos_2015/ancient.tsv")
-	#merged = Ranchero.merge_dataframes(merged, bos, merge_upon="run_index", left_name="tba6", right_name="Bos (ancient)")
 
 	# Brites
 	print(f"{_b_}Processing Brites{_bb_}")
@@ -292,17 +285,6 @@ def run_merges(tba6):
 	CRyPTIC = Ranchero.add_column_with_this_value(CRyPTIC, "pheno_source", "CRyPTIC_reuse_table") #PMC9363010
 	merged = Ranchero.merge_dataframes(merged, CRyPTIC, merge_upon="run_index", left_name="tba6", right_name="CRyPTIC_reuse_table", drop_exclusive_right=True)
 	check_stuff(merged)
-
-	# Merker (two of them...)
-	#print(f"{_b_}Processing the run-indexed part of Merker 2022{_bb_}")
-	#merker = Ranchero.from_tsv("./inputs/publications/run_indexed/Merker_2022 (run)/Merker_clean_run_indeces.tsv", auto_standardize=True, 
-	#	drop_columns=["pheno_STREPTOMYCIN","pheno_ISONIAZID","pheno_RIFAMPICIN","pheno_ETHAMBUTOL","pheno_PYRAZINAMIDE",
-	#	"pheno_AMIKACIN","pheno_KANAMYCIN","pheno_CAPREOMYCIN","pheno_CYCLOSERINE","pheno_CLOFAZIMINE","pheno_OFLOXACIN",
-	#	"pheno_PAS","pheno_RIFABUTIN","pheno_MOXIFLOXACIN","pheno_LINEZOLID","pheno_ETHIONAMIDE","pheno_BEDAQUILINE"]) # turns out these are genotypic
-	#merker = Ranchero.add_column_with_this_value(merker, "pheno_source", "Merker_2022") #PMC9426364
-	#merged = Ranchero.merge_dataframes(merged, merker, merge_upon="run_index", left_name="tba6", right_name="Merker_2022", drop_exclusive_right=True)
-	# DONT FORGET THE OTHER MERKER PAPER, AND ALSO THE SAMPLE-INDEXED PART
-	#check_stuff(merged)
 
 	# Napier
 	print(f"{_b_}Processing Napier{_bb_}")
@@ -373,11 +355,6 @@ def sample_index_merges(merged_runs):
 
 	merged = merged_by_sample
 
-	# atypical
-	#print(f"{_b_}Processing atypical samples{_bb_}")
-	#atypical = Ranchero.from_tsv("./inputs/atypical.tSV")
-	#merged = Ranchero.merge_dataframes(merged, atypical, merge_upon="sample_index", left_name="tba6", right_name="atypical_genotypes", drop_exclusive_right=False)
-
 	# Andres
 	print(f"{_b_}Processing Andres{_bb_}")
 	Andres_pheno = Ranchero.from_tsv("./inputs/publications/sample_indexed/Andres_2019/Andres_cleaned.tsv", drop_columns=['Ethambutol_MIC'], auto_standardize=True)
@@ -406,18 +383,6 @@ def sample_index_merges(merged_runs):
 	merged = Ranchero.merge_dataframes(merged, menardo_2021, merge_upon="sample_index", right_name="Menardo_2021", indicator="collection", escalate_warnings=False)
 	print(f"Merged with menardos in {time.time() - start:.4f} seconds")
 	check_stuff(merged)
-
-	# Merker (sample side of 2022) AAAAAAAAAAAA
-	#print(f"{_b_}Processing Merker's sample-indexed stuff{_bb_}")
-	#merker_samples = Ranchero.from_tsv("./inputs/publications/sample_indexed/Merker_2022 [ERS]/Merker_cleaned_ERS_id.tsv", auto_rancheroize=False, glob=False, check_index=False,
-	#	drop_columns=["pheno_STREPTOMYCIN","pheno_ISONIAZID","pheno_RIFAMPICIN","pheno_ETHAMBUTOL","pheno_PYRAZINAMIDE",
-	#	"pheno_AMIKACIN","pheno_KANAMYCIN","pheno_CAPREOMYCIN","pheno_CYCLOSERINE","pheno_CLOFAZIMINE","pheno_OFLOXACIN",
-	#	"pheno_PAS","pheno_RIFABUTIN","pheno_MOXIFLOXACIN","pheno_LINEZOLID","pheno_ETHIONAMIDE","pheno_BEDAQUILINE"]) # turns out these are genotypic
-	#merker_ids = Ranchero.from_tsv("./inputs/publications/sample_indexed/Merker_2022 [ERS]/ERS-to-SAME-incomplete.txt", auto_rancheroize=False, glob=False, check_index=False)
-	#merker_sample_fixed = Ranchero.merge_dataframes(merker_samples, merker_ids, merge_upon="SRS_id") # needed for the samples indeces that aren't in the other dataframe
-	#merker_sample_fixed = Ranchero.standardize_everything(merker_sample_fixed)
-	#merged = Ranchero.merge_dataframes(merged, merker_samples, merge_upon="SRS_id", right_name="Merker_2022", indicator="collection")
-	#check_stuff(merged)
 
 	print(f"{_b_}Processing CSISP ref set{_bb_}")
 	ref_set_CSISP = Ranchero.from_tsv("./inputs/publications/sample_indexed/ref_set_CSISP.tsv", auto_rancheroize=False, glob=False, check_index=False)

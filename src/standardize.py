@@ -275,6 +275,9 @@ class ProfessionalsHaveStandards():
 			else:
 				self.logging.warning("write_lineages is True, but can't find a lineage column!")
 				skip_lineage = True
+			
+			# TODO: strain_sam_ss_dpl139 can sometimes have lineage names instead of strain names, and doing things
+			# this way can result in those lineage designations getting dropped
 			if 'strain_sam_ss_dpl139' in polars_df.columns and polars_df.schema['strain_sam_ss_dpl139'] == pl.Utf8:
 				strain_column, skip_strain = 'strain_sam_ss_dpl139', False
 			elif 'strain' in polars_df.columns and polars_df.schema['strain'] == pl.Utf8:
@@ -556,6 +559,9 @@ class ProfessionalsHaveStandards():
 		* keep_only_bad_examples is for debugging; it effectively hides dates that are probably good
 		* len_bytes() is way faster than len_chars()
 		* yeah you can have mutliple expressions in one with_columns() but that'd require tons of alias columns plus nullify so I'm not doing that
+
+
+		TODO: if a date collected is already in ISO format, sometimes it gets converted to just YYYY
 		"""
 
 		if polars_df.schema['date_collected'] == pl.List:
@@ -755,8 +761,8 @@ class ProfessionalsHaveStandards():
 				.then(pl.lit('badger'))
 				.otherwise(pl.col('host_commonname'))
 				.alias('host_commonname')
-			])
-		return polars_df.drop('anonymised_badger_id_sam')
+			]).drop('anonymised_badger_id_sam')
+		return polars_df
 
 	def unmask_mice(self, polars_df):
 		if 'mouse_strain_sam' in polars_df.columns:
@@ -775,8 +781,8 @@ class ProfessionalsHaveStandards():
 				.then(pl.lit('Mus musculus'))
 				.otherwise(pl.col('host_scienname'))
 				.alias('host_scienname')
-			])
-		return polars_df.drop('mouse_strain_sam')
+			]).drop('mouse_strain_sam')
+		return polars_df
 
 	# because polars runs with_columns() matches in parallel, this is probably the most effecient way to do this. but having four functions for it is ugly.
 	def taxoncore_GO(self, polars_df, match_string, i_group, i_organism, exact=False):
@@ -1147,7 +1153,9 @@ class ProfessionalsHaveStandards():
 			.otherwise(None)
 			.alias('region_as_list')
 		])
-		NeighLib.print_only_where_col_not_null(polars_df, 'region_as_list')
+		if self.logging.getEffectiveLevel() == 10:
+			self.logging.debug("Rows where region is list")
+			NeighLib.print_only_where_col_not_null(polars_df, 'region_as_list')
 		#polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['region_as_list'])
 		polars_df = NeighLib.stringify_one_list_column(polars_df, 'region_as_list')
 		polars_df = polars_df.with_columns(pl.coalesce(["region", "region_as_list"]).alias("neo_region"))

@@ -1,4 +1,7 @@
 # Ranchero
+
+**You are looking at a static older version (tagged as 0.0.17 on GitHub) of ranchero. Please see the main branch of the repo (https://github.com/aofarrel/ranchero) for a more updated version.**
+
 Is your mycobacterial metadata a mess? Grab the *M. bovis* by the horns with Ranchero.
 
 Ranchero is a Python solution to the dozens of different metadata formats used in genomic datasets. While it is specifically focused on NCBI's collection of *Mycobacterium tuberculosis complex* metadata, it still has utility for other organisms. For information on what Ranchero considers "a sample" and the like, see [./docs/data_structure.md](./docs/data_structure.md). For information on how to configure Ranchero, see [.docs/configuration.md](.docs/configuration.md).
