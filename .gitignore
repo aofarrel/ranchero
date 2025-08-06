@@ -1,5 +1,6 @@
 
 .DS_Store
+inputs/*
 inputs/BQ/*
 inputs/overrides/*
 inputs/pipeline/*
@@ -8,10 +9,10 @@ inputs/standford/*
 inputs/tbprofiler/*
 inputs/test/*
 inputs/truncated/*
+ranchero_output_archive/*
 Intermediate/*
 src/__pycache__/*
 src/dictionaries/__pycache__/*
-*.tsv
 tba5_per_sample.tsv
 *.pyc
 /2024-tba3-redo-compilations
@@ -32,3 +33,7 @@ RC18_summary.txt
 ranchero_rc17_subset_just_samples_NOT_CURRENT.txt
 inputs/txid2750823.txt
 inputs/txid2750823.txt
+src/statics/taxoncore_quick_debug.tsv
+src/statics/taxoncore_v3_with_stricto_sensu.tsv
+cases.tsv
+src/columns.tsv

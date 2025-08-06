@@ -1,0 +1,221 @@
+when	strain	lineage	organism	bacterial group	comment
+Mycobacterium	None	None	Mycobacterium sp.	unclassified mycobacteria	
+Mycobacterium sp\.	None	None	Mycobacterium sp.	unclassified mycobacteria	
+\bTB\b	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	
+(?i)Tuberculosis	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	English, Spanish for "tuberculosis"
+(?i)Tuberkulose	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	German for "tuberculosis"
+(?i)Tuberculose	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	Dutch, French, Portuguese for "tuberculosis"
+(?i)Tubercolosi	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	Italian for "tuberculosis"
+(?i)Tuberkulozo	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	Esperanto for "tuberculosis"
+(?i)Tuberkulosis	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	Bahasa Indonesia, Bahasa Melayu, Tagalog for "tuberculosis"
+M\.tb\b	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	
+(?i)MTB complex	None	None	Mycobacterium tuberculosis complex sp.	MTBC	
+(?i)\bMtb\b	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	
+MTBC	None	None	Mycobacterium tuberculosis complex sp.	MTBC	
+(?i)Mycobacterium tuberculosis$	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	
+(?i)Mycobacteria tuberculosis$	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	
+(?i)Mycobacteria tuberculosis complex	None	None	Mycobacterium tuberculosis complex sp.	MTBC	
+(?i)Mycobacterium tb complex	None	None	Mycobacterium tuberculosis complex sp.	MTBC	
+(?i)Mycobacterium tuberculosis complex	None	None	Mycobacterium tuberculosis complex sp.	MTBC	
+(?i)Mycobacterium tuberculosis complex sp	None	None	Mycobacterium tuberculosis complex sp.	MTBC	
+^L1	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	generic lineage1 match; leaves lineage column blank to avoid overwriting sublineages
+^L2	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	generic lineage2 match; leaves lineage column blank to avoid overwriting sublineages
+^L3	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	generic lineage3 match; leaves lineage column blank to avoid overwriting sublineages
+^L4	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	generic lineage4 match; leaves lineage column blank to avoid overwriting sublineages
+^L5	None	None	Mycobacterium africanum	tuberculosis: human-adapted	generic lineage5 match; leaves lineage column blank to avoid overwriting sublineages
+^L6	None	None	Mycobacterium africanum	tuberculosis: human-adapted	generic lineage6 match; leaves lineage column blank to avoid overwriting sublineages
+^L7	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	generic lineage7 match; leaves lineage column blank to avoid overwriting sublineages
+^L8	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	generic lineage8 match; leaves lineage column blank to avoid overwriting sublineages
+^L9	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	generic lineage9 match; leaves lineage column blank to avoid overwriting sublineages
+(?i)Leprosy	None	None	Mycobacterium sp. (leprosy)	leprosy	
+Ghana	Ghana	L4.1.3	Mycobacterium tuberculosis	tuberculosis: human-adapted	could easily pick up a location instead
+Manila	Manila	L1	Mycobacterium tuberculosis	tuberculosis: human-adapted	could easily pick up a location instead
+Cameroon	Cameroon	L4.6.2	Mycobacterium tuberculosis	tuberculosis: human-adapted	could easily pick up a location instead
+Connaught	Connaught	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+\bKZN\b	KZN	L4.3	Mycobacterium tuberculosis	tuberculosis: human-adapted	LAM4
+M-strain	M	L4.1.2.1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+\bNTM\b	None	None	Mycobacterium sp. (NTM)	NTM: unclassified	
+(?i)Nontuberculosis mycobacteria	None	None	Mycobacterium sp. (NTM)	NTM: unclassified	
+(?i)Nontuberculosis mycobacterium	None	None	Mycobacterium sp. (NTM)	NTM: unclassified	
+(?i)Non-tuberculosis mycobacteria	None	None	Mycobacterium sp. (NTM)	NTM: unclassified	
+(?i)Non-tuberculosis mycobacterium	None	None	Mycobacterium sp. (NTM)	NTM: unclassified	
+(?i)Non-TB mycobacterium	None	None	Mycobacterium sp. (NTM)	NTM: unclassified	
+(?i)Hansen disease	None	None	Mycobacterium sp. (leprosy)	leprosy	
+(?i)Hansen's disease	None	None	Mycobacterium sp. (leprosy)	leprosy	
+(?i)Hansens disease	None	None	Mycobacterium sp. (leprosy)	leprosy	
+M \(L4\.1\.2\.1\)	M-strain	L4.1.2.1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+\bF11\b	F11	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+ST889	EAI6	L1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+ST-19\b	Manila	L1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+ST281	None	L6	Mycobacterium africanum	tuberculosis: human-adapted	
+ST320	None	L6	Mycobacterium africanum	tuberculosis: human-adapted	
+ST279	Manila	L1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)H37Rv	H37Rv	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	also matches "H37Rv-like" so be careful!
+(?i)suricattae	None	None	Mycobacterium suricattae	MTBC	
+\bBCG\b	BCG	La1.2	Mycobacterium bovis	tuberculosis: animal-adapted	
+(?i)Harlem	Haarlem	L4.1.2	Mycobacterium tuberculosis	tuberculosis: human-adapted	typo of Haarlem, could pick up a location instead
+MtZ	Zaragoza	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+UGII\b	None	L4.6	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+ETH\b	None	L4.2.2	Mycobacterium tuberculosis	tuberculosis: human-adapted	could pick up antibiotic code
+CAS\b	None	L3	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+EAI	None	L1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+LAM\b	None	L4.3	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+\(LAM\)	None	L4.3	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Euro-AmericanLAM	None	L4.3	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+LAM\(4\.3\.4\.2\)	None	L4.3.4.2	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)Zaragoza	Zaragoza	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	could pick up location
+PGG3	PGG3	L4.10	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Ural	Ural	L4.2.1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Beijing	None	L2.2.1	Mycobacterium tuberculosis	tuberculosis: human-adapted	will also match "proto-Beijing" etc, do matches on those later!
+Haarlem	Haarlem	L4.1.2	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)EuroAmerican	None	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)Euro-American	None	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)East-Asian	None	L2	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)EastAsian	None	L2	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+\bL 5	None	L5	Mycobacterium africanum	tuberculosis: human-adapted	
+\bL 6	None	L6	Mycobacterium africanum	tuberculosis: human-adapted	
+East-African-Indian	None	L1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Delhi-CAS	None	L3	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Indo-Oceanic	None	L1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Indo Oceanic	None	L1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)oyrgis	None	La3	Mycobacterium orygis	tuberculosis: animal-adapted	typo
+(?i)orgyis	None	La3	Mycobacterium orygis	tuberculosis: animal-adapted	typo
+(?i)orygus	None	La3	Mycobacterium orygis	tuberculosis: animal-adapted	typo
+(?i)africanium	None	None	Mycobacterium africanum	tuberculosis: human-adapted	typo
+(?i)africanuum	None	None	Mycobacterium africanum	tuberculosis: human-adapted	typo
+(?i)tuberuclosis	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	common typo
+(?i)tubercuclosis	None	None	Mycobacterium tuberculosis	tuberculosis: unclassified	common typo
+(?i)subsp\. tuberculosis	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)subsp tuberculosis	None	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)X-type	X-type	L4.1.1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)West-african 1	None	L5	Mycobacterium africanum	tuberculosis: human-adapted	could pick up location
+(?i)West African 1	None	L5	Mycobacterium africanum	tuberculosis: human-adapted	could pick up location
+(?i)West-african 2	None	L6	Mycobacterium africanum	tuberculosis: human-adapted	could pick up location
+(?i)West African 2	None	L6	Mycobacterium africanum	tuberculosis: human-adapted	could pick up location
+AFRI_1	None	L5	Mycobacterium africanum	tuberculosis: human-adapted	
+AFRI_2	None	L6	Mycobacterium africanum	tuberculosis: human-adapted	
+(?i)STB-K	STB-K	None	Mycobacterium canettii	MTBC	
+(?i)STB-D	STB-D	None	Mycobacterium canettii	MTBC	
+Tice	Tice	La1.2	Mycobacterium bovis	tuberculosis: animal-adapted	
+LAM9	None	L4.3.3	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)CDC1551\b	Oshkosh	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	https://biocyc.org/organism-summary?object=MTBCDC1551
+(?i)CDC-1551\b	Oshkosh	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	https://biocyc.org/organism-summary?object=MTBCDC1551
+Oshkosh	Oshkosh	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	https://biocyc.org/organism-summary?object=MTBCDC1551
+Ravenel	Ravenel	La1	Mycobacterium bovis	tuberculosis: human-adapted	
+S-type	None	L4.4.1.1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)ProtoBeijing	None	L2	Mycobacterium tuberculosis	tuberculosis: human-adapted	MUST COME AFTER SIMPLE BEIJING MATCH
+(?i)Proto-Beijing	None	L3	Mycobacterium tuberculosis	tuberculosis: human-adapted	MUST COME AFTER SIMPLE BEIJING MATCH
+(?i)nonBeijing	None	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	MUST COME AFTER SIMPLE BEIJING MATCH
+(?i)non-Beijing	None	L5	Mycobacterium tuberculosis	tuberculosis: human-adapted	MUST COME AFTER SIMPLE BEIJING MATCH
+(?i)africanum	None	None	Mycobacterium africanum	tuberculosis: human-adapted	
+(?i)bovis	None	La1	Mycobacterium bovis	tuberculosis: animal-adapted	
+(?i)caprae	None	La2	Mycobacterium caprae	tuberculosis: animal-adapted	
+(?i)orygis	None	La3	Mycobacterium orygis	tuberculosis: animal-adapted	
+(?i)canetti	None	None	Mycobacterium canettii	MTBC	common typo, also matches canettii
+(?i)pinnipedi	None	None	Mycobacterium pinnipedii	tuberculosis: animal-adapted	common typo, matches pinnipedii
+(?i)mungi	None	None	Mycobacterium mungi	MTBC	
+(?i)microti	None	None	Mycobacterium microti	tuberculosis: animal-adapted	
+(?i)Percy302	STB-K	None	Mycobacterium canettii	MTBC	
+(?i)H37Rv-like	None	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	MUST COME AFTER H37RV MATCH
+mainly T	None	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+(?i)Aethiop	None	L7	Mycobacterium tuberculosis	tuberculosis: human-adapted	Nebenzahl-Guimaraes et al. proposed name for L7 is "Aethiop vetus" (PMC5320646)
+(?i)Erdman	Erdman	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+ATCC 35828	H37Rv-PZA-R	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+H37Ra	H37Ra	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+H41Rv	H41Rv	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+SCAID 252	SCAID 252	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+SCAID252	SCAID 252	None	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Rangipo	Rangipo	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Otara	Otara	L4	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+Danish-SSI 1331	None	La1	Mycobacterium bovis	tuberculosis: human-adapted	
+(?i)Kiyosense	None	None	Mycobacterium kiyosense	NTM: unclassified	
+(?i)vole bacillus	None	vole bacillus	Mycobacterium tuberculosis complex sp.	MTBC	
+(?i)dassie bacillus	None	dassie bacillus	Mycobacterium tuberculosis complex sp.	MTBC	
+(?i)chimpanzee bacillus	None	chimpanzee bacillus	Mycobacterium tuberculosis complex sp.	MTBC	
+Mycobacterium muris	None	None	Mycobacterium microti	tuberculosis: animal-adapted	do NOT match on M. muris, there's a nematode with that name
+Mycobacterium variant muris	None	None	Mycobacterium microti	tuberculosis: animal-adapted	
+Mycobacterium basiliense	None	None	Mycobacterium basiliense	NTM: unclassified	
+Mycobacterium kansasii	None	None	Mycobacterium kansasii	NTM: unclassified	
+Mycobacterium kansasi	None	None	Mycobacterium kansasii	NTM: unclassified	typo
+Mycobacterium kiyosense	None	None	Mycobacterium kiyosense	NTM: unclassified	
+Mycobacterium lentiflavum	None	None	Mycobacterium lentiflavum	NTM: unclassified	
+Mycobacterium malmoense	None	None	Mycobacterium malmoense	NTM: unclassified	
+Mycobacterium mantenii	None	None	Mycobacterium mantenii	NTM: unclassified	
+Mycobacterium manteni	None	None	Mycobacterium mantenii	NTM: unclassified	typo
+Mycobacterium marinum	None	None	Mycobacterium marinum	NTM: unclassified	
+Mycobacterium paragordonae	None	None	Mycobacterium paragordonae	NTM: unclassified	
+Mycobacterium peregrinum	None	None	Mycobacterium peregrinum	NTM: unclassified	
+Mycobacterium riyadhense	None	None	Mycobacterium riyadhense	NTM: unclassified	
+Mycobacterium scrofulaceum	None	None	Mycobacterium scrofulaceum	NTM: unclassified	
+Mycobacterium senegalense	None	None	Mycobacterium senegalense	NTM: unclassified	
+Mycobacterium triplex	None	None	Mycobacterium triplex	NTM: unclassified	
+Mycobacterium ulcerans	None	None	Mycobacterium ulcerans	NTM: unclassified	
+Mycobacterium sp\. DSM 104308 	None	None	Mycobacterium basiliense	NTM: unclassified	
+Mycobacterium abscessus	None	None	Mycobacteroides abscessus	NTM: abscessus complex	
+Mycobacteroides abscessus	None	None	Mycobacteroides abscessus	NTM: abscessus complex	
+Mycobacteroides abscessus ATCC 19977	None	None	Mycobacteroides abscessus	NTM: abscessus complex	
+Mycobacterium bolletii	None	None	Mycobacterium bolletii	NTM: abscessus complex	
+Mycobacteroides chelonae	None	None	Mycobacteroides chelonae	NTM: abscessus complex	
+Mycobacterium massiliense	None	None	Mycobacterium massiliense	NTM: abscessus complex	
+Mycobacterium [tuberculosis] TKK-01-0051	None	None	Mycobacterium avium complex sp.	NTM: avium complex	yes this is avium: https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=1324261
+Mycobacterium avium	None	None	Mycobacterium avium	NTM: avium complex	
+Mycobacterium avium avium	None	None	Mycobacterium avium	NTM: avium complex	
+Mycobacterium avium hominissuis	None	None	Mycobacterium avium subsp. hominissuis	NTM: avium complex	
+Mycobacterium avium subsp. hominissuis	None	None	Mycobacterium avium subsp. hominissuis	NTM: avium complex	
+Mycobacterium avium complex sp	None	None	Mycobacterium avium complex sp.	NTM: avium complex	
+Mycobacterium avium paratuberculosis	None	None	Mycobacterium avium subsp. paratuberculosis	NTM: avium complex	
+Mycobacterium avium subsp\. paratuberculosis	None	None	Mycobacterium avium subsp. paratuberculosis	NTM: avium complex	
+Mycobacterium avium XTB13-223	None	None	Mycobacterium avium	NTM: avium complex	
+Mycobacterium bouchedurhonense	None	None	Mycobacterium bouchedurhonense	NTM: avium complex	
+Mycobacterium chimaera	None	None	Mycobacterium intracellulare subsp. chimaera	NTM: avium complex	
+Mycobacterium colombiense	None	None	Mycobacterium colombiense	NTM: avium complex	
+Mycobacterium intracellulare	None	None	Mycobacterium intracellulare	NTM: avium complex	
+Mycobacterium intracellulare subsp. chimaera	None	None	Mycobacterium intracellulare subsp. chimaera	NTM: avium complex	
+Mycobacterium intracellulare subsp. yongonense	None	None	Mycobacterium intracellulare subsp. yongonense	NTM: avium complex	
+Mycobacterium marseillense	None	None	Mycobacterium marseillense	NTM: avium complex	
+Mycobacterium sp\. TKK-01-0059	None	None	Mycobacterium intracellulare subsp. yongonense	NTM: avium complex	Mycobacterium yongonense doi:10.1016/j.ijid.2018.04.796
+Mycobacterium timonense	None	None	Mycobacterium timonense	NTM: avium complex	
+Mycobacterium yongonense	None	None	Mycobacterium intracellulare subsp. yongonense	NTM: avium complex	
+Mycolicibacterium	None	None	Mycolicibacterium sp.	mycolicibacterium	
+Mycolicibacterium sp\.	None	None	Mycolicibacterium sp.	mycolicibacterium	
+Mycolicibacteria	None	None	Mycolicibacterium sp.	mycolicibacterium	
+Mycolicibacterium agri	None	None	Mycolicibacterium agri	mycolicibacterium	
+Mycobacterium agri	None	None	Mycolicibacterium agri	mycolicibacterium	
+Mycolicibacterium aichiense	None	None	Mycolicibacterium aichiense	mycolicibacterium	
+Mycobacterium aichiense	None	None	Mycolicibacterium aichiense	mycolicibacterium	
+Mycolicibacterium alvei	None	None	Mycolicibacterium alvei	mycolicibacterium	
+Mycobacterium alvei	None	None	Mycolicibacterium alvei	mycolicibacterium	
+Mycolicibacterium aubagnense	None	None	Mycolicibacterium aubagnense	mycolicibacterium	
+Mycobacterium aubagnense	None	None	Mycolicibacterium aubagnense	mycolicibacterium	
+Mycolicibacterium aurum	None	None	Mycolicibacterium aurum	mycolicibacterium	
+Mycobacterium aurum	None	None	Mycolicibacterium aurum	mycolicibacterium	
+Mycolicibacterium austroafricanum	None	None	Mycolicibacterium austroafricanum	mycolicibacterium	
+Mycobacterium austroafricanum	None	None	Mycolicibacterium austroafricanum	mycolicibacterium	
+Mycolicibacterium fortuitum	None	None	Mycolicibacterium fortuitum	mycolicibacterium	
+Mycolicibacterium fortuitum complex	None	None	Mycolicibacterium fortuitum	mycolicibacterium	
+Mycobacterium fortuitum	None	None	Mycolicibacterium fortuitum	mycolicibacterium	
+Mycobacterium fortuitum complex	None	None	Mycolicibacterium fortuitum	mycolicibacterium	
+Mycolicibacterium malmesburyense	None	None	Mycolicibacterium malmesburyense	mycolicibacterium	
+Mycobacterium malmesburyense	None	None	Mycolicibacterium malmesburyense	mycolicibacterium	
+Mycolicibacterium iranicum	None	None	Mycolicibacterium iranicum	mycolicibacterium	
+Mycobacterium iranicum	None	None	Mycolicibacterium iranicum	mycolicibacterium	
+Mycobacterium smegmatis	None	None	Mycolicibacterium smegmatis	mycolicibacterium	
+Mycolicibacterium smegmatis	None	None	Mycolicibacterium smegmatis	mycolicibacterium	
+Mycolicibacterium smegmatis MC2 155	None	None	Mycolicibacterium smegmatis	mycolicibacterium	
+Mycobacterium leprae	None	None	Mycobacterium leprae	leprosy	
+Mycobacterium lepromatosis	None	None	Mycobacterium lepromatosis	leprosy	
+Candidatus Mycobacterium methanotrophicum	None	None	Mycobacterium methanotrophicum	methanotrophic	
+Mycobacterium methanotrophicum Sulfur Cave	None	None	Mycobacterium methanotrophicum	methanotrophic	
+Mycobacterium sp\. MAG1	None	None	Mycobacterium methanotrophicum	methanotrophic	
+Mycobacterium methanotrophicum	None	None	Mycobacterium methanotrophicum	methanotrophic	
+Mycobacterium alsense	None	None	Mycobacterium alsense	unclassified mycobacteria	
+Mycobacterium asiaticum	None	None	Mycobacterium asiaticum	unclassified mycobacteria	
+Mycobacterium basiliense	None	None	Mycobacterium basiliense	unclassified mycobacteria	
+Mycobacterium gordonae	None	None	Mycobacterium gordonae	unclassified mycobacteria	
+Mycobacterium interjectum	None	None	Mycobacterium interjectum	unclassified mycobacteria	
+Mycobacterium szulgai	None	None	Mycobacterium szulgai	unclassified mycobacteria	
+Pasteur 1173P2	Pasteur 1173P2	La1.2	Mycobacterium bovis	tuberculosis: animal-adapted	
+Pasteur 1721	Pasteur 1721	La1.2	Mycobacterium bovis	tuberculosis: animal-adapted	
+(?i)2\.2\.2 - East Asian	None	L2.2.2	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+4\.4\.1\.1	None	L4.4.1.1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
+\b2\.2\.1(\s|$)	None	L2.2.1	Mycobacterium tuberculosis	tuberculosis: human-adapted	
