@@ -1,3 +1,18 @@
+# Copyright (C) 2025 Ash O'Farrell
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 from .config import RancheroConfig
 from .neigh import NeighLib
 Configuration = RancheroConfig()  # creates a default config
@@ -13,8 +28,6 @@ _Standardizer = ProfessionalsHaveStandards(Configuration)
 from .read_file import FileReader
 _FileReader = FileReader(Configuration)
 
-
-
 # exposed classes of global instances
 to_tsv = _NeighLib.polars_to_tsv
 flatten_nested_list_cols = _NeighLib.flatten_nested_list_cols
@@ -28,7 +41,6 @@ unique_bioproject_per_center_name = _NeighLib.unique_bioproject_per_center_name
 rancheroize = _NeighLib.rancheroize_polars
 print_schema = _NeighLib.print_schema
 add_column_with_this_value = _NeighLib.add_column_of_just_this_value
-
 
 from_tsv = _FileReader.polars_from_tsv
 from_bigquery = _FileReader.polars_from_bigquery

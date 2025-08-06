@@ -4,9 +4,24 @@ import polars as pl
 from polars.testing import assert_series_equal
 from src.statics import kolumns, null_values, drop_zone, file_extensions
 
-
 # https://peps.python.org/pep-0661/
 _DEFAULT_TO_CONFIGURATION = object()
+
+
+# Copyright (C) 2025 Ash O'Farrell
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 class Extractor:
 
