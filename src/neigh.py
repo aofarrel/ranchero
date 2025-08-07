@@ -111,7 +111,7 @@ class NeighLib:
 
 	def get_hypothetical_index_basename(self, wannabe_index_column: str) -> str:
 		# DOES NO CHECKING (hence hypothetical)
-		return str(wannabe_index_column.rstrip(INDEX_PREFIX))
+		return str(wannabe_index_column.lstrip(INDEX_PREFIX))
 
 	def strip_index_marker(self, polars_df: pl.DataFrame) -> pl.DataFrame:
 		return polars_df.rename({
