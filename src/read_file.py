@@ -92,7 +92,7 @@ class FileReader():
 		
 		polars_df = pl.read_csv(csv)
 		polars_df = polars_df.drop(drop_columns)
-		if check_index: NeighLib.check_index(polars_df)
+		if check_index: polars_df = NeighLib.check_index(polars_df, df_name=os.path.basename(csv))
 		if auto_rancheroize: 
 			polars_df = NeighLib.rancheroize_polars(polars_df)
 			if auto_standardize:
@@ -131,7 +131,6 @@ class FileReader():
 		if index is not None:
 			polars_df = NeighLib.mark_index(polars_df, index)
 			index = NeighLib.get_index(polars_df, index)
-		
 		if list_columns is not None:
 			for column in list_columns:
 				polars_df = polars_df.with_columns(
@@ -146,7 +145,7 @@ class FileReader():
 			# would want the quiet version, since it wouldn't return a str during error cases...
 			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), 
 				delimiter=explode_upon, drop_new_non_unique=check_index)
-		if check_index: NeighLib.check_index(polars_df)
+		if check_index: polars_df = NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
 		if auto_rancheroize:
 			self.logging.info("Rancheroizing dataframe from TSV...")
 			polars_df = NeighLib.rancheroize_polars(polars_df, index=index)
@@ -326,11 +325,13 @@ class FileReader():
 		
 		try:
 			cursed_dictionary = xmltodict.parse(xml_content)
+			better_xml = None
 		except xml.parsers.expat.ExpatError:
 			better_xml = self.fix_efetch_file(efetch_xml)
 			with open(better_xml, "r") as file:
 				xml_content = file.read()
 			cursed_dictionary = xmltodict.parse(xml_content)
+		xml_name = os.path.basename(efetch_xml) if better_xml is None else os.path.basename(better_xml) # for logging
 		
 		# Regardless of whether or not we had to fix the XML file, cursed_dictionary kind of looks like this:
 		#
@@ -387,7 +388,7 @@ class FileReader():
 			assert list(EXPERIMENT_PACKAGE.keys()) == ["EXPERIMENT_PACKAGE"]
 			for list_of_experiments in EXPERIMENT_PACKAGE.values():
 				assert type(list_of_experiments) == list
-				for actual_experiment in tqdm(list_of_experiments, desc="Processing 'experiments''", ascii='➖🌱🐄', bar_format=barformat):
+				for actual_experiment in tqdm(list_of_experiments, desc=f"Processing {xml_name}'s 'experiments''", ascii='➖🌱🐄', bar_format=barformat):
 					assert type(actual_experiment) == dict
 					if len(actual_experiment) == 7 or len(actual_experiment) == 6: # whether or not "Pool" is present
 						
@@ -460,7 +461,7 @@ class FileReader():
 				blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(file_index).agg(
 						[c for c in blessed_dataframe.columns if c != file_index]
 				), force_index=file_index)
-			if check_index: blessed_dataframe = NeighLib.check_index(blessed_dataframe) # must come AFTER the group_by option 
+			if check_index: blessed_dataframe = NeighLib.check_index(blessed_dataframe, df_name=xml_name) # must come AFTER the group_by option 
 			return blessed_dataframe
 		else:
 			# TODO: sum() submitted_file_sizes
@@ -471,7 +472,7 @@ class FileReader():
 			blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_index).agg(
 				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != run_index]
 			), force_index=run_index)
-			if check_index: blessed_dataframe = NeighLib.check_index(blessed_dataframe)
+			if check_index: blessed_dataframe = NeighLib.check_index(blessed_dataframe, df_name=xml_name)
 			return blessed_dataframe
 
 	def fix_bigquery_file(self, bq_file):
@@ -715,7 +716,7 @@ class FileReader():
 			self.logging.debug("Rancheroizing run-indexed dataframe")
 			polars_df = NeighLib.rancheroize_polars(polars_df) # runs check_index()
 		else:
-			NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
+			polars_df = NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		polars_df = NeighLib.null_lists_of_len_zero(

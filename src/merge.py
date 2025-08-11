@@ -142,19 +142,22 @@ class Merger:
 		merging dataframes multiple times. If right_name is None, or indicator is explictly set to None, a right_name
 		column will be created temporarily but dropped before returning.
 		"""
-		self.logging.info(f"Merging {left_name} and {right_name} upon {merge_upon}")
+		self.logging.debug(f"Preparing to merge {left_name} and {right_name} upon {merge_upon}...")
 		n_rows_left, n_rows_right = left.shape[0], right.shape[0]
 		n_cols_left, n_cols_right = left.shape[1], right.shape[1]
 		assert n_rows_left != 0 and n_rows_right != 0
 		assert n_cols_left != 0 and n_cols_right != 0
 		if indicator is _DEFAULT_TO_CONFIGURATION:
 			indicator = self.cfg.indicator_column
+		self.logging.debug(f"Dropping null columns from {left_name} and {right_name}...")
 		left, right = NeighLib.drop_null_columns(left), NeighLib.drop_null_columns(right)
 
 		# merge_upon is not necessarily the index of either dataframe, but in the short term we want it to act like one (that is to say, fully
 		# unique, no nulls, etc)
-		left = NeighLib.check_index(left, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True)
-		right = NeighLib.check_index(right, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True)
+		self.logging.debug(f"Checking {left_name}'s index...")
+		left = NeighLib.check_index(left, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=left_name)
+		self.logging.debug(f"Checking {right_name}'s index...")
+		right = NeighLib.check_index(right, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=right_name)
 
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:
@@ -169,6 +172,7 @@ class Merger:
 				else:
 					print(df.filter(pl.col(merge_upon).is_null()))
 				raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
+		self.logging.info(f"Merging {left_name} and {right_name} upon {merge_upon}")
 
 		# right/left-hand dataframe's index's values (SRR16156818, SRR12380906, etc) ONLY -- all other columns excluded
 		assert left.schema[merge_upon] == right.schema[merge_upon]
@@ -208,8 +212,8 @@ class Merger:
 			exclusive_right_values = pl.DataFrame()
 		else:
 			self.logging.info(f"--> Exclusive to {right_name}: {len(exclusive_right_values)}")
-			#if len(exclusive_right_values) > 0:
-			#	self.logging.debug(f"--> Some of the exclusive right values: {exclusive_right_values}")
+			if len(exclusive_right_values) > 0:
+				self.logging.debug(f"-----> Some of the exclusive right values: {exclusive_right_values}")
 
 		# TODO: this is here just so we have better testing of list merges, but later it's probably better to just
 		# put something like this at the end by concat_list()ing pl.lit() the name into the column
