@@ -1133,6 +1133,7 @@ class NeighLib:
 				#print_cols = [base_col, right_col, index_column, self.cfg.indicator_column] if self.cfg.indicator_column in polars_df.columns else [base_col, right_col, index_column]
 				if len(polars_df.filter(pl.col(base_col) != pl.col(right_col))) == 0:
 					self.logging.debug("[kolumns.list_throw_error] Found conflicts, but they're nulls, so who cares?")
+					polars_df = polars_df.drop(right_col) # TODO: is this right?
 				else:
 					self.logging.error(f"[kolumns.list_throw_error] {base_col} --> Fatal error. There should never be lists in this column.")
 					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(print_cols), f"conflicts")

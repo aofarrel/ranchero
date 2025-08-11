@@ -121,12 +121,15 @@ class FileReader():
 		check_index = self._sentinal_handler(check_index)
 		auto_standardize = self._sentinal_handler(auto_standardize)
 		ignore_polars_read_errors = self._sentinal_handler(ignore_polars_read_errors)
+		df_name = os.path.basename(tsv)
 
 		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, 
 			ignore_errors=ignore_polars_read_errors, glob=glob)
 		if len(drop_columns) != 0:
 			polars_df = polars_df.drop(drop_columns)
-			self.logging.info(f"Dropped {drop_columns}")
+			self.logging.info(f"Dropped {drop_columns} from {df_name}")
+
+		self.logging.debug(f"{df_name} currently has these columns: {polars_df.columns}")
 
 		if index is not None:
 			polars_df = NeighLib.mark_index(polars_df, index)
@@ -147,10 +150,10 @@ class FileReader():
 				delimiter=explode_upon, drop_new_non_unique=check_index)
 		if check_index: polars_df = NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
 		if auto_rancheroize:
-			self.logging.info("Rancheroizing dataframe from TSV...")
+			self.logging.info(f"Rancheroizing dataframe from {df_name}...")
 			polars_df = NeighLib.rancheroize_polars(polars_df, index=index)
 			if auto_standardize:
-				self.logging.info("Standardizing dataframe from TSV...")
+				self.logging.info(f"Standardizing dataframe from {df_name}...")
 				polars_df = Standardizer.standardize_everything(polars_df)
 		return polars_df
 
