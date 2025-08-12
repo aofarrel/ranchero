@@ -1,3 +1,6 @@
+import sys
+assert sys.version_info >= (3, 9), f"Use Python 3.9 or newer -- you are using {sys.version_info[0]}.{sys.version_info[1]}"
+
 from .config import RancheroConfig
 from .neigh import NeighLib
 Configuration = RancheroConfig()  # creates a default config
@@ -12,7 +15,6 @@ from .standardize import ProfessionalsHaveStandards
 _Standardizer = ProfessionalsHaveStandards(Configuration)
 from .read_file import FileReader
 _FileReader = FileReader(Configuration)
-
 
 
 # exposed classes of global instances

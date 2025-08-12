@@ -281,6 +281,7 @@ class NeighLib:
 			elif dupe_index_handling == 'keep_most_data':
 				# TODO: is it faster to do this with just the subset of columns with dupes and then concat?
 				# maybe swap strategies based on the shape of duplicate_df and polars_df relative to each other
+				self.logging.info(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index {index_to_check}, will keep rows with the most non-nulls")
 				polars_df = polars_df.with_columns(
 					pl.sum_horizontal(
 						*[pl.col(c).is_not_null().cast(pl.Int64) for c in polars_df.columns if c != index_to_check]

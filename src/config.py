@@ -26,7 +26,7 @@ DupeIndexOptions: TypeAlias = Literal[
 	"silent",
 	"allow",
 	"dropall",
-	"keep_most_data"
+	"keep_most_data" # be aware this sorts the dataframe
 ]
 
 # valid options for host_info_handling
