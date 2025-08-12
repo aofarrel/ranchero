@@ -25,7 +25,8 @@ DupeIndexOptions: TypeAlias = Literal[
 	"verbose_warn",
 	"silent",
 	"allow",
-	"dropall"
+	"dropall",
+	"keep_most_data"
 ]
 
 # valid options for host_info_handling

@@ -249,7 +249,6 @@ class NeighLib:
 		# TODO: dupe_index_handling should probably align with try_to_fix behavior
 		assert polars_df.schema[index_to_check] == pl.Utf8  # in case entire column got nulled and datatype became pl.Null
 		duplicate_df = polars_df.filter(polars_df[index_to_check].is_duplicated())
-		duplicate_df = duplicate_df.select(self.valid_cols(duplicate_df, [index_to_check, 'run_index', 'sample_index', 'submitted_files_bytes']))
 		n_dupe_indeces = len(duplicate_df)
 		#if len(polars_df) != len(polars_df.unique(subset=[index_to_check], keep="any")):
 		if n_dupe_indeces > 0:
@@ -262,8 +261,8 @@ class NeighLib:
 					raise ValueError(f"Found {n_dupe_indeces} duplicates in index column")
 				else: # verbose_error
 					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
+					self.dfprint(duplicate_df.select(self.valid_cols(duplicate_df, [index_to_check, 'run_index', 'sample_index', 'submitted_files_bytes'])), str_len=120, width=120)
 					raise ValueError(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index column (dumped to dupes_in_index.tsv)")
-					self.dfprint(duplicate_df, str_len=120, width=120)
 			elif dupe_index_handling in ['warn', 'verbose_warn', 'silent']:
 				subset = polars_df.unique(subset=[index_to_check], keep="any")
 				if dupe_index_handling == 'warn':
@@ -273,12 +272,25 @@ class NeighLib:
 					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
 					self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index {index_to_check} (dumped to dupes_in_index.tsv), "
 						"will keep one instance per dupe")
-					self.dfprint(duplicate_df.sort(index_to_check), str_len=120, width=120)
+					self.dfprint(duplicate_df.select(self.valid_cols(duplicate_df, [index_to_check, 'run_index', 'sample_index', 'submitted_files_bytes'])).sort(index_to_check), str_len=120, width=120)
 				polars_df = subset
 			elif dupe_index_handling == 'dropall':
 				subset = polars_df.unique(subset=[index_to_check], keep="none")
 				self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index {index_to_check}, will drop all of them")
 				polars_df = subset
+			elif dupe_index_handling == 'keep_most_data':
+				# TODO: is it faster to do this with just the subset of columns with dupes and then concat?
+				# maybe swap strategies based on the shape of duplicate_df and polars_df relative to each other
+				polars_df = polars_df.with_columns(
+					pl.sum_horizontal(
+						*[pl.col(c).is_not_null().cast(pl.Int64) for c in polars_df.columns if c != index_to_check]
+					).alias("_non_null_count")
+				)
+				polars_df = (
+					polars_df.sort(by=[index_to_check, "_non_null_count"], descending=[False, True])
+					.unique(subset=[index_to_check], keep="first")
+					.drop("_non_null_count")
+				)
 			else:
 				raise ValueError(f"Unknown value provided for dupe_index_handling: {dupe_index_handling}")
 		else:
@@ -1740,13 +1752,18 @@ class NeighLib:
 			self.logging.debug(f"Called encode_as_str() on {column}, which already has pl.Utf8 type. Doing nothing...")
 			return polars_df
 
+		elif datatype in [pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.Float32, pl.Float64]:
+			raise TypeError("Not implemented yet")
+			return polars_df
+
 		else:
 			raise ValueError(f"Tried to make {column} into a string column, but we don't know what to do with type {datatype}")
 
 	def stringify_all_list_columns(self, polars_df):
 		self.logging.debug(f"Forcing ALL list columns into strings")
 		for col, datatype in polars_df.schema.items():
-			polars_df = self.encode_as_str(polars_df, col)
+			if datatype == pl.List or datatype == pl.Object:
+				polars_df = self.encode_as_str(polars_df, col)
 		return polars_df
 
 	def add_column_of_just_this_value(self, polars_df, column, value):
@@ -1791,6 +1808,9 @@ class NeighLib:
 			debug = pl.DataFrame({col:  f"Was {dtype1}, now {dtype2}" for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if col in df_to_write.columns and dtype2 != pl.String and dtype2 != pl.List(pl.String)})
 			self.super_print_pl(debug, "Potentially problematic that may have caused the TSV write failure:")
 			exit(1)
+
+	def col_to_list(self, polars_df, col):
+		return pl.Series(polars_df.select(col)).to_list()
 	
 	def assert_unique_columns(self, pandas_df):
 		"""Assert all columns in a !!!PANDAS!!! dataframe are unique -- useful if converting to polars """

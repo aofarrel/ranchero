@@ -28,6 +28,8 @@ df = pl.DataFrame({
 }, strict=False, schema_overrides={"list: str + null": pl.Object})
 
 
+### Configuration ###
+
 
 ### File parsing ###
 
@@ -45,38 +47,91 @@ df = pl.DataFrame({
 
 
 ### Index stuff ###
+def miscellanous_index_stuff():
 
-# Removing nulls from an index column
-def removing_nulls_from_an_index_column():
-	df = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", None, "bizz.fq"]})
-	df = Ranchero.check_index(df)
-	assert df.shape[0] == 3
-	print("✅ Removing nulls from an index column")
+	def removing_nulls_from_an_index_column():
+		df = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", None, "bizz.fq"]})
+		df = Ranchero.check_index(df)
+		assert df.shape[0] == 3
+		print("✅ Removing nulls from an index column")
 
-# Removing dupes from an index column
-def removing_dupes_from_an_index_column():
-	df = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", "bar.fq", "bizz.fq"]})
-	df = Ranchero.check_index(df)
-	assert df.shape[0] == 3
-	print("✅ Removing dupes from an index column")
+	removing_nulls_from_an_index_column()
 
-# Concatenating two dataframes that will result in dupe indeces, and making sure dupes are dropped
-# Test dataframes need two columns or else pl.concat() will drop the repeated one automatically.
-def remove_dupes_after_concat():
-	df1 = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", "bizz.fq"], "host": ["human", "dog", "cat"]})
-	df2 = pl.DataFrame({"__index__file": ["loreum.fq", "bar.fq", "ipsum.fq"], "host": ["llama", "chicken", "boar"]})
-	df3 = pl.concat([df1, df2], how="align_full")
-	assert df3.shape[0] == 6
-	df3 = Ranchero.check_index(df3)
-	assert df3.shape[0] == 5
-	print("✅ Removing dupes from an index column created by pl.concat")
+def dupe_index_handling():
+	dupe_index_df = pl.DataFrame({
+		"__index__file": ["foo.fq", "bar.fq", "bar.fq", "bizz.fq"],
+		"int_or_null": [1, None, 2, 4],
+		"list_data": [[1,2], [1,2], [1,2], [1,2]],
+		"list_or_null": [[1], None, [2], [3]],
+		"str_or_null": ["foo", "bar", None, "bizz"]
+	})
+	non_null_counts = pl.Series(dupe_index_df.with_columns(
+		pl.sum_horizontal(
+			*[pl.col(c).is_not_null().cast(pl.Int64) for c in dupe_index_df.columns if c != '__index__file']
+		).alias("_non_null_count")
+	).select('_non_null_count')).to_list()
+	assert non_null_counts == [4,2,3,4]
 
-# Blocking a merge due to either of the dataframes having dupes in the merge_upon column
+	def dupe_index_handling__error(dupe_index_df):
+		Ranchero.Configuration.set_config({"dupe_index_handling": 'error'})
+		df = dupe_index_df
+		try:
+			df = Ranchero.check_index(df)
+		except ValueError:
+			print("✅ Dupe index handling: error (threw ValueError)")
+	
+	def dupe_index_handling__keep_most_data(dupe_index_df):
+		Ranchero.Configuration.set_config({"dupe_index_handling": 'keep_most_data'})
+		df_goal = pl.DataFrame({
+			"__index__file": ["bar.fq", "bizz.fq", "foo.fq"],
+			"int_or_null": [2, 4, 1],
+			"list_data": [[1,2], [1,2], [1,2]],
+			"list_or_null": [[2], [3], [1]],
+			"str_or_null": [None, "bizz", "foo"]
+		})
+		df = dupe_index_df
+		df = Ranchero.check_index(df)
+		pl.testing.assert_frame_equal(df, df_goal)
+		print("✅ Dupe index handling: keep_most_data (kept the one with the least number of nulls)")
+	
+	def dupe_index_handling__verbose_warn(dupe_index_df):
+		Ranchero.Configuration.set_config({"dupe_index_handling": 'verbose_warn'})
+		df = dupe_index_df
+		df = Ranchero.check_index(df)
+		assert df.shape[0] == 3
+		print("✅ Dupe index handling: verbose_warn (removed one)")
+	
+	def dupe_index_handling__warn(dupe_index_df):
+		Ranchero.Configuration.set_config({"dupe_index_handling": 'warn'})
+		df = dupe_index_df
+		df = Ranchero.check_index(df)
+		assert df.shape[0] == 3
+		print("✅ Dupe index handling: warn (removed one)")
+
+	def remove_dupes_after_concat():
+		# Test dataframes need two columns or else pl.concat() will drop the repeated one automatically.
+		Ranchero.Configuration.set_config({"dupe_index_handling": 'warn'}) # TODO: set to default?
+		df1 = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", "bizz.fq"], "host": ["human", "dog", "cat"]})
+		df2 = pl.DataFrame({"__index__file": ["loreum.fq", "bar.fq", "ipsum.fq"], "host": ["llama", "chicken", "boar"]})
+		df3 = pl.concat([df1, df2], how="align_full")
+		assert df3.shape[0] == 6
+		df3 = Ranchero.check_index(df3)
+		assert df3.shape[0] == 5
+		print("✅ Removing dupes from an index column created by pl.concat")
+
+	
+	dupe_index_handling__error(dupe_index_df)
+	dupe_index_handling__keep_most_data(dupe_index_df)
+	dupe_index_handling__verbose_warn(dupe_index_df)
+	dupe_index_handling__warn(dupe_index_df)
+	remove_dupes_after_concat()
+
 
 
 ### Merge stuff ###
+# Blocking a merge due to either of the dataframes having dupes in the merge_upon column
 
 
-removing_nulls_from_an_index_column()
-removing_dupes_from_an_index_column()
-remove_dupes_after_concat()
+
+dupe_index_handling()
+
