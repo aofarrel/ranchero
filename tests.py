@@ -27,6 +27,8 @@ df = pl.DataFrame({
 	"list: str": [["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"],["lorem", "ipsum"]],
 }, strict=False, schema_overrides={"list: str + null": pl.Object})
 
+verbose = False
+
 
 ### Configuration ###
 
@@ -44,6 +46,105 @@ df = pl.DataFrame({
 # Read BigQuery NJSON on sra metadata table
 
 # Read BigQuery NJSON on sra metadata table and that one taxonomic table
+
+### Polars assumptions ###
+def polars_null_handling():
+	# check for https://github.com/pola-rs/polars/issues/20069 and/or related regressions
+
+	def dtype_null__len_of_null():
+		just_null = pl.DataFrame({'x': [None]}).with_columns(x_len=pl.col('x').len())
+		if verbose: print(just_null)
+		assert just_null[0,1] == 1
+		print("✅ len(`pl.Null` in column of type `pl.Null`) = 1")
+
+	def dtype_list_null__len_of_empty_list():
+		null_list = pl.DataFrame({'x': [[]]}).with_columns(x_len=pl.col('x').len(), x_list_len=pl.col('x').list.len())
+		if verbose: print(null_list)
+		assert null_list[0,1] == 1
+		print("✅ len(`[]` in column of type `list[null]`) = 1")
+
+	def dtype_listlen_null__len_of_empty_list():
+		null_list = pl.DataFrame({'x': [[]]}).with_columns(x_len=pl.col('x').len(), x_list_len=pl.col('x').list.len())
+		if verbose: print(null_list)
+		assert null_list[0,2] == 0
+		print("✅ list.len(`[]` in column of type `list[null]`) = 0")
+	
+	def dtype_list_null__len_of_nullnull():
+		null_list = pl.DataFrame({'x': [[None, None]]}).with_columns(x_len=pl.col('x').len(), x_list_len=pl.col('x').list.len())
+		if verbose: print(null_list)
+		assert null_list[0,1] == 1
+		print("✅ len(`[pl.Null, pl.Null]` in column of type `list[null]`) = 1")
+	
+	def dtype_list_null__listlen_of_nullnull():
+		null_list = pl.DataFrame({'x': [[None, None]]}).with_columns(x_len=pl.col('x').len(), x_list_len=pl.col('x').list.len())
+		if verbose: print(null_list)
+		assert null_list[0,2] == 2
+		print("✅ list.len(`[pl.Null, pl.Null]` in column of type `list[null]`) = 2")
+
+
+	dtype_null__len_of_null()
+	dtype_list_null__len_of_empty_list()
+	dtype_listlen_null__len_of_empty_list()
+	dtype_list_null__len_of_nullnull()
+	dtype_list_null__listlen_of_nullnull()
+
+	nullframe = pl.DataFrame({'x': [
+		None,
+		[],
+		[None],
+		[None, None],
+		["foo", None, "bar"],
+		["a", "b"]
+	]}).with_columns(x_list_len=pl.col('x').list.len())
+	if verbose: print(nullframe)
+
+	def schema_guessing_isnt_whack(nullframe):
+		assert nullframe.dtypes == [pl.List(pl.Utf8), pl.UInt32]
+		print("✅ nullframe has correct schema")
+
+	def dtype_list_str__listlen_of_unlisted_null(nullframe):
+		if verbose: print(nullframe[0])
+		assert nullframe[0,0] == None
+		assert nullframe[0,1] == None
+		print("✅ list.len(`pl.Null` in column of type `list[str]`) = pl.Null")
+
+	def dtype_list_str__listlen_of_empty_list(nullframe):
+		if verbose: print(nullframe[1])
+		assert list(nullframe[1,0]) == []
+		assert nullframe[1,1] == 0
+		print("✅ list.len(`[]` in column of type `list[str]`) = 0")
+
+	def dtype_list_str__listlen_of_listed_null(nullframe):
+		if verbose: print(nullframe[2])
+		assert list(nullframe[2,0]) == [None]
+		assert nullframe[2,1] == 1
+		print("✅ list.len(`[pl.Null]` in column of type `list[str]`) = 1")
+
+	def dtype_list_str__listlen_of_listed_nullnull(nullframe):
+		if verbose: print(nullframe[3])
+		assert list(nullframe[3,0]) == [None, None]
+		assert nullframe[3,1] == 2
+		print("✅ list.len(`[pl.Null, pl.Null]` in column of type `list[str]`) = 2")
+
+	def dtype_list_str__listlen_of_aNullb(nullframe):
+		if verbose: print(nullframe[4])
+		assert list(nullframe[4,0]) == ["foo", None, "bar"]
+		assert nullframe[4,1] == 3
+		print("✅ list.len(`['foo', pl.Null, 'bar']` in column of type `list[str]`) = 3")
+
+	def dtype_list_str__listlen_of_ab(nullframe):
+		if verbose: print(nullframe[5])
+		assert list(nullframe[5,0]) == ["a", "b"]
+		assert nullframe[5,1] == 2
+		print("✅ list.len(`['a', 'b']` in column of type `list[str]`) = 2")
+
+	schema_guessing_isnt_whack(nullframe)
+	dtype_list_str__listlen_of_unlisted_null(nullframe)
+	dtype_list_str__listlen_of_empty_list(nullframe)
+	dtype_list_str__listlen_of_listed_null(nullframe)
+	dtype_list_str__listlen_of_listed_nullnull(nullframe)
+	dtype_list_str__listlen_of_aNullb(nullframe)
+	dtype_list_str__listlen_of_ab(nullframe)
 
 
 ### Index stuff ###
@@ -133,5 +234,7 @@ def dupe_index_handling():
 
 
 
+polars_null_handling()
+miscellanous_index_stuff()
 dupe_index_handling()
 

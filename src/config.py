@@ -95,11 +95,10 @@ class RancheroConfig:
 			else:
 				print(f"* {keys}: {values}")
 
-	def read_config(self, path=None):
+	def read_config(self, path=None) -> ConfigParameters:
 		# Just reads the file, doesn't actually set anything in and of itself
 		if path is None:
 			path = "/Users/aofarrel/github/ranchero/src/config.yaml"
-			print("⚠️⚠️⚠️⚠️STOP USING HARDCODED PATHS FOR YOUR DEFAULTS!!⚠️⚠️⚠️⚠️")
 		with open(path, 'r') as file:
 			config = yaml.safe_load(file)
 		typed_config: ConfigParameters = config # doesn't enforce typing in and of itself
@@ -107,13 +106,13 @@ class RancheroConfig:
 			assert self.is_in_ConfigParameters(keys)
 		return typed_config
 
-	def get_config(self, option):
+	def get_config(self, option) -> str:
 		if not hasattr(self, option):
 			raise ValueError(f"Option {option!r} doesn't exist")
 		else:
 			return getattr(self, option)
 
-	def initialize_config(self, overrides):
+	def initialize_config(self, overrides) -> None:
 		for option, value in overrides.items():
 			global ConfigParametersIterable
 			if option not in ConfigParametersList:
@@ -130,7 +129,7 @@ class RancheroConfig:
 				logging.getLogger().handlers.clear()
 				self.logger = self._setup_logger()
 
-	def prepare_taxoncore_dictionary(self, tsv='./src/statics/taxoncore_v4.tsv'):
+	def prepare_taxoncore_dictionary(self, tsv='./src/statics/taxoncore_v3_with_stricto_sensu.tsv') -> list:
 		if os.path.isfile(tsv):
 			with open(tsv, 'r') as tsvfile:
 				taxoncore_rules = []
@@ -160,7 +159,7 @@ class RancheroConfig:
 					(workdir: {os.getcwd()}). Certain functions will not work.""")
 				return None
 
-	def _setup_logger(self):
+	def _setup_logger(self) -> logging.Logger:
 		"""Sets up a logger instance"""
 		if not logging.getLogger().hasHandlers(): # necessary to avoid different modules logging all over each other
 			logger = logging.getLogger(__name__)
