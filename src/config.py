@@ -55,6 +55,8 @@ class ConfigParameters(TypedDict):
 	# not sure if this is how I want to handle this...
 	taxoncore_ruleset: None
 
+ConfigParametersList = list(ConfigParameters.__annotations__)
+
 class ReadFileParameters(TypedDict):
 	auto_cast_types: bool
 	auto_parse_dates: bool
@@ -105,18 +107,28 @@ class RancheroConfig:
 			assert self.is_in_ConfigParameters(keys)
 		return typed_config
 
-	def set_config(self, overrides):
+	def get_config(self, option):
+		if not hasattr(self, option):
+			raise ValueError(f"Option {option!r} doesn't exist")
+		else:
+			return getattr(self, option)
+
+	def initialize_config(self, overrides):
 		for option, value in overrides.items():
-			# TODO: actually implement this
-			#if option not in ConfigParameters:
-			#	raise ValueError(f"Option {option!r} doesn't exist")
+			global ConfigParametersIterable
+			if option not in ConfigParametersList:
+				raise ValueError(f"Config initialized with option {option!r} but that doesn't seem valid? Valid parameters: {ConfigParametersList}")
 			setattr(self, option, value)
 
-	def override_config(self, overrides) -> None:
+	def set_config(self, overrides) -> None:
 		for option, value in overrides.items():
 			if not hasattr(self, option):
 				raise ValueError(f"Option {option!r} doesn't exist")
-			getattr(self, option)(value)
+			setattr(self, option, value)
+			if option == 'loglevel':
+				# destroy the old logger, make a new one
+				logging.getLogger().handlers.clear()
+				self.logger = self._setup_logger()
 
 	def prepare_taxoncore_dictionary(self, tsv='./src/statics/taxoncore_v4.tsv'):
 		if os.path.isfile(tsv):
@@ -163,7 +175,7 @@ class RancheroConfig:
 	def __init__(self):
 		""" Creates a fallback configuration if read_config() isn't run"""
 		defaults = self.read_config()
-		self.set_config(defaults)
+		self.initialize_config(defaults)
 		self.logger = self._setup_logger()
 		self.taxoncore_ruleset = self.prepare_taxoncore_dictionary()
 		#self.print_config_raw()
