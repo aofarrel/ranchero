@@ -182,6 +182,11 @@ def dupe_index_handling():
 			print("✅ Dupe index handling: error (threw ValueError)")
 	
 	def dupe_index_handling__keep_most_data(dupe_index_df):
+		"""
+		Apparent polars version difference crops up here:
+		polars==1.1.16 --> df stays in foo, bar, bizz order
+		polars==1.1.27 --> df alphabetized as bar, bizz, foo
+		"""
 		Ranchero.Configuration.set_config({"dupe_index_handling": 'keep_most_data'})
 		df_goal = pl.DataFrame({
 			"__index__file": ["bar.fq", "bizz.fq", "foo.fq"],
