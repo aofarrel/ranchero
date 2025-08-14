@@ -1,38 +1,32 @@
 import sys
 from datetime import datetime
-from src.statics import host_disease, host_species, sample_sources, kolumns, countries, regions
+from .statics import host_disease, host_species, sample_sources, kolumns, countries, regions
 from .config import RancheroConfig
 import polars as pl
 from tqdm import tqdm
 from collections import OrderedDict # dictionaries are ordered in Python 3.7+, but OrderedDict has a better popitem() function we need
-from . import _NeighLib as NeighLib
-
-globals().update({f"_cfg_{name}": object() for name in [
-	"rm_phages", "mycobacterial_mode"
-]})
-_SENTINEL_TO_CONFIG = {
-	_cfg_rm_phages: "rm_phages",
-	_cfg_mycobacterial_mode: "mycobacterial_mode"
-}
-
 class ProfessionalsHaveStandards():
-	def __init__(self, configuration: RancheroConfig = None):
+	def __init__(self, configuration, naylib):
 		if configuration is None:
 			raise ValueError("No configuration was passed to NeighLib class. Ranchero is designed to be initialized with a configuration.")
 		else:
 			self.cfg = configuration
 			self.logging = self.cfg.logger
 			self.taxoncore_ruleset = self.cfg.taxoncore_ruleset
+			self.NeighLib = naylib
 
-	def _sentinal_handler(self, arg):
-		"""Handles "allow overriding config" variables in function calls"""
-		if arg in _SENTINEL_TO_CONFIG:
-			config_attr = _SENTINEL_TO_CONFIG[arg]
-			check_me = getattr(self.cfg, config_attr)
-			assert check_me != arg, f"Configuration for '{config_attr}' is invalid or uninitialized"
-			return check_me
-		else:
-			return arg
+	def test_neighlib_cfg_update_mycobact(self, via_another_module=None):
+		self.NeighLib._testcfg_mycobact_is_false(via_another_module=True)
+
+	def _testcfg_mycobact_is_false(self):
+		assert self.cfg.mycobacterial_mode == False
+		print("✅ Successfully updated mycobacterial_mode in Standardizer")
+
+	def _testcfg_logger_is_debug(self):
+		self.logging.debug("✅ Successfully updated loglevel in Standardizer")
+
+	def test_neighlib_cfg_update(self, via_another_module=None):
+		self.NeighLib._testcfg_logger_is_debug(via_another_module=True)
 
 	def standardize_everything(self, polars_df, add_expected_nulls=True, assume_organism="Mycobacterium tuberculosis", assume_clade="tuberculosis", skip_sample_source=False, force_strings=True,
 		organism_fallback=None, clade_fallback=None):
@@ -43,13 +37,8 @@ class ProfessionalsHaveStandards():
 		if 'date_collected' in polars_df.columns:
 			self.logging.info("Cleaning up dates...")
 			polars_df = self.cleanup_dates(polars_df)
-
-		if ['date_collected_year', 'date_collected_month'] in polars_df.columns:
-			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_year', cols_of_interest=kolumns.id_columns+'date_collected'+'date_collected_year')
-			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_month', cols_of_interest=kolumns.id_columns+'date_collected'+'date_collected_year')
-			exit(1)
 		
-		# Because this one is VERY open to interpretation and I don't have an MD, we will also have a "raw value" column.
+		# Because this one is VERY open to interpretation and I'm not a medical doctor, we will also have a "raw value" column.
 		if 'isolation_source' in polars_df.columns and not skip_sample_source:
 			self.logging.info("Standardizing isolation sources...")
 			polars_df = polars_df.with_columns(pl.col('isolation_source').alias('isolation_source_raw'))
@@ -68,9 +57,9 @@ class ProfessionalsHaveStandards():
 			polars_df = self.sort_out_taxoncore_columns(polars_df, force_strings=force_strings)
 		elif add_expected_nulls:
 			if 'organism' not in polars_df.columns:
-				polars_df = NeighLib.add_column_of_just_this_value(polars_df, 'organism', assume_organism)
+				polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'organism', assume_organism)
 			if 'clade' not in polars_df.columns:
-				polars_df = NeighLib.add_column_of_just_this_value(polars_df, 'clade', assume_clade)
+				polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'clade', assume_clade)
 
 		if organism_fallback is not None:
 			polars_df = polars_df.with_columns(pl.col('organism').fill_null(organism_fallback))
@@ -78,7 +67,7 @@ class ProfessionalsHaveStandards():
 			polars_df = polars_df.with_columns(pl.col('organism').fill_null(clade_fallback))
 
 		polars_df = self.drop_no_longer_useful_columns(polars_df)
-		polars_df = NeighLib.null_lists_of_len_zero(NeighLib.rancheroize_polars(polars_df, nullify=False))
+		polars_df = self.NeighLib.null_lists_of_len_zero(self.NeighLib.rancheroize_polars(polars_df, nullify=False))
 		return polars_df
 
 	def standardize_sample_source(self, polars_df):
@@ -388,7 +377,7 @@ class ProfessionalsHaveStandards():
 			for disease, simplified_disease in host_disease.host_disease_exact_match.items():
 				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=False, remove_match_from_list=True)
 			# DEBUGPRINT
-			#NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
+			#self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
 
 		# here's where we actually beginning handling the stuff for this actual column!
 		for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
@@ -420,7 +409,7 @@ class ProfessionalsHaveStandards():
 		])
 
 		# AFTER we have cleaned up very obvious things, from now on, write to a NEW COLUMN to help avoid accidentally overwriting past iterations (eg "culture from sputum" --> "sputum" or "culture")
-		polars_df = NeighLib.add_column_of_just_this_value(polars_df, 'neo_isolation_source', None)
+		polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'neo_isolation_source', None)
 
 		for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			this_and_that = pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any().and_(pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any())
@@ -579,15 +568,15 @@ class ProfessionalsHaveStandards():
 		"""
 
 		if polars_df.schema['date_collected'] == pl.List:
-			polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=['date_collected'])
+			polars_df = self.NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=['date_collected'])
 			if polars_df.schema['date_collected'] == pl.List:
 				if err_on_list:
 					self.logging.error("Tried to flatten date_collected, but there seems to be some rows with unique values.")
-					print(NeighLib.get_rows_where_list_col_more_than_one_value(polars_df, 'date_collected').select([NeighLib.get_index_column(polars_df), 'date_collected']))
+					print(self.NeighLib.get_rows_where_list_col_more_than_one_value(polars_df, 'date_collected').select([self.NeighLib.get_index_column(polars_df), 'date_collected']))
 					exit(1)
 				else:
 					self.logging.warning("Tried to flatten date_collected, but there seems to be some rows with unique values. Will convert to string. This may be less accurate.")
-					polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['date_collected'])
+					polars_df = self.NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['date_collected'])
 
 		if polars_df.schema['date_collected'] != pl.Utf8 and force_strings:
 			self.logging.warning("date_collected column is not of type string. Will attempt to cast it as string.")
@@ -738,7 +727,7 @@ class ProfessionalsHaveStandards():
 			)
 
 		if 'date_collected_year' in polars_df.columns:
-			polars_df = NeighLib.try_nullfill_left(polars_df, 'date_collected', 'date_collected_year')[0]
+			polars_df = self.NeighLib.try_nullfill_left(polars_df, 'date_collected', 'date_collected_year')[0]
 			polars_df.drop('date_collected_year')
 
 		# this is going to be annoying to handle properly and might not ever be helpful -- low priority TODO
@@ -842,7 +831,7 @@ class ProfessionalsHaveStandards():
 		# Is there a better way of doing this? Tried a few things but so far this one seems the most reliable.
 		if self.cfg.taxoncore_ruleset is None:
 			raise ValueError("A taxoncore ruleset failed to initialize, so we cannot use function taxoncore_iterate_rules!")
-		elif self.cfg.taxoncore_ruleset is 'None':
+		elif self.cfg.taxoncore_ruleset == 'None':
 			# something about how I changed defaults is causing this... well, strs are invalid anyway so. whatever.
 			raise ValueError("A taxoncore ruleset failed to initialize, so we cannot use function taxoncore_iterate_rules!")
 		
@@ -858,7 +847,7 @@ class ProfessionalsHaveStandards():
 				polars_df = self.taxoncore_GOLS(polars_df, when,  i_group=bacterial_group, i_organism=organism, i_lineage=lineage, i_strain=strain)
 		return polars_df
 
-	def sort_out_taxoncore_columns(self, polars_df, rm_phages=_cfg_rm_phages, force_strings=True):
+	def sort_out_taxoncore_columns(self, polars_df, rm_phages="AAAA", force_strings=True):
 		"""
 		Some columns in polars_df will be in list all_taxoncore_columns. We want to use these taxoncore columns to create three new columns:
 		* i_organism should be of form "Mycobacterium" plus one more word, with no trailing "subsp." or "variant", if a specific organism can be imputed from a taxoncore column, else null
@@ -915,13 +904,13 @@ class ProfessionalsHaveStandards():
 		polars_df = polars_df.with_columns([pl.col("i_lineage").alias("lineage"), pl.col("i_organism").alias("organism"), pl.col("i_strain").alias("strain")])
 		polars_df = polars_df.drop(['taxoncore_list', 'taxoncore_str', 'i_group', 'i_lineage', 'i_organism', 'i_strain'])
 		for col in ['clade', 'organism', 'lineage', 'strain']:
-			polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col])
+			polars_df = self.NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col])
 			if polars_df.schema[col] == pl.List and self.logging.getEffectiveLevel() == 10:
 				self.logging.debug(f'Found these multi-element lists in {col} after attempted flatten')
-				NeighLib.print_only_where_col_list_is_big(polars_df, col) # DEBUGPRINT
+				self.NeighLib.print_only_where_col_list_is_big(polars_df, col) # DEBUGPRINT
 				if force_strings:
 					self.logging.debug('Forcing these multi-element lists into strings')
-					polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col], force_strings=True)
+					polars_df = self.NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[col], force_strings=True)
 
 		return polars_df
 
@@ -1000,7 +989,7 @@ class ProfessionalsHaveStandards():
 			# If geoloc_info can become a str 'region' column, and 'region' column doesn't already exist, let's do that
 			# ...but that's computationally expensive and we want to parse geoloc_info for continents so actually let's not do this here
 			#if try_rm_geoloc_info:
-			#	polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=['geoloc_info'])
+			#	polars_df = self.NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=['geoloc_info'])
 			#	if polars_df['geoloc_info'].schema == pl.Utf8 and 'region' not in polars_df.columns:
 			#		polars_df = polars_df.rename({'geoloc_info': 'region'})
 
@@ -1150,7 +1139,7 @@ class ProfessionalsHaveStandards():
 		# We can only safely use countries.substring_match safely here; continents should be okay too but just to be safe let's not
 		# TODO: Check if later region extraction script manages to pull out "Sinfra" for Ivory Coast samples (see SRR18334007)
 		for nation, ISO3166 in tqdm(countries.substring_match.items(), desc="Finishing up", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-			null_start = NeighLib.get_count_of_x_in_column_y(polars_df, None, 'country')
+			null_start = self.NeighLib.get_count_of_x_in_column_y(polars_df, None, 'country')
 			polars_df = polars_df.with_columns([
 				pl.when((pl.col("geoloc_info").list.eval(pl.element().str.contains(nation)).list.sum() != 0)
 					.and_(pl.col('country').is_null()))
@@ -1160,7 +1149,7 @@ class ProfessionalsHaveStandards():
 				# Purposely do not remove matches from geoloc_info; this will keep stuff like ["Beijing China"] available
 				# for regionafying, even though that means we get a country of CHN and a region of "Beijing China"
 			])
-			null_end = NeighLib.get_count_of_x_in_column_y(polars_df, None, 'country')
+			null_end = self.NeighLib.get_count_of_x_in_column_y(polars_df, None, 'country')
 
 		# We hereby declare anything remaining in geoloc_info to be a region
 		polars_df = polars_df.with_columns([
@@ -1172,9 +1161,9 @@ class ProfessionalsHaveStandards():
 		])
 		if self.logging.getEffectiveLevel() == 10:
 			self.logging.debug("Found some stuff in geoloc_info we're not sure how to handle, will convert to region")
-			NeighLib.print_only_where_col_list_is_big(polars_df, 'geoloc_info_unhandled')
-		#polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['geoloc_info_unhandled'])
-		polars_df = NeighLib.encode_as_str(polars_df, 'geoloc_info_unhandled')
+			self.NeighLib.print_only_where_col_list_is_big(polars_df, 'geoloc_info_unhandled')
+		#polars_df = self.NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['geoloc_info_unhandled'])
+		polars_df = self.NeighLib.encode_as_str(polars_df, 'geoloc_info_unhandled')
 		polars_df = polars_df.with_columns(pl.coalesce(["region", "geoloc_info_unhandled"]).alias("neo_region"))
 		polars_df = polars_df.drop(['region', 'geoloc_info_unhandled', 'geoloc_info'])
 		polars_df = polars_df.rename({'neo_region': 'region'})
@@ -1210,8 +1199,8 @@ class ProfessionalsHaveStandards():
 			self.logging.error(
 				f"The following rows have countries that failed to convert to ISO3166 format:"
 			)
-			print(invalid_rows.select(NeighLib.get_valid_id_columns(invalid_rows) + ['country']))
+			print(invalid_rows.select(self.NeighLib.get_valid_id_columns(invalid_rows) + ['country']))
 			raise ValueError
 		if self.logging.getEffectiveLevel() == 10:
 			self.logging.debug("---- After absolutely everything ----")
-			NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_index', list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
+			self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_index', list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])

@@ -6,7 +6,7 @@ import polars as pl
 from polars.testing import assert_series_equal
 import polars.selectors as cs
 import traceback
-import src as Ranchero
+
 verbose = False
 pl.Config.set_tbl_rows(15)
 pl.Config.set_tbl_cols(15)
@@ -14,29 +14,94 @@ pl.Config.set_fmt_str_lengths(50)
 pl.Config.set_fmt_table_cell_list_len(10)
 pl.Config.set_tbl_width_chars(200)
 
+import ranchero as ranchero
 
 ### Configuration ###
+def hellish_cfg_tests():
 
+	# Logging is tested seperately because we handle it via the very silly method of destroying all other logger handlers
 
-### NeighLib utilities ###
+	# Do not change the order any of these functions are run in!
+	def cfg_default_mycobact():
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True
+		print("✅ mycobacterial_mode is True by default")
+	def cfg_change_intrafunction():
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True
+		ranchero.Configuration.set_config({"mycobacterial_mode": False}) # also sets up interfunction test
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == False
+		print("✅ cfg.mycobacterial_mode can be changed by set_config")
+	def cfg_change_interfunction():
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == False
+		print("✅ cfg.mycobacterial_mode retains changes across functions")
+		ranchero.Configuration.set_config({"mycobacterial_mode": True})
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True # back to default
+		print("✅ ...and changes back")
+	def cfg_change_NeighLib_intrafunction():
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True
+		ranchero.Configuration.set_config({"mycobacterial_mode": False}) # also sets up interfunction test
+		ranchero.NeighLib._testcfg_mycobact_is_false(via_another_module=False)
+	def cfg_change_NeighLib_interfunction():
+		ranchero.NeighLib._testcfg_mycobact_is_false(via_another_module=False)
+		print("✅ cfg.mycobacterial_mode in NeighLib context retains changes across functions")
+		ranchero.Configuration.set_config({"mycobacterial_mode": True})
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True # back to default
+	def cfg_change_NeighLib_intrafunction_via_Standardizer():
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True
+		ranchero.Configuration.set_config({"mycobacterial_mode": False})
+		ranchero.Standardizer.test_neighlib_cfg_update_mycobact(via_another_module=True)
+	def cfg_change_NeighLib_interfunction_via_Standardizer():
+		ranchero.NeighLib._testcfg_mycobact_is_false(via_another_module=True)
+		print("✅ cfg.mycobacterial_mode in NeighLib context via Standardizer retains changes across functions")
+		ranchero.Configuration.set_config({"mycobacterial_mode": True})
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True # back to default
+	def cfg_chnage_Standardizer_intrafunction():
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True
+		ranchero.Configuration.set_config({"mycobacterial_mode": False})
+		ranchero.Standardizer._testcfg_mycobact_is_false()
+	def cfg_chnage_Standardizer_interfunction():
+		ranchero.Standardizer._testcfg_mycobact_is_false()
+		print("✅ cfg.mycobacterial_mode in Standardizer context retains changes across functions")
+		ranchero.Configuration.set_config({"mycobacterial_mode": True})
+		assert ranchero.Configuration.get_config("mycobacterial_mode") == True # back to default
+	cfg_default_mycobact()
+	cfg_change_intrafunction()
+	cfg_change_interfunction()
+	cfg_change_NeighLib_intrafunction()
+	cfg_change_NeighLib_interfunction()
+	cfg_change_NeighLib_intrafunction_via_Standardizer()
+	cfg_change_NeighLib_interfunction_via_Standardizer()
+	cfg_chnage_Standardizer_intrafunction()
+	cfg_chnage_Standardizer_interfunction()
+	
+	# Change loglevel on NeighLib
+	def change_loglevel_NeighLib():
+		assert ranchero.Configuration.get_config("loglevel") != 10
+		ranchero.Configuration.set_config({"loglevel": 10})
+		ranchero.NeighLib._testcfg_logger_is_debug(via_another_module=False)
+		ranchero.Configuration.set_config({"loglevel": 40})
+		assert ranchero.Configuration.get_config("loglevel") == 40
 
-# sort_list_str_col()
+	# Change loglevel on NeighLib imported module, where the module calls a NeighLib function
+	# TODO: consider adding a logging handler to make sure this printed the right version (but logger init destroys handlers so... maybe not)
+	def change_loglevel_NeighLib_via_Standardizer():
+		assert ranchero.Configuration.get_config("loglevel") != 10
+		ranchero.Configuration.set_config({"loglevel": 10})
+		ranchero.Standardizer.test_neighlib_cfg_update(via_another_module=True)
+		ranchero.Configuration.set_config({"loglevel": 40})
+		assert ranchero.Configuration.get_config("loglevel") == 40
 
-
-### File parsing ###
-
-# Read TSV
-
-# Read CSV via from_tsv(delimiter=","), and that CSV has internal commas within dquotes
-
-# Read efetch XML
-
-# Read SRA webview XML
-
-# Read BigQuery NJSON on sra metadata table
-
-# Read BigQuery NJSON on sra metadata table and that one taxonomic table
-
+	# Change loglevel on NeighLib-imported module, where the module does its own logging
+	def change_loglevel_Standardizer():
+		assert ranchero.Configuration.get_config("loglevel") != 10
+		ranchero.Configuration.set_config({"loglevel": 10})
+		ranchero.Standardizer._testcfg_logger_is_debug()
+		ranchero.Configuration.set_config({"loglevel": 40})
+		assert ranchero.Configuration.get_config("loglevel") == 40
+	
+	change_loglevel_NeighLib()
+	change_loglevel_NeighLib_via_Standardizer()
+	change_loglevel_Standardizer()
+	
 ### Polars assumptions ###
 def polars_null_handling():
 	# check for https://github.com/pola-rs/polars/issues/20069 and/or related regressions
@@ -136,13 +201,24 @@ def polars_null_handling():
 	dtype_list_str__listlen_of_aNullb(nullframe)
 	dtype_list_str__listlen_of_ab(nullframe)
 
+### utilities ###
+def general_utilities():
+	def sort_list_str_col():
+		df = pl.DataFrame({
+			"important words": [["lorem", "ipsum"],["Lorem", "ipsum"],["dolor", "sit", "amet"]]
+		})
+		df_goal = pl.DataFrame({
+			"important words": [["ipsum", "lorem"],["Lorem", "ipsum"],["amet", "dolor", "sit"]]
+		})
+		Ranchero.NeighLib.sort_list_str_col(df)
+		assert_frame_equal(df, df_goal)
 
 ### Index stuff ###
 def miscellanous_index_stuff():
 
 	def removing_nulls_from_an_index_column():
 		df = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", None, "bizz.fq"]})
-		df = Ranchero.check_index(df)
+		df = ranchero.check_index(df)
 		assert df.shape[0] == 3
 		print("✅ Removing nulls from an index column")
 
@@ -164,10 +240,10 @@ def dupe_index_handling():
 	assert non_null_counts == [4,2,3,4]
 
 	def dupe_index_handling__error(dupe_index_df):
-		Ranchero.Configuration.set_config({"dupe_index_handling": 'error'})
+		ranchero.Configuration.set_config({"dupe_index_handling": 'error'})
 		df = dupe_index_df
 		try:
-			df = Ranchero.check_index(df)
+			df = ranchero.check_index(df)
 		except ValueError:
 			print("✅ Dupe index handling: error (threw ValueError)")
 	
@@ -177,7 +253,7 @@ def dupe_index_handling():
 		polars==1.1.16 --> df stays in foo, bar, bizz order
 		polars==1.1.27 --> df alphabetized as bar, bizz, foo
 		"""
-		Ranchero.Configuration.set_config({"dupe_index_handling": 'keep_most_data'})
+		ranchero.Configuration.set_config({"dupe_index_handling": 'keep_most_data'})
 		df_goal = pl.DataFrame({
 			"__index__file": ["bar.fq", "bizz.fq", "foo.fq"],
 			"int_or_null": [2, 4, 1],
@@ -186,32 +262,32 @@ def dupe_index_handling():
 			"str_or_null": [None, "bizz", "foo"]
 		})
 		df = dupe_index_df
-		df = Ranchero.check_index(df)
+		df = ranchero.check_index(df)
 		pl.testing.assert_frame_equal(df, df_goal)
 		print("✅ Dupe index handling: keep_most_data (kept the one with the least number of nulls)")
 	
 	def dupe_index_handling__verbose_warn(dupe_index_df):
-		Ranchero.Configuration.set_config({"dupe_index_handling": 'verbose_warn'})
+		ranchero.Configuration.set_config({"dupe_index_handling": 'verbose_warn'})
 		df = dupe_index_df
-		df = Ranchero.check_index(df)
+		df = ranchero.check_index(df)
 		assert df.shape[0] == 3
 		print("✅ Dupe index handling: verbose_warn (removed one)")
 	
 	def dupe_index_handling__warn(dupe_index_df):
-		Ranchero.Configuration.set_config({"dupe_index_handling": 'warn'})
+		ranchero.Configuration.set_config({"dupe_index_handling": 'warn'})
 		df = dupe_index_df
-		df = Ranchero.check_index(df)
+		df = ranchero.check_index(df)
 		assert df.shape[0] == 3
 		print("✅ Dupe index handling: warn (removed one)")
 
 	def remove_dupes_after_concat():
 		# Test dataframes need two columns or else pl.concat() will drop the repeated one automatically.
-		Ranchero.Configuration.set_config({"dupe_index_handling": 'warn'}) # TODO: set to default?
+		ranchero.Configuration.set_config({"dupe_index_handling": 'warn'}) # TODO: set to default?
 		df1 = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", "bizz.fq"], "host": ["human", "dog", "cat"]})
 		df2 = pl.DataFrame({"__index__file": ["loreum.fq", "bar.fq", "ipsum.fq"], "host": ["llama", "chicken", "boar"]})
 		df3 = pl.concat([df1, df2], how="align")
 		assert df3.shape[0] == 6
-		df3 = Ranchero.check_index(df3)
+		df3 = ranchero.check_index(df3)
 		assert df3.shape[0] == 5
 		print("✅ Removing dupes from an index column created by pl.concat")
 
@@ -228,26 +304,48 @@ def run_to_sample_index_swap():
 		"purposely_conflicting_metadata": ["foo", "bar", "bizz", "buzz"],
 		"sample_index": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
 	})
-	flipped = Ranchero.run_index_to_sample_index(df)
+	flipped = ranchero.run_index_to_sample_index(df)
 	flipped_goal = pl.DataFrame({
 		"__index__sample_index": ["SAMN17861658", "SAMN41021645", "SAMN12046450"],
 		"organism": ["Homo sapiens", "Homo sapiens", "Homo sapiens"],
 		"purposely_conflicting_metadata": [["foo"], ["bar", "bizz"], ["buzz"]],
 		"run": [["SRR13684378"], ["SRR30310804", "SRR30310805"], ["SRR9291314"]],
 	})
-	Ranchero.check_index(flipped)
-	flipped = Ranchero.NeighLib.sort_list_str_col(flipped, "purposely_conflicting_metadata", safe=False)
-	flipped = Ranchero.NeighLib.sort_list_str_col(flipped, "run", safe=False)
-	flipped_goal = Ranchero.NeighLib.sort_list_str_col(flipped_goal, "purposely_conflicting_metadata", safe=False)
-	flipped_goal = Ranchero.NeighLib.sort_list_str_col(flipped_goal, "run", safe=False)
+	ranchero.check_index(flipped)
+	flipped = ranchero.NeighLib.sort_list_str_col(flipped, "purposely_conflicting_metadata", safe=False)
+	flipped = ranchero.NeighLib.sort_list_str_col(flipped, "run", safe=False)
+	flipped_goal = ranchero.NeighLib.sort_list_str_col(flipped_goal, "purposely_conflicting_metadata", safe=False)
+	flipped_goal = ranchero.NeighLib.sort_list_str_col(flipped_goal, "run", safe=False)
 	pl.testing.assert_frame_equal(
 		flipped.sort("__index__sample_index").select(['__index__sample_index', "organism", "purposely_conflicting_metadata", "run"]),
 		flipped_goal.sort("__index__sample_index").select(['__index__sample_index', "organism", "purposely_conflicting_metadata", "run"])
 	)
 	print("✅ Flipping run-indexed dataframe to sample-indexed dataframe")
 
-### Merge stuff ###
 
+
+### File parsing ###
+def file_parsing(folder="./inputs/test"):
+
+	# Read TSV
+
+	# Read CSV via from_tsv(delimiter=","), and that CSV has internal commas within dquotes
+
+	# Read efetch XML
+
+	# Read SRA webview XML
+
+	# Read generic JSON
+	def read_json(folder):
+		left = ranchero.from_bigquery(f"{folder}/left.json", auto_standardize=False)
+
+	# Read BigQuery NJSON on sra metadata table
+
+	# Read BigQuery NJSON on sra metadata table and that one taxonomic table
+
+	read_json(folder)
+
+### Merge stuff ###
 def merge_stuff():
 
 	# Every column in a polars dataframe has a datatype. Nulls can be stored in any arbitrary datatype column,
@@ -315,10 +413,12 @@ def merge_stuff():
 
 	# Blocking a merge due to either of the dataframes having dupes in the merge_upon column
 
-
-run_to_sample_index_swap()
+hellish_cfg_tests()
 polars_null_handling()
-merge_stuff()
+general_utilities()
 miscellanous_index_stuff()
 dupe_index_handling()
+run_to_sample_index_swap()
+file_parsing()
+merge_stuff()
 

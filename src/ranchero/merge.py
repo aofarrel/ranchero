@@ -1,21 +1,19 @@
-from .config import RancheroConfig
-from . import _NeighLib as NeighLib
 import polars as pl
 from polars.testing import assert_series_equal
-from src.statics import kolumns, null_values, drop_zone
-
+from .statics import kolumns, null_values, drop_zone
 
 # https://peps.python.org/pep-0661/
 _DEFAULT_TO_CONFIGURATION = object()
 
 class Merger:
 
-	def __init__(self, configuration: RancheroConfig = None):
+	def __init__(self, configuration, naylib):
 		if configuration is None:
 			raise ValueError("No configuration was passed to NeighLib class. Ranchero is designed to be initialized with a configuration.")
 		else:
 			self.cfg = configuration
 			self.logging = self.cfg.logger
+			self.NeighLib = naylib
 
 	def aggregate_conflicting_metadata(self, polars_df, column_key):
 		"""
@@ -26,7 +24,7 @@ class Merger:
 		# this works if there aren't already any lists, but panics otherwise
 		#agg_values = polars_df.group_by(column_key).agg([pl.col(c).n_unique().alias(c) for c in polars_df.columns if c != column_key])
 		agg_values = polars_df.group_by(column_key).agg([999 if polars_df.schema[c] == pl.List else pl.col(c).n_unique().alias(c) for c in polars_df.columns if c != column_key])
-		NeighLib.super_print_pl(agg_values, "agg_values")
+		self.NeighLib.super_print_pl(agg_values, "agg_values")
 
 		# to match in cool_rows, ALL rows must have a value of 1
 		# to match in uncool_rows, ANY rows must have a value of not 1
@@ -70,7 +68,7 @@ class Merger:
 
 		restored_data = polars_df.join(columns_we_will_merge_and_their_column_keys, on="run_index", how="semi") # get our real data back (eg, not agg integers)
 		restored_catagorical_data = restored_data.group_by(column_key).agg([pl.col(column).alias(column) for column in restored_data.columns if column != column_key and column in will_be_catagorical])
-		NeighLib.super_print_pl(restored_catagorical_data, "restored catagorical data")
+		self.NeighLib.super_print_pl(restored_catagorical_data, "restored catagorical data")
 
 		return restored_catagorical_data
 
@@ -88,7 +86,7 @@ class Merger:
 		n_rows_merged = merged_df.shape[0]
 		n_rows_expected = sum([len(intersection_values), len(exclusive_left_values), len(exclusive_right_values)])
 
-		merged_df = NeighLib.check_index(merged_df, manual_index_column=manual_index_column)
+		merged_df = self.NeighLib.check_index(merged_df, manual_index_column=manual_index_column)
 
 		# we expect n_rows_merged = intersection_values + exclusive_left_values + exclusive_right_values
 		if n_rows_merged == n_rows_expected:
@@ -150,20 +148,20 @@ class Merger:
 		if indicator is _DEFAULT_TO_CONFIGURATION:
 			indicator = self.cfg.indicator_column
 		self.logging.debug(f"Dropping null columns from {left_name} and {right_name}...")
-		left, right = NeighLib.drop_null_columns(left), NeighLib.drop_null_columns(right)
+		left, right = self.NeighLib.drop_null_columns(left), self.NeighLib.drop_null_columns(right)
 
 		# merge_upon is not necessarily the index of either dataframe, but in the short term we want it to act like one (that is to say, fully
 		# unique, no nulls, etc)
 		self.logging.debug(f"Checking {left_name}'s index...")
-		left = NeighLib.check_index(left, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=left_name)
+		left = self.NeighLib.check_index(left, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=left_name)
 		self.logging.debug(f"Checking {right_name}'s index...")
-		right = NeighLib.check_index(right, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=right_name)
+		right = self.NeighLib.check_index(right, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=right_name)
 
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:
 				raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in {name} dataframe")
 			if merge_upon == 'run_index' or merge_upon == 'run_accession':
-				if not NeighLib.is_run_indexed(df):
+				if not self.NeighLib.is_run_indexed(df):
 					self.logging.warning(f"Merging upon {merge_upon}, which looks like a run accession, but {name} dataframe appears to not be indexed by run accession")
 			if len(df.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
 				self.logging.error("Dataframe has null values for the merge column:")
@@ -229,7 +227,7 @@ class Merger:
 			n_cols_right = right.shape[1]
 			n_cols_left = left.shape[1]
 
-		shared_columns = NeighLib.get_dupe_columns_of_two_polars(left, right, assert_shared_cols_equal=False)
+		shared_columns = self.NeighLib.get_dupe_columns_of_two_polars(left, right, assert_shared_cols_equal=False)
 		shared_columns.remove(merge_upon)
 		merged_columns = [] # for printing at the end
 		left_list_cols = [col for col, dtype in zip(left.columns, left.dtypes) if dtype == pl.List]
@@ -240,7 +238,7 @@ class Merger:
 			if n_cols_right == n_cols_left:
 				initial_merge = left.sort(merge_upon).merge_sorted(right.sort(merge_upon), merge_upon).unique().sort(merge_upon)
 				infostr1 = f"Merged a {n_rows_left}x{n_cols_left} df with a {n_rows_right}x{n_cols_right} df upon {merge_upon}. "
-				infostr2 = f"Final dataframe is {initial_merge.shape} and index {NeighLib.get_index(initial_merge)}.  "
+				infostr2 = f"Final dataframe is {initial_merge.shape} and index {self.NeighLib.get_index(initial_merge)}.  "
 				self.logging.info(infostr1 + infostr2)
 				merged_dataframe = initial_merge
 			else:
@@ -418,7 +416,7 @@ class Merger:
 
 			initial_merge = left.join(right, merge_upon, how="outer_coalesce").unique().sort(merge_upon)
 			self.logging.debug(f"after initial join but before merge right columns, {initial_merge.shape[0]} rows")
-			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings, force_index=force_index)
+			really_merged = self.NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings, force_index=force_index)
 			really_merged_no_dupes = really_merged.unique() # this doesn't actually help with duplicate indeces
 			duplicated_indices = really_merged_no_dupes.filter(pl.col(merge_upon).is_duplicated())
 			assert duplicated_indices.shape[0] == 0 # TODO: unless we allow dupes in index i guess?? why would we do that though
@@ -428,7 +426,7 @@ class Merger:
 			left_added_columns = [thing for thing in left.columns if thing not in merged_columns]
 			rite_added_columns = [thing for thing in right.columns if thing not in merged_columns]
 			infostr1 = f"Merged a {n_rows_left}x{n_cols_left} df with a {n_rows_right}x{n_cols_right} df upon {merge_upon}. "
-			infostr2 = f"Final dataframe is {merged_dataframe.shape} and index {NeighLib.get_index(merged_dataframe)}. "
+			infostr2 = f"Final dataframe is {merged_dataframe.shape} and index {self.NeighLib.get_index(merged_dataframe)}. "
 			infostr3 = f"The columns that were merged were: "
 			infostr4 = f"\n\t* {'\n\t* '.join(thing for thing in merged_columns)}"
 			infostr5 = f"\nThe left dataframe added {len(left_added_columns)} columns: "
@@ -442,7 +440,7 @@ class Merger:
 			intersection_values=intersection_values, exclusive_left_values=exclusive_left_values, exclusive_right_values=exclusive_right_values, 
 			n_rows_left=n_rows_left, n_rows_right=n_rows_right, right_name=right_name, right_name_in_this_column=indicator, manual_index_column=force_index)
 		self.logging.debug("Checking merged dataframe's index...")
-		NeighLib.check_index(merged_dataframe, manual_index_column=force_index)
+		self.NeighLib.check_index(merged_dataframe, manual_index_column=force_index)
 		self.logging.debug("Trying to null newly created empty lists...")
-		merged_dataframe = NeighLib.null_lists_of_len_zero(merged_dataframe)
+		merged_dataframe = self.NeighLib.null_lists_of_len_zero(merged_dataframe)
 		return merged_dataframe

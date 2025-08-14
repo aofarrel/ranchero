@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ranchero"
+version = "0.1.0"
+description = "Ranchero: analysis and processing tools"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "GPL-3.0"
+authors = [
+    { name = "Aisling O'Farrell" }
+]
+
+dependencies = [
+    "pyyaml",
+    "polars==1.27.0",
+    "pandas",
+    "pyarrow",
+    "tqdm",
+    "xmltodict==0.14.2"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ranchero*"]
+
+[tool.setuptools.package-data]
+"ranchero" = [
+    "config.yaml",
+    "columns.tsv",
+    "statics/*.tsv",
+    "statics/**/*.tsv"
+]

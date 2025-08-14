@@ -1,4 +1,4 @@
-import src as Ranchero
+import ranchero as Ranchero
 
 #xml = Ranchero.from_efetch("/Users/aofarrel/Downloads/c_auris.xml")
 #print(xml)

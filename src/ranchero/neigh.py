@@ -1,36 +1,12 @@
-# general purpose functions
-
 import os
 import re
 import polars as pl
 import datetime
-from src.statics import kolumns, drop_zone, null_values, HPRC_sample_ids
+from .statics import kolumns, drop_zone, null_values, HPRC_sample_ids
 from polars.testing import assert_series_equal
 import polars.selectors as cs
 from .config import RancheroConfig
-
-# for debugging
-import traceback
-
-# my crummy implementation of https://peps.python.org/pep-0661/
-globals().update({f"_cfg_{name}": object() for name in [
-	"force_SRR_ERR_DRR_run_index", "force_SAMN_SAME_SAMD_sample_index",
-	"check_index", "indicator_column",
-	"intermediate_files", "dupe_index_handling", "rm_not_pared_illumina"
-]})
-_SENTINEL_TO_CONFIG = {
-	_cfg_force_SRR_ERR_DRR_run_index: "force_SRR_ERR_DRR_run_index",
-	_cfg_force_SAMN_SAME_SAMD_sample_index: "force_SAMN_SAME_SAMD_sample_index",
-	_cfg_dupe_index_handling: "dupe_index_handling",
-	_cfg_check_index: "check_index",
-	_cfg_intermediate_files: "intermediate_files",
-	_cfg_indicator_column: "indicator_column",
-	_cfg_rm_not_pared_illumina: "rm_not_pared_illumina",
-}
-
 INDEX_PREFIX = "__index__"
-
-
 class NeighLib:
 	def __init__(self, configuration: RancheroConfig = None):
 		if configuration is None:
@@ -39,15 +15,9 @@ class NeighLib:
 			self.cfg = configuration
 			self.logging = self.cfg.logger
 
-	def _sentinal_handler(self, arg):
-		"""Handles "allow overriding config" variables in function calls"""
-		if arg in _SENTINEL_TO_CONFIG:
-			config_attr = _SENTINEL_TO_CONFIG[arg]
-			check_me = getattr(self.cfg, config_attr)
-			assert check_me != arg, f"Configuration for '{config_attr}' is invalid or uninitialized"
-			return check_me
-		else:
-			return arg
+	def _default_fallback(self, cfg_var, value):
+		if value is None:
+			return self.cfg.get_config(cfg_var)
 
 	# --------- INDEX FUNCTIONS --------- #
 
@@ -169,10 +139,10 @@ class NeighLib:
 			polars_df, 
 			guess=True,
 			try_to_fix=True,
-			manual_index_column=None, 
-			force_NCBI_runs=_cfg_force_SRR_ERR_DRR_run_index, 
-			force_BioSamples=_cfg_force_SAMN_SAME_SAMD_sample_index,
-			dupe_index_handling=_cfg_dupe_index_handling,
+			manual_index_column=None,
+			force_INSDC_runs=None,     # has a default fallback
+			force_INSDC_samples=None,  # has a default fallback
+			dupe_index_handling=None,  # has a default fallback
 			allow_bad_name=False,  # for merge_upon checks, etc
 			df_name=None           # for logging
 			):
@@ -185,9 +155,9 @@ class NeighLib:
 		Unless manual_index_column is not none, this function will use kolumns.equivalence to figure out what your index column(s) are.
 		"""
 		df_name = "Dataframe" if df_name is None else df_name
-		dupe_index_handling = self._sentinal_handler(dupe_index_handling)
-		force_NCBI_runs = self._sentinal_handler(force_NCBI_runs)
-		force_BioSamples = self._sentinal_handler(force_BioSamples)
+		dupe_index_handling = self._default_fallback("dupe_index_handling", dupe_index_handling)
+		force_INSDC_runs = self._default_fallback("force_INSDC_runs", force_INSDC_runs)
+		force_INSDC_samples = self._default_fallback("force_INSDC_samples", force_INSDC_samples)
 
 		# 1st check: Are there multiple marked __INDEX__ columns?
 		if self.has_multiple_index_columns(polars_df):
@@ -277,10 +247,10 @@ class NeighLib:
 			if dupe_index_handling == 'allow':
 				self.logging.warning(f"Reluctantly keeping {n_dupe_indeces} duplicate values in {df_name}'s {index_to_check} as per dupe_index_handling")
 			elif dupe_index_handling in ['error', 'verbose_error']:
-				self.logging.error(f"Duplicates in {df_name}'s index found!") # print above and below verbose dataframe
 				if dupe_index_handling == 'error':
 					raise ValueError(f"Found {n_dupe_indeces} duplicates in index column")
 				else: # verbose_error
+					self.logging.error(f"Duplicates in {df_name}'s index found!") # not in non-verbose error so testing module doesn't print "ERROR" (yeah yeah logging handlers would fix it but i dont wanna)
 					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
 					self.dfprint(duplicate_df.select(self.valid_cols(duplicate_df, [index_to_check, 'run_index', 'sample_index', 'submitted_files_bytes'])), str_len=120, width=120)
 					raise ValueError(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index column (dumped to dupes_in_index.tsv)")
@@ -324,7 +294,7 @@ class NeighLib:
 		# to prevent issues if we do a run-to-sample conversion later
 		# also, thanks to earlier checks, we know there should only be a maximum of one sample index and one run index.
 		for column in polars_df.columns:
-			if column in kolumns.equivalence['sample_index'] and force_BioSamples and polars_df.schema[column] != pl.List:
+			if column in kolumns.equivalence['sample_index'] and force_INSDC_samples and polars_df.schema[column] != pl.List:
 				good = (
 					polars_df[column].str.starts_with("SAMN") |
 					polars_df[column].str.starts_with("SAME") |
@@ -336,7 +306,7 @@ class NeighLib:
 					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
 					print(invalid_rows)
 					return valid_rows
-			elif column in kolumns.equivalence['run_index'] and force_NCBI_runs and polars_df.schema[column] != pl.List:
+			elif column in kolumns.equivalence['run_index'] and force_INSDC_runs and polars_df.schema[column] != pl.List:
 				good = (
 					polars_df[column].str.starts_with("SRR") |
 					polars_df[column].str.starts_with("ERR") |
@@ -1668,7 +1638,6 @@ class NeighLib:
 					# list.unique() does not work on nested lists so you better hope you removed them earlier!
 					self.logging.warning(f"{col} (type {type(polars_df.schema[col])})-->Not sure how to handle, will treat it as a set")
 					assert polars_df.schema[col] == pl.List
-					print(polars_df.schema[col])
 					polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set (no rules)'})
@@ -1902,3 +1871,25 @@ class NeighLib:
 			polars_df.replace_column(to_replace_index, casted.to_series())
 			#print(f"Cast {k} to type {v}")
 		return polars_df
+
+
+	# Here be dragons...
+	def _testcfg_mycobact_is_false(self, via_another_module=None):
+		if via_another_module is None:
+			print("❌ Not called correctly!")
+			exit(1)
+		elif not via_another_module:
+			assert self.cfg.mycobacterial_mode == False
+			print("✅ Successfully updated mycobacterial_mode in NeighLib")
+		else:
+			assert self.cfg.mycobacterial_mode == False
+			print("✅ Successfully updated mycobacterial_mode in NeighLib via another module")
+
+	def _testcfg_logger_is_debug(self, via_another_module=None):
+		if via_another_module is None:
+			self.logging.debug("❌ Not called correctly!")
+			exit(1)
+		elif not via_another_module:
+			self.logging.debug("✅ Successfully updated loglevel in NeighLib")
+		else:
+			self.logging.debug("✅ Successfully updated loglevel in NeighLib via another module")

@@ -1,6 +1,6 @@
 import time
 start = time.time()
-import src as Ranchero
+import ranchero as Ranchero
 print(f"⏰ {(time.time() - start):.3f} seconds to import")
 import polars as pl
 pl.Config.set_fmt_table_cell_list_len(5)

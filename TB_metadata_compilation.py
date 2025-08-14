@@ -5,7 +5,7 @@ import polars as pl
 import time
 start = time.time()
 import gc
-import src as Ranchero
+import ranchero as Ranchero
 _b_ = "\033[1m"
 _bb_ = "\033[0m"
 _c_ = "\033[0;36m"

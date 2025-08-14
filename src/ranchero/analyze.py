@@ -1,6 +1,5 @@
 import polars as pl
 import pandas as pd
-from src.neigh import NeighLib
 
 def drop_lowcount_columns(polars_df, cutoff=3, verbose=True):
 	dropped = []
@@ -19,7 +18,7 @@ def drop_lowcount_columns(polars_df, cutoff=3, verbose=True):
 
 
 def rm_all_not_beginning_with_myco(polars_df, inverse=False, column='organism'):
-	NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=True)
+	self.NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=True)
 	if not inverse:
 		return polars_df.filter(pl.col(column).str.starts_with("Myco", case=False))
 	else:
@@ -29,7 +28,7 @@ def rm_tuberculosis_suffixes(polars_df, rm_variants=False, clean_variants=True, 
 	"""
 	polars regex doesn't support look-ahead/look-behind, so this is very cringe
 	"""
-	NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=True)
+	self.NeighLib.check_columns_exist(polars_df, [column], err=True, verbose=True)
 
 	# manually handle the avium complex's weirdest member
 	polars_df = polars_df.with_columns(
@@ -98,9 +97,9 @@ def rm_tuberculosis_suffixes(polars_df, rm_variants=False, clean_variants=True, 
 
 def print_unique_rows(polars_df, column='organisms', sort=True):
 	if sort:
-		NeighLib.super_print_pl(polars_df.select("organism").unique().sort("organism"), f"unique {column}")
+		self.NeighLib.super_print_pl(polars_df.select("organism").unique().sort("organism"), f"unique {column}")
 	else:
-		NeighLib.super_print_pl(polars_df.select("organism").unique(), f"unique {column}")
+		self.NeighLib.super_print_pl(polars_df.select("organism").unique(), f"unique {column}")
 
 # pandas versions -- not comprehensive
 def get_paired_illumina_pandas(pandas_df):

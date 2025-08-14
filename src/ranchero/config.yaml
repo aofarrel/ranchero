@@ -1,14 +1,14 @@
-read_file:
-  # Automatically cast types when reading a file
-  auto_cast_types: True
-  # Automatically parse dates when reading a file
-  auto_parse_dates: False
-  # Automatically rancheroize dataframes upon file read
-  auto_rancheroize: True
-  # Automatically standardize dataframes upon file read (dataframe must be rancheroized)
-  auto_standardize: True
-  # Ignore polars read errors when parsing a file -- recommended to keep this as true
-  ignore_polars_read_errors: True
+
+# Automatically cast types when reading a file
+auto_cast_types: False
+# Automatically parse dates when reading a file
+auto_parse_dates: False
+# Automatically rancheroize dataframes upon file read
+auto_rancheroize: True
+# Automatically standardize dataframes upon file read (dataframe must be rancheroized)
+auto_standardize: True
+# Ignore polars read errors when parsing a file -- recommended to keep this as true
+ignore_polars_read_errors: True
 
 
 # When doing things that might modify the index, check it for integrity/lack of duplicates
@@ -26,9 +26,9 @@ check_index: True
 dupe_index_handling: 'verbose_warn'
 
 # Values in run_index column must start with SRR, ERR, or DRR
-force_SRR_ERR_DRR_run_index: True
+force_INSDC_runs: True
 # Values in sample_index column must start with SAMN, SAME, or SAMD
-force_SAMN_SAME_SAMD_sample_index: False
+force_INSDC_samples: False
 
 # How to handle columns relating to host information found in "attrs" in BQ JSONs, which are much less useful
 # if they had been combined into a single column like we would locational data n stuff, but can add a ton of

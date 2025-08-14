@@ -5,35 +5,14 @@ import os
 import csv
 from tqdm import tqdm
 from collections import OrderedDict # dictionaries are ordered in Python 3.7+, but OrderedDict has a better popitem() function we need
-from src.statics import kolumns, null_values
-from .config import RancheroConfig
-from . import _NeighLib as NeighLib
-from . import _Standardizer as Standardizer
+from .statics import kolumns, null_values
+from .config import RancheroConfig  # should import the *class*
 
 barformat = '{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'
 
-# my crummy implementation of https://peps.python.org/pep-0661/
-globals().update({f"_cfg_{name}": object() for name in [
-	"auto_cast_types", "auto_parse_dates", "auto_rancheroize", "auto_standardize",
-	"check_index", "ignore_polars_read_errors", "indicator_column",
-	"intermediate_files", "rm_dupes", "rm_not_pared_illumina"
-]})
-_SENTINEL_TO_CONFIG = {
-	_cfg_rm_dupes: "rm_dupes",
-	_cfg_auto_cast_types: "auto_cast_types",
-	_cfg_auto_parse_dates: "auto_parse_dates",
-	_cfg_auto_rancheroize: "auto_rancheroize",
-	_cfg_auto_standardize: "auto_standardize",
-	_cfg_check_index: "check_index",
-	_cfg_ignore_polars_read_errors: "ignore_polars_read_errors",
-	_cfg_intermediate_files: "intermediate_files",
-	_cfg_indicator_column: "indicator_column",
-	_cfg_rm_not_pared_illumina: "rm_not_pared_illumina",
-}
-
 class FileReader():
 
-	def __init__(self, configuration: RancheroConfig = None):
+	def __init__(self, configuration, naylib, professionals):
 		if configuration is None:
 			raise ValueError("No configuration was passed to FileReader class. Ranchero is designed to be initialized with a configuration.")
 		else:
@@ -45,21 +24,12 @@ class FileReader():
 					tqdm.pandas()
 				except ImportError:
 					self.logging.warning("Failed to import tqdm -- pandas operations will not show a progress bar")
+			self.NeighLib = naylib
+			self.Standardizer = professionals
 
-	def _sentinal_handler(self, arg):
-		"""Handles "allow overriding config" variables in function calls"""
-		if arg in _SENTINEL_TO_CONFIG:
-			config_attr = _SENTINEL_TO_CONFIG[arg]
-			if RancheroConfig.is_in_ReadFileParameters(self, config_attr):
-				read_file_dictionary = getattr(self.cfg, 'read_file')
-				check_me = read_file_dictionary[config_attr]
-				assert check_me != arg, f"Configuration for '{config_attr}' is invalid or uninitialized"
-				return check_me
-			check_me = getattr(self.cfg, config_attr)
-			assert check_me != arg, f"Configuration for '{config_attr}' is invalid or uninitialized"
-			return check_me
-		else:
-			return arg
+	def _default_fallback(self, cfg_var, value):
+		if value is None:
+			return self.cfg.get_config(cfg_var)
 
 	def read_metadata_injection(self, injection_file, delimiter='\t', drop_columns=[]):
 		"""
@@ -79,35 +49,40 @@ class FileReader():
 				dict_list.append(clean_row)
 		return dict_list
 
-	def polars_from_ncbi_run_selector(self, csv, drop_columns=list(), check_index=_cfg_check_index, auto_rancheroize=_cfg_auto_rancheroize):
+	def polars_from_ncbi_run_selector(self,
+		csv,
+		drop_columns=list(),
+		check_index=None, # has a default fallback
+		auto_rancheroize=None, # has a default fallback
+		auto_standardize=None): # has a default fallback
 		"""
 		1. Read CSV
 		2. Drop columns in drop_columns, if any
 		3. Check index (optional)
 		4. Rancheroize (optional)
 		"""
-		check_index = self._sentinal_handler(check_index)
-		auto_rancheroize = self._sentinal_handler(auto_rancheroize)
-		auto_standardize = self._sentinal_handler(auto_standardize)
+		check_index = self._default_fallback("check_index", check_index)
+		auto_rancheroize = self._default_fallback("auto_rancheroize", auto_rancheroize)
+		auto_standardize = self._default_fallback("auto_standardize", auto_standardize)
 		
 		polars_df = pl.read_csv(csv)
 		polars_df = polars_df.drop(drop_columns)
-		if check_index: polars_df = NeighLib.check_index(polars_df, df_name=os.path.basename(csv))
+		if check_index: polars_df = self.NeighLib.check_index(polars_df, df_name=os.path.basename(csv))
 		if auto_rancheroize: 
-			polars_df = NeighLib.rancheroize_polars(polars_df)
+			polars_df = self.NeighLib.rancheroize_polars(polars_df)
 			if auto_standardize:
-				polars_df = Standardizer.standardize_everything(polars_df)	
+				polars_df = self.Standardizer.standardize_everything(polars_df)	
 		return polars_df
 
 	def polars_from_tsv(self, tsv, delimiter='\t', drop_columns=list(), explode_upon=None,
 		index=None,
 		glob=True,
 		list_columns=None,
-		auto_parse_dates=_cfg_auto_parse_dates,
-		auto_rancheroize=_cfg_auto_rancheroize,
-		auto_standardize=_cfg_auto_standardize,
-		check_index=_cfg_check_index, 
-		ignore_polars_read_errors=_cfg_ignore_polars_read_errors, 
+		auto_parse_dates=None, # has a default fallback
+		auto_rancheroize=None, # has a default fallback
+		auto_standardize=None, # has a default fallback
+		check_index=None,      # has a default fallback
+		ignore_polars_read_errors=None, # has a default fallback
 		null_values=null_values.nulls_CSV):
 		"""
 		1. Read a TSV (or similar) and convert to Polars dataframe
@@ -116,11 +91,12 @@ class FileReader():
 		4. Check index (optional)
 		5. Rancheroize (optional)
 		"""
-		auto_rancheroize = self._sentinal_handler(auto_rancheroize)
-		auto_parse_dates = self._sentinal_handler(auto_parse_dates)
-		check_index = self._sentinal_handler(check_index)
-		auto_standardize = self._sentinal_handler(auto_standardize)
-		ignore_polars_read_errors = self._sentinal_handler(ignore_polars_read_errors)
+		check_index = self._default_fallback("check_index", check_index)
+		auto_rancheroize = self._default_fallback("auto_rancheroize", auto_rancheroize)
+		auto_standardize = self._default_fallback("auto_standardize", auto_standardize)
+		auto_parse_dates = self._default_fallback("auto_parse_dates", auto_parse_dates)
+		ignore_polars_read_errors = self._default_fallback("ignore_polars_read_errors", ignore_polars_read_errors)
+
 		df_name = os.path.basename(tsv)
 
 		polars_df = pl.read_csv(tsv, separator=delimiter, try_parse_dates=auto_parse_dates, null_values=null_values, 
@@ -132,8 +108,8 @@ class FileReader():
 		self.logging.debug(f"{df_name} currently has these columns: {polars_df.columns}")
 
 		if index is not None:
-			polars_df = NeighLib.mark_index(polars_df, index)
-			index = NeighLib.get_index(polars_df, index)
+			polars_df = self.NeighLib.mark_index(polars_df, index)
+			index = self.NeighLib.get_index(polars_df, index)
 		if list_columns is not None:
 			for column in list_columns:
 				polars_df = polars_df.with_columns(
@@ -144,17 +120,17 @@ class FileReader():
 				)
 
 		if explode_upon != None:
-			# TODO: this function call had column=NeighLib.get_index_column(polars_df, quiet=True) but I'm not sure why we
+			# TODO: this function call had column=self.NeighLib.get_index_column(polars_df, quiet=True) but I'm not sure why we
 			# would want the quiet version, since it wouldn't return a str during error cases...
-			polars_df = self.polars_explode_delimited_rows(polars_df, column=NeighLib.get_index_column(polars_df, quiet=True), 
+			polars_df = self.polars_explode_delimited_rows(polars_df, column=self.NeighLib.get_index_column(polars_df, quiet=True), 
 				delimiter=explode_upon, drop_new_non_unique=check_index)
-		if check_index: polars_df = NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
+		if check_index: polars_df = self.NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
 		if auto_rancheroize:
 			self.logging.info(f"Rancheroizing dataframe from {df_name}...")
-			polars_df = NeighLib.rancheroize_polars(polars_df, index=index)
+			polars_df = self.NeighLib.rancheroize_polars(polars_df, index=index)
 			if auto_standardize:
 				self.logging.info(f"Standardizing dataframe from {df_name}...")
-				polars_df = Standardizer.standardize_everything(polars_df)
+				polars_df = self.Standardizer.standardize_everything(polars_df)
 		return polars_df
 
 	def fix_efetch_file(self, efetch_xml):
@@ -311,7 +287,7 @@ class FileReader():
 		self.logging.debug(f"Processed {SRR_id} from {BioSample}")
 		return blessed_dataframe
 
-	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=_cfg_check_index):
+	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=None): # check_index has a default fallback
 		"""
 		1. Convert the output of efetch into an XML format that is actually correct (harder than you'd expect)
 		2. Convert the resulting dictionary into a Polars dataframe that is actually useful (also hard)
@@ -321,6 +297,8 @@ class FileReader():
 		  b) Several <EXPERIMENT_PACKAGE_SET>s, one of which is unmatched
 		  c) Like b but there's also additional <?xml version="1.0" encoding="UTF-8"  ?> headers thrown in for fun
 		 """
+		check_index = self._default_fallback("check_index", check_index)
+
 		import xml
 		import xmltodict
 		with open(efetch_xml, "r") as file:
@@ -451,31 +429,31 @@ class FileReader():
 							self.logging.error(thing)
 						exit(1)
 		blessed_dataframe = pl.concat(blessed_dataframes, how='diagonal')
-		if self.logging.getEffectiveLevel() == 10: NeighLib.super_print_pl(blessed_dataframe.select(NeighLib.valid_cols(blessed_dataframe, ['SRR_id', 'BioSample', 'TAG', 'VALUE'])), "XML as converted")
+		if self.logging.getEffectiveLevel() == 10: self.NeighLib.super_print_pl(blessed_dataframe.select(self.NeighLib.valid_cols(blessed_dataframe, ['SRR_id', 'BioSample', 'TAG', 'VALUE'])), "XML as converted")
 		
 		# TODO: add check for BioSample containing 'COULDNT_PARSE_BIOSAMPLE'
 		
 		blessed_dataframe = blessed_dataframe.rename({'BioSample': 'sample_index', 'SRR_id': 'run_index'})
 
 		if index_by_file:
-			blessed_dataframe = NeighLib.mark_index(blessed_dataframe.rename({'submitted_files': 'file'}), 'file')
-			file_index = NeighLib.get_index(blessed_dataframe)
+			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'submitted_files': 'file'}), 'file')
+			file_index = self.NeighLib.get_index(blessed_dataframe)
 			if group_by_file:
-				blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(file_index).agg(
+				blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(file_index).agg(
 						[c for c in blessed_dataframe.columns if c != file_index]
 				), force_index=file_index)
-			if check_index: blessed_dataframe = NeighLib.check_index(blessed_dataframe, df_name=xml_name) # must come AFTER the group_by option 
+			if check_index: blessed_dataframe = self.NeighLib.check_index(blessed_dataframe, df_name=xml_name) # must come AFTER the group_by option 
 			return blessed_dataframe
 		else:
 			# TODO: sum() submitted_file_sizes
-			blessed_dataframe = NeighLib.mark_index(blessed_dataframe.rename({'run_index': 'run'}), 'run')
-			run_index = NeighLib.get_index(blessed_dataframe)
+			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'run_index': 'run'}), 'run')
+			run_index = self.NeighLib.get_index(blessed_dataframe)
 			if blessed_dataframe.select(pl.col(run_index).n_unique() != pl.col(run_index).len()):
 				self.logging.warning(f"Found non-unique values for {run_index} (SRR_id)")
-			blessed_dataframe = NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_index).agg(
+			blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_index).agg(
 				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != run_index]
 			), force_index=run_index)
-			if check_index: blessed_dataframe = NeighLib.check_index(blessed_dataframe, df_name=xml_name)
+			if check_index: blessed_dataframe = self.NeighLib.check_index(blessed_dataframe, df_name=xml_name)
 			return blessed_dataframe
 
 	def fix_bigquery_file(self, bq_file):
@@ -494,12 +472,17 @@ class FileReader():
 		return out_file_path
 
 
-	def polars_from_bigquery(self, bq_file, drop_columns=list(), normalize_attributes=True, rancheroize=_cfg_auto_rancheroize):
+	def polars_from_bigquery(self, bq_file, drop_columns=list(), normalize_attributes=True,
+		auto_rancheroize=None, # has a default fallback
+		auto_standardize=None): # has a default fallback
 		""" 
 		1. Reads a bigquery JSON into a polars dataframe
 		2. (optional) Splits the attributes columns into new columns (combines fixing the attributes column and JSON normalizing)
 		3. Rancheroize columns
 		"""
+		auto_rancheroize = self._default_fallback("auto_rancheroize", auto_rancheroize)
+		auto_standardize = self._default_fallback("auto_standardize", auto_standardize)
+
 		try:
 			polars_df = pl.read_json(bq_file)
 			self.logging.debug(f"{bq_file} has {polars_df.width} columns and {len(polars_df)} rows")
@@ -515,11 +498,10 @@ class FileReader():
 
 		if normalize_attributes and "attributes" in polars_df.columns:  # if column doesn't exist, return false
 			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df)
-		print(polars_df.columns)
-		if self._sentinal_handler(rancheroize):
-			polars_df = NeighLib.rancheroize_polars(polars_df, index='acc', rename_index='__index__run')
-		if self._sentinal_handler(_cfg_auto_standardize):
-			polars_df = Standardizer.standardize_everything(polars_df)
+		if auto_rancheroize:
+			polars_df = self.NeighLib.rancheroize_polars(polars_df, index='acc', rename_index='__index__run')
+		if auto_standardize:
+			polars_df = self.Standardizer.standardize_everything(polars_df)
 		return polars_df
 
 
@@ -547,8 +529,8 @@ class FileReader():
 			bq_jnorm = pl.concat([polars_df.drop('attributes'), just_attributes_df], how="horizontal")
 		self.logging.info(f"An additional {len(just_attributes_df.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
 		if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Columns added: {just_attributes_df.columns}")
-		if rancheroize: bq_jnorm = NeighLib.rancheroize_polars(bq_jnorm)
-		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
+		if rancheroize: bq_jnorm = self.NeighLib.rancheroize_polars(bq_jnorm)
+		if self.cfg.intermediate_files: self.NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
 
 	def polars_run_to_sample(self, polars_df, sample_index='sample_index', run_index='__index__run'):
@@ -643,8 +625,8 @@ class FileReader():
 		)
 
 		if self.logging.getEffectiveLevel() == 10:
-			NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
-			NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
+			self.NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
+			self.NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
 
 		return grouped_df_
 
@@ -669,7 +651,7 @@ class FileReader():
 		[SRR126]        | SAMN3        | [bar]
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
-		NeighLib.check_index(polars_df, manual_index_column=run_index)
+		self.NeighLib.check_index(polars_df, manual_index_column=run_index)
 		assert polars_df.filter(pl.col(run_index).is_duplicated()).shape[0] == 0 # handled by check_index
 		assert sample_index in polars_df.columns
 		assert run_index in polars_df.columns
@@ -689,36 +671,39 @@ class FileReader():
 			else:
 				self.logging.error(f"""Found {nulls_in_sample_index.shape[0]} rows with null values for {sample_index}.
 					To drop these in-place instead of erroring, set drop_bad_news to True. Here's {run_index} where {sample_index} is null:""")
-				NeighLib.super_print_pl(nulls_in_sample_index)
+				self.NeighLib.super_print_pl(nulls_in_sample_index)
 				exit(1)
 		self.logging.debug("After handling of nulls in sample index, null counts in each column are as follows:")
 		self.logging.debug(polars_df.null_count())
 
 		if not skip_rancheroize:
 			self.logging.debug("Rancheroizing run-indexed dataframe")
-			polars_df = NeighLib.rancheroize_polars(polars_df) # runs check_index()
+			polars_df = self.NeighLib.rancheroize_polars(polars_df) # runs check_index()
 		else:
-			polars_df = NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
+			polars_df = self.NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)
-		new_index_name = NeighLib.get_hypothetical_index_fullname(sample_index)
-		version_with_nested_lists = NeighLib.mark_index(version_with_nested_lists, sample_index, rm_existing_index=True)
-		polars_df = NeighLib.null_lists_of_len_zero(
-			NeighLib.flatten_all_list_cols_as_much_as_possible(
+		new_index_name = self.NeighLib.get_hypothetical_index_fullname(sample_index)
+		version_with_nested_lists = self.NeighLib.mark_index(version_with_nested_lists, sample_index, rm_existing_index=True)
+		polars_df = self.NeighLib.null_lists_of_len_zero(
+			self.NeighLib.flatten_all_list_cols_as_much_as_possible(
 				version_with_nested_lists
 			)
 		)
-		polars_df = NeighLib.check_index(polars_df, new_index_name)
+		polars_df = self.NeighLib.check_index(polars_df, new_index_name)
 		return polars_df
 
-	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search_and_host_info=True):
+	def polars_fix_attributes_and_json_normalize(self, polars_df,
+		rancheroize=None,     # has default fallback
+		auto_cast_types=None, # has default fallback
+		keep_all_primary_search_and_host_info=True):
 		"""
-		Uses NeighLib.concat_dicts to turn the weird format of the attributes column into flat dictionaries,
+		Uses self.NeighLib.concat_dicts to turn the weird format of the attributes column into flat dictionaries,
 		then do some JSON normalization to output a polars dataframe.
 
 		1. Create a tempoary pandas dataframe
-		2. .apply(NeighLib.concat_dicts) to the attributes column in the pandas df
+		2. .apply(self.NeighLib.concat_dicts) to the attributes column in the pandas df
 		3. Run polars_json_normalize to add new columns to the polars dataframe
 		4. If rancheroize: rename columns
 		5. Polars will default to str type for new columns; if cast_types, cast the most common not-string folders to
@@ -730,26 +715,28 @@ class FileReader():
 		Performance is very good on my largest datasets, but I'm interested in avoiding the panadas conversion if possible.
 
 		Configurations used:
-		* cast_types (set)
+		* rancheroize (fallback)
+		* cast_types (fallback)
 		* intermediate_files (set)
 		* verbose (set)
 		"""
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
-		thiscfg__auto_cast_types = self._sentinal_handler('auto_cast_types')
+		cast_types = self._default_fallback('auto_cast_types', auto_cast_types)
+		rancheroize = self._default_fallback('auto_rancheroize', rancheroize)
 		if keep_all_primary_search_and_host_info:  # TODO: benchmark these two options
 			if self.logging.getEffectiveLevel() == 10:
 				self.logging.info("Concatenating dictionaries with Pandas...")
-				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts_with_shared_keys)
+				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(self.NeighLib.concat_dicts_with_shared_keys)
 			else:
-				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts_with_shared_keys)
+				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(self.NeighLib.concat_dicts_with_shared_keys)
 		else:
 			if self.logging.getEffectiveLevel() == 10:
 				self.logging.info("Concatenating dictionaries with Pandas...")
-				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(NeighLib.concat_dicts)
+				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(self.NeighLib.concat_dicts)
 			else:
-				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(NeighLib.concat_dicts)
+				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(self.NeighLib.concat_dicts)
 		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'])
-		if rancheroize: normalized = NeighLib.rancheroize_polars(normalized)
-		if thiscfg__auto_cast_types: normalized = NeighLib.cast_politely(normalized)
-		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
+		if rancheroize: normalized = self.NeighLib.rancheroize_polars(normalized)
+		if cast_types: normalized = self.NeighLib.cast_politely(normalized)
+		if self.cfg.intermediate_files: self.NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
 		return normalized
