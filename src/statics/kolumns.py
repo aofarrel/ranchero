@@ -106,7 +106,7 @@ list_to_set_uniq = [
 	'host_info',
 	'pheno_source',
 	'primary_search',
-	'region_as_list',
+	'geoloc_info_unhandled',
 	'run_index',
 	'sra_study',
 	'libraryselection',
@@ -125,8 +125,11 @@ list_to_list_silent = [
 	'geoloc_info'
 ]
 
-# Throw an error (error can be made non-fatal in which case it will fallback on left or right per function settings)
-list_throw_error = ["BioSample", "sample_index"]
+# Throw an error... unless the mismatch is caused by the columns simply having null differences
+list_throw_error = []
+
+# Throw an error, even if the mismatch is just a null thing
+list_throw_error_strict = ["BioSample", "sample_index"]
 
 # In: pl.List() of any type
 # Out: Inner type if flattening existing list, falling back on left or right if merge

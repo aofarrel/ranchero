@@ -28,6 +28,9 @@ _SENTINEL_TO_CONFIG = {
 	_cfg_rm_not_pared_illumina: "rm_not_pared_illumina",
 }
 
+INDEX_PREFIX = "__index__"
+
+
 class NeighLib:
 	def __init__(self, configuration: RancheroConfig = None):
 		if configuration is None:
@@ -45,6 +48,393 @@ class NeighLib:
 			return check_me
 		else:
 			return arg
+
+	# --------- INDEX FUNCTIONS --------- #
+
+	def mark_index(self, polars_df: pl.DataFrame, wannabe_index_column: str, rm_existing_index=False) -> pl.DataFrame:
+		"""Attempts to mark wannabe_index_column as an index using INDEX_PREFIX, checking
+		beforehand that there isn't already a marked index
+
+		when wannabe_index_column == 'file', hypothetical_marked_index == '__INDEX__file'
+		when wannabe_index_column == '__INDEX__file', hypothetical_unmarked_index == 'file'
+
+		"""
+		hypothetical_marked_index = self.get_hypothetical_index_fullname(wannabe_index_column)
+		hypothetical_unmarked_index = self.get_hypothetical_index_basename(wannabe_index_column)
+
+		if hypothetical_marked_index == wannabe_index_column:
+			self.logging.info("Index is already marked!")
+			return polars_df
+
+		# is this column (or some hypothetical iteration of it) in the dataframe?
+		if wannabe_index_column not in polars_df.columns:
+			if hypothetical_marked_index not in polars_df.columns:
+				if hypothetical_unmarked_index not in polars_df.columns:
+					raise ValueError(f"{wannabe_index_column} nor {hypothetical_marked_index} nor {hypothetical_unmarked_index} in DataFrame")
+				else:
+					# this should never happen
+					raise ValueError(f"FAILURE: {wannabe_index_column} absent, {hypothetical_marked_index} absent, {hypothetical_unmarked_index} present")
+			# wannabe_index_column = 'file' and not in df, '__INDEX__file' is in df
+			if self.has_one_index_column(polars_df):
+				self.logging.debug(f"Tried to mark non-existent column {wannabe_index_column} as index, but {hypothetical_marked_index} already in dataframe")
+				return polars_df
+			else:
+				raise ValueError(f"More than one index in dataframe! Columns: {sort(polars_df.columns)}")
+		
+		# the actually normal situation - wannabe is in the df and there is currently no index
+		elif self.has_zero_index_columns(polars_df):
+			return polars_df.rename({wannabe_index_column: hypothetical_marked_index})
+		
+		# wannabe is in polars_df, but we already have precisely one existing index
+		elif self.has_one_index_column(polars_df):
+
+			# is there a marked and unmarked version of the wannabe_index_column?
+			# we already ensured wannabe_index_column is in polars_df, and already handled hypothetical == wannabe
+			if hypothetical_marked_index in polars_df.columns:
+				assert_series_equal(polars_df[wannabe_index_column].rename(hypothetical_marked_index), polars_df[hypothetical_marked_index])
+				self.logging.warning(f"Somehow {wannabe_index_column} and {hypothetical_marked_index} are both in the dataframe, but they're equal, so we'll just remove {wannabe_index_column}")
+				return polars_df.drop(wannabe_index_column)
+			elif rm_existing_index:
+				polars_df = self.strip_index_marker(polars_df)
+				return polars_df.rename({wannabe_index_column: hypothetical_marked_index})
+			else:
+				self.logging.error("Another index already eixsts in the dataframe (set rm_existing_index to True if you want to remove automatically)")
+				raise ValueError("Multiple indeces detected, and rm_existing_index is not True")
+		elif rm_existing_index:
+			polars_df = self.strip_index_marker(polars_df)
+			return polars_df.rename({wannabe_index_column: hypothetical_marked_index})
+		else:
+			self.logging.error("Multiple indeces detected, and rm_existing_index is not True")
+			raise ValueError("Multiple indeces detected, and rm_existing_index is not True")
+
+
+	def get_index(self, polars_df: pl.DataFrame, guess=False) -> str | None:
+		if self.has_one_index_column(polars_df):
+			for col in polars_df.columns:
+				if col.startswith(INDEX_PREFIX):
+					return col
+			raise ValueError("We thought there was an index, but can't find a column with the index prefix!")
+		if guess:
+			return self.guess_index_column(polars_df)
+		return None
+
+	def get_index_subname(self, polars_df: pl.DataFrame) -> str | None:
+		for col in polars_df.columns:
+			if col.startswith(INDEX_PREFIX):
+				return col[len(INDEX_PREFIX):]
+		return None
+
+	def get_hypothetical_index_fullname(self, wannabe_index_column: str) -> str:
+		# DOES NO CHECKING (hence hypothetical)
+		if wannabe_index_column.startswith(INDEX_PREFIX):
+			return wannabe_index_column
+		return str(INDEX_PREFIX + wannabe_index_column)
+
+	def get_hypothetical_index_basename(self, wannabe_index_column: str) -> str:
+		# DOES NO CHECKING (hence hypothetical)
+		return str(wannabe_index_column.lstrip(INDEX_PREFIX))
+
+	def strip_index_marker(self, polars_df: pl.DataFrame) -> pl.DataFrame:
+		return polars_df.rename({
+			col: col[len(INDEX_PREFIX):]
+			for col in polars_df.columns if col.startswith(INDEX_PREFIX)
+		})
+
+	def has_multiple_index_columns(self, polars_df: pl.DataFrame):
+		if len([col for col in polars_df.columns if col.startswith(INDEX_PREFIX)]) > 1:
+			return True
+		return False
+
+	def has_zero_index_columns(self, polars_df: pl.DataFrame) -> bool:
+		if len([col for col in polars_df.columns if col.startswith(INDEX_PREFIX)]) == 0:
+			return True
+		return False
+
+	def has_one_index_column(self, polars_df: pl.DataFrame) -> bool:
+		# Quick check of whether a df has one index column. That index may still be invalid -- we don't want to do
+		# multiple expensive checks when not necessary, so this is a very basic check.
+		if len([col for col in polars_df.columns if col.startswith(INDEX_PREFIX)]) == 1:
+			return True
+		return False
+
+	def rstrip_whitespace_from_index(self, polars_df: pl.DataFrame) -> pl.DataFrame:
+		# WARNING: THIS IS VERY SLOW!
+		if self.has_one_index_column(polars_df):
+			return self.recursive_rstrip(polars_df, self.get_index(polars_df), strip_char=" ")
+		else:
+			self.logging.error("Couldn't find index column in dataframe; set it via NeighLib.mark_index() before calling this function")
+			raise ValueError("Couldn't find index column in dataframe; set it via NeighLib.mark_index() before calling this function")
+
+	def check_index(self,
+			polars_df, 
+			guess=True,
+			try_to_fix=True,
+			manual_index_column=None, 
+			force_NCBI_runs=_cfg_force_SRR_ERR_DRR_run_index, 
+			force_BioSamples=_cfg_force_SAMN_SAME_SAMD_sample_index,
+			dupe_index_handling=_cfg_dupe_index_handling,
+			allow_bad_name=False,  # for merge_upon checks, etc
+			df_name=None           # for logging
+			):
+		"""
+		Check a polars dataframe's apparent index, which is expected to be either run accessions or sample accessions, for the following issues:
+		* pl.null/None values
+		* duplicates
+		* incompatiable index columns (eg, two run index columns)
+
+		Unless manual_index_column is not none, this function will use kolumns.equivalence to figure out what your index column(s) are.
+		"""
+		df_name = "Dataframe" if df_name is None else df_name
+		dupe_index_handling = self._sentinal_handler(dupe_index_handling)
+		force_NCBI_runs = self._sentinal_handler(force_NCBI_runs)
+		force_BioSamples = self._sentinal_handler(force_BioSamples)
+
+		# 1st check: Are there multiple marked __INDEX__ columns?
+		if self.has_multiple_index_columns(polars_df):
+			if try_to_fix:
+				# to avoid messing up checks below, this will just strip the multiple indexes and continue
+				self.logging.warning(f"Found multiple index columns in {df_name}, but will try to fix...")
+				polars_df = self.strip_index_marker(polars_df)
+			else:
+				self.logging.error(f"Found multiple index columns in {df_name} (to try to fix, run with try_to_fix = True)")
+				raise ValueError(f"Found multiple index columns in {df_name} (to try to fix, run with try_to_fix = True)")
+
+		# 2nd check: What actually is the index column? (a lot of checking happens in mark_index())
+		# Option A: User defined an index column manually
+		if manual_index_column is not None:
+			not_guessed_current_index = self.get_index(polars_df, guess=False)
+			if not manual_index_column.startswith(INDEX_PREFIX) and not allow_bad_name:
+				if try_to_fix:
+					polars_df = self.mark_index(polars_df, manual_index_column)
+					manual_index_column = self.get_index(polars_df, guess=False)
+					index_to_check = manual_index_column
+			
+			if manual_index_column not in polars_df.columns:
+				if try_to_fix: # whether we allow bad names or not, we gotta fix this!
+					polars_df = self.mark_index(polars_df, manual_index_column)
+					index_to_check = self.get_index(polars_df, guess=False)
+				else:
+					raise ValueError(f"Manual index column set to {manual_index_column}, but that column isn't in {df_name}! (it may already be marked as an index column though, try running with try_to_fix=True)")
+			
+			# manual_index_column is in polars_df, but there is also a marked __INDEX__ that doesn't match it
+			elif manual_index_column != not_guessed_current_index and not_guessed_current_index is not None:
+				if not allow_bad_name: # for merge_upon checks, etc
+					self.logging.error(f"manual_index_column={manual_index_column} but {df_name} already has supposed index {not_guessed_current_index}")
+					raise ValueError(f"manual_index_column={manual_index_column} but {df_name} already has supposed index {not_guessed_current_index}")
+				self.logging.warning(f"You're checking {manual_index_column} as if it were {df_name}'s index, but index column {not_guessed_current_index} also exists. I'll allow it, reluctantly.")
+				index_to_check = manual_index_column # no need to mark it, it's already marked... er, right? well, we'll check later anyway			
+			else:
+				index_to_check = manual_index_column
+			not_guessed_current_index = None
+		# Option B: User did not define an index column manually
+		else:
+			if self.has_one_index_column(polars_df):
+				index_to_check = self.get_index(polars_df, guess=False)
+			else:
+				if guess:
+					could_make_that_an_index = self.get_index(polars_df, guess=True)
+					assert could_make_that_an_index is not None
+					polars_df = self.mark_index(polars_df, could_make_that_an_index)
+					index_to_check = self.get_hypothetical_index_fullname(could_make_that_an_index)
+				else:
+					index_to_check = self.get_index(polars_df, guess=False)
+					assert index_to_check is not None
+
+		assert index_to_check is not None
+		assert polars_df.schema[index_to_check] == pl.Utf8
+		if not allow_bad_name:
+			assert index_to_check.startswith(INDEX_PREFIX)
+			assert self.get_index(polars_df) == index_to_check
+
+		# check for leading and lagging whitespace -- note that this check is a little slow, and the fix is VERY slow
+		#if polars_df.filter(pl.col(index_to_check).str.starts_with(" ")).size[0] != 0:
+		#	if try_to_fix:
+		#		polars_df = self.recursive_rstrip(polars_df, index_to_check)
+		#if polars_df.filter(pl.col(index_to_check).str.ends_with(" ")).size[0] != 0:
+		#	self.logging.error("Found lagging whitespace in column")
+		#	self.super_print_pl(polars_df.filter(pl.col(index_to_check).str.ends_with(" ")).select(index_to_check), "")
+		#	raise ValueError(f"Found lagging whitespace in index column {index_to_check}")
+		# TODO: doesn't fix leading, doesn't fix or check for tabs/carriage return (can polars even have those in a str column?), rstrip function should be replaced...
+		
+		# drop any nulls in the index column -- these needs to be before checking for duplicates
+		nulls = self.get_null_count_in_column(polars_df, index_to_check, warn=False, error=False)
+		if nulls > 0:
+			self.logging.warning(f"Dropped {nulls} row(s) with null value(s) in {df_name}'s index column {index_to_check}")
+			polars_df = polars_df.filter(pl.col(index_to_check).is_not_null())
+			nulls = self.get_null_count_in_column(polars_df, index_to_check, warn=False, error=False)
+			if nulls > 0:
+				self.logging.error(f"Failed to remove null values from {df_name}'s index column {index_to_check}")
+				raise ValueError
+		
+		# check for duplicates
+		# TODO: dupe_index_handling should probably align with try_to_fix behavior
+		assert polars_df.schema[index_to_check] == pl.Utf8  # in case entire column got nulled and datatype became pl.Null
+		duplicate_df = polars_df.filter(polars_df[index_to_check].is_duplicated())
+		n_dupe_indeces = len(duplicate_df)
+		#if len(polars_df) != len(polars_df.unique(subset=[index_to_check], keep="any")):
+		if n_dupe_indeces > 0:
+			self.logging.debug(f"Found {n_dupe_indeces} dupes in {df_name}'s {index_to_check}, will handle according to dupe_index_handling: {dupe_index_handling}")
+			if dupe_index_handling == 'allow':
+				self.logging.warning(f"Reluctantly keeping {n_dupe_indeces} duplicate values in {df_name}'s {index_to_check} as per dupe_index_handling")
+			elif dupe_index_handling in ['error', 'verbose_error']:
+				self.logging.error(f"Duplicates in {df_name}'s index found!") # print above and below verbose dataframe
+				if dupe_index_handling == 'error':
+					raise ValueError(f"Found {n_dupe_indeces} duplicates in index column")
+				else: # verbose_error
+					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
+					self.dfprint(duplicate_df.select(self.valid_cols(duplicate_df, [index_to_check, 'run_index', 'sample_index', 'submitted_files_bytes'])), str_len=120, width=120)
+					raise ValueError(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index column (dumped to dupes_in_index.tsv)")
+			elif dupe_index_handling in ['warn', 'verbose_warn', 'silent']:
+				subset = polars_df.unique(subset=[index_to_check], keep="any")
+				if dupe_index_handling == 'warn':
+					self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index {index_to_check}, "
+						"will keep one instance per dupe")
+				elif dupe_index_handling == 'verbose_warn':
+					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
+					self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index {index_to_check} (dumped to dupes_in_index.tsv), "
+						"will keep one instance per dupe")
+					self.dfprint(duplicate_df.select(self.valid_cols(duplicate_df, [index_to_check, 'run_index', 'sample_index', 'submitted_files_bytes'])).sort(index_to_check), str_len=120, width=120)
+				polars_df = subset
+			elif dupe_index_handling == 'dropall':
+				subset = polars_df.unique(subset=[index_to_check], keep="none")
+				self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index {index_to_check}, will drop all of them")
+				polars_df = subset
+			elif dupe_index_handling == 'keep_most_data':
+				# TODO: is it faster to do this with just the subset of columns with dupes and then concat?
+				# maybe swap strategies based on the shape of duplicate_df and polars_df relative to each other
+				self.logging.info(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index {index_to_check}, will keep rows with the most non-nulls")
+				
+				# POLARS VERSION DIFFERENCE: polars=1.1.16 will not sort the same way as polars==1.27.0, see testing module for an example
+				polars_df = polars_df.with_columns(
+					pl.sum_horizontal(
+						*[pl.col(c).is_not_null().cast(pl.Int64) for c in polars_df.columns if c != index_to_check]
+					).alias("_non_null_count")
+				)
+				polars_df = (
+					polars_df.sort(by=[index_to_check, "_non_null_count"], descending=[False, True])
+					.unique(subset=[index_to_check], keep="first")
+					.drop("_non_null_count")
+				)
+			else:
+				raise ValueError(f"Unknown value provided for dupe_index_handling: {dupe_index_handling}")
+		else:
+			self.logging.debug(f"Did not find any duplicates in {df_name}'s {index_to_check}")
+		
+		# if applicable, make sure there's no nonsense in our index columns -- also, we're checking run AND sample columns if both are present,
+		# to prevent issues if we do a run-to-sample conversion later
+		# also, thanks to earlier checks, we know there should only be a maximum of one sample index and one run index.
+		for column in polars_df.columns:
+			if column in kolumns.equivalence['sample_index'] and force_BioSamples and polars_df.schema[column] != pl.List:
+				good = (
+					polars_df[column].str.starts_with("SAMN") |
+					polars_df[column].str.starts_with("SAME") |
+					polars_df[column].str.starts_with("SAMD")
+				)
+				invalid_rows = polars_df.filter(~good).drop([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_index'] + kolumns.equivalence['run_index'])])
+				valid_rows = polars_df.filter(good)
+				if len(invalid_rows) > 0:
+					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
+					print(invalid_rows)
+					return valid_rows
+			elif column in kolumns.equivalence['run_index'] and force_NCBI_runs and polars_df.schema[column] != pl.List:
+				good = (
+					polars_df[column].str.starts_with("SRR") |
+					polars_df[column].str.starts_with("ERR") |
+					polars_df[column].str.starts_with("DRR")
+				)
+				invalid_rows = polars_df.filter(~good).drop([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_index'] + kolumns.equivalence['run_index'])])
+				valid_rows = polars_df.filter(good)
+				if len(invalid_rows) > 0:
+					self.logging.warning(f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR (will be dropped, leaving {len(valid_rows)} afterwards):")
+					print(invalid_rows)
+					return valid_rows
+			else:
+				continue
+		
+		# double check no funny business
+		duplicates = polars_df.filter(polars_df[index_to_check].is_duplicated())
+		assert polars_df.filter(polars_df[index_to_check].is_duplicated()).shape[0] == 0
+		self.logging.debug(f"Finished all index checks for {df_name}")
+		return polars_df
+
+
+	def guess_index_column(self, polars_df, angry=True):
+		"""
+		A last resort check for an index column, based on values in kolumns.equivalence
+		"""
+		already_known_index = self.get_index(polars_df, guess=False)
+		if already_known_index is not None:
+			return str(already_known_index)
+		
+		sample_matches = [col for col in kolumns.equivalence['sample_index'] if (col in polars_df.columns and polars_df.schema[col] == pl.Utf8)]
+		run_matches = [col for col in kolumns.equivalence['run_index'] if (col in polars_df.columns and polars_df.schema[col] == pl.Utf8)]
+
+		if len(sample_matches) > 1:
+			if angry:
+				self.logging.error(f"Tried to find dataframe index, but there's multiple possible sample indeces: {sample_matches}")
+				raise ValueError(f"Tried to find dataframe index, but there's multiple possible sample indeces: {sample_matches}")
+	
+		elif len(sample_matches) == 1:
+			if len(run_matches) > 1:
+				if angry:
+					raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces (may indicate failed run->sample conversion):  {run_matches}")
+				else:
+					return None
+			
+			elif len(run_matches) == 1:
+				if polars_df.schema[run_matches[0]] == pl.List:
+					return str(sample_matches[0])
+				else:
+					return str(run_matches[0])
+
+			else:
+				return str(sample_matches[0])  # no run indeces, just one sample index
+
+		# no sample index, multiple run indeces
+		elif len(run_matches) > 1:
+			if angry:
+				self.logging.error(f"Dataframe has multiple possible run indeces: {index_column[1]}")
+				raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces: {run_matches}")
+			else:
+				return [4, run_matches]
+		
+		# no sample index, one run index
+		elif len(run_matches) == 1:
+			return str(run_matches[0])
+
+		else:
+			if angry:
+				raise ValueError(f"No valid index column found in polars_df! Columns available: {polars_df.columns}")
+			else:
+				return [5]
+
+		if angry:
+			raise ValueError("No idea what the index column is!")
+		return None
+
+
+
+		if type(index_column) == list:
+			if index_column[0] == 2:
+				
+				raise ValueError
+			elif index_column[0] == 3:
+				# in theory you could get away with this, since there is a sample index, but I won't support that
+				
+				raise ValueError
+			elif index_column[0] == 4:
+				self.logging.error(f"Dataframe has multiple possible run indeces: {index_column[1]}")
+				raise ValueError
+			elif index_column[0] == 5:
+				self.logging.error(f"Could not find any valid index column. You can set valid index columns in kolumns.py's equivalence dictionary.")
+				self.logging.error(f"Current possible run index columns (key for kolumns.equivalence['run_index']): {kolumns.equivalence['run_index']}")
+				self.logging.error(f"Current possible sample index columns (key for kolumns.equivalence['sample_index']): {kolumns.equivalence['sample_index']}")
+				self.logging.error(f"Your dataframe's columns: {polars_df.columns}")
+				raise ValueError
+			else:
+				raise ValueError
+
+
 
 	# --------- GET FUNCTIONS --------- #
 
@@ -122,56 +512,6 @@ class NeighLib:
 		else:
 			self.logging.warning("Failed to filter out non-PE Illumina as platform and/or librarylayout columns aren't present")
 		return polars_df
-
-	def get_index_column(self, polars_df, quiet=False):
-		"""
-		Does NOT check for duplicates in the index column(s)
-		"""
-		sample_indeces = kolumns.equivalence['sample_index']
-		sample_matches = [col for col in sample_indeces if col in polars_df.columns]
-		run_indeces = kolumns.equivalence['run_index']
-		run_matches = [col for col in run_indeces if col in polars_df.columns]
-
-		# more than one sample index, arbitrary number of run indeces
-		if len(sample_matches) > 1:
-			if not quiet:
-				raise ValueError(f"Tried to find dataframe index, but there's multiple possible sample indeces: {sample_matches}")
-			else:
-				return [2, sample_matches]
-	
-		# one sample index, arbitrary number of run indeces
-		elif len(sample_matches) == 1:
-			if len(run_matches) > 1:
-				if not quiet:
-					raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces (may indicate failed run->sample conversion):  {run_matches}")
-				else:
-					return [3, run_matches]
-			
-			elif len(run_matches) == 1:
-				if polars_df.schema[run_matches[0]] == pl.List:
-					return str(sample_matches[0])
-				else:
-					return str(run_matches[0])
-
-			else:
-				return str(sample_matches[0])  # no run indeces, just one sample index
-
-		# no sample index, multiple run indeces
-		elif len(run_matches) > 1:
-			if not quiet:
-				raise ValueError(f"Tried to find dataframe index, but there's multiple possible run indeces: {run_matches}")
-			else:
-				return [4, run_matches]
-		
-		# no sample index, one run index
-		elif len(run_matches) == 1:
-			return str(run_matches[0])
-
-		else:
-			if not quiet:
-				raise ValueError(f"No valid index column found in polars_df! Columns available: {polars_df.columns}")
-			else:
-				return [5]
 
 	def get_dupe_columns_of_two_polars(self, polars_df_a, polars_df_b, assert_shared_cols_equal=False):
 		""" Check two polars dataframes share any columns """
@@ -311,17 +651,20 @@ class NeighLib:
 			print(polars_df)
 
 	@staticmethod
-	def super_print_pl(polars_df, header, select=None):
+	def super_print_pl(polars_df, header, select=None, str_len=45):
 		print(f"┏{'━' * len(header)}┓")
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
+		try:
+			polars_df = polars_df.fill_null("-")
+		except Exception: # TODO: be more specific, it's some kind of polars type error
+			self.logging.warning("Cannot fill null values with strings; print below may have empty row")
 		if select is not None:
 			valid_selected_columns = [col for col in select if col in polars_df.columns]
-			print(valid_selected_columns)
-			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
+			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=str_len, fmt_table_cell_list_len=10):
 				print(polars_df.select(valid_selected_columns))
 		else:
-			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=40, fmt_table_cell_list_len=10):
+			with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=str_len, fmt_table_cell_list_len=10):
 				print(polars_df)
 
 	def print_schema(self, polars_df):
@@ -489,6 +832,10 @@ class NeighLib:
 		polars_df = self.null_lists_of_len_zero(polars_df)
 		return polars_df
 
+	def assert_no_list_columns(self, polars_df: pl.DataFrame):
+		list_cols = [name for name, dtype in polars_df.schema.items() if isinstance(dtype, pl.List)]
+		assert not list_cols, f"Found list columns: {list_cols}"
+
 	def mark_rows_with_value(self, polars_df, filter_func, true_value="M. avium complex", false_value='', new_column="bacterial_family", **kwargs):
 		#polars_df = polars_df.with_columns(pl.lit("").alias(new_column))
 		polars_df = polars_df.with_columns(
@@ -533,17 +880,17 @@ class NeighLib:
 			if 'k' in d and 'v' in d:
 				if d['k'] == 'primary_search':
 					primary_search.add(d['v'])
-				elif self.cfg.host_info_behavior != 'columns' and d['k'] in kolumns.host_info:
+				elif self.cfg.host_info_handling != 'columns' and d['k'] in kolumns.host_info:
 					host_info.add(f"{d['k']}: {str(d['v']).lstrip('host_').rstrip('_sam').rstrip('sam_s_dpl111')}")
 				else:
 					combined_dict[d['k']] = d['v']
 		if len(primary_search) > 0:
 			combined_dict.update({"primary_search": list(primary_search)}) # convert to a list to avoid the polars column becoming type object
-		if self.cfg.host_info_behavior == 'dictionary' and len(host_info) > 0:
+		if self.cfg.host_info_handling == 'dictionary' and len(host_info) > 0:
 			combined_dict.update({"host_info": list(host_info)})
-		elif self.cfg.host_info_behavior == 'drop':
+		elif self.cfg.host_info_handling == 'drop':
 			combined_dict = {k: v for k, v in combined_dict.items() if k not in kolumns.host_info}
-		# self.cfg.host_info_behavior == 'columns' is handled automagically
+		# self.cfg.host_info_handling == 'columns' is handled automagically
 		return combined_dict
 
 	def concat_dicts_risky(dict_list: list):
@@ -577,7 +924,7 @@ class NeighLib:
 				combined_dict[d['k']] = d['v']
 		return combined_dict
 
-	def try_nullfill(self, polars_df, left_col, right_col):
+	def try_nullfill_left(self, polars_df, left_col, right_col):
 		before = self.get_null_count_in_column(polars_df, left_col, warn=False)
 		if polars_df.schema[left_col] is pl.List or before <= 0:
 			self.logging.debug(f"{left_col} is a list or has no nulls, will not nullfill")
@@ -713,7 +1060,7 @@ class NeighLib:
 					pl.when((pl.col(right_col) != pl.col(left_col)).and_(pl.col(right_col).is_not_null())).then(pl.col(right_col)).otherwise(pl.col(left_col)).alias(left_col)
 				])
 			else:
-				polars_df = self.try_nullfill(polars_df, left_col, right_col)[0]
+				polars_df = self.try_nullfill_left(polars_df, left_col, right_col)[0]
 				polars_df = polars_df.with_columns([
 					pl.when((pl.col(right_col) != pl.col(left_col)).and_(pl.col(right_col).is_not_null()).and_(pl.col(left_col).is_not_null())).then(pl.col(right_col)).otherwise(None).alias(right_col),
 				])
@@ -740,7 +1087,7 @@ class NeighLib:
 		"""
 		right_columns = [col for col in polars_df.columns if col.endswith("_right")]
 		if force_index is None:
-			index_column = self.get_index_column(polars_df)
+			index_column = self.guess_index_column(polars_df)
 		else:
 			index_column = force_index
 		assert index_column not in right_columns
@@ -787,15 +1134,17 @@ class NeighLib:
 
 			# in all other cases, try nullfilling
 			#else:
-			if polars_df.schema[base_col] == pl.List(pl.Boolean) or polars_df.schema[base_col] == pl.List(pl.Boolean):
+			if polars_df.schema[base_col] == pl.List(pl.Boolean) or polars_df.schema[right_col] == pl.List(pl.Boolean):
 				polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=[base_col, right_col], force_index=index_column)
 				if polars_df.schema[base_col] == pl.List(pl.Boolean) or polars_df.schema[base_col] == pl.List(pl.Boolean):
 					self.logging.warning("List of booleans detected and cannot be flattened! Nulls may propagate!")
 			else:
-				polars_df, nullfilled = self.try_nullfill(polars_df, base_col, right_col)
+				polars_df, nullfilled = self.try_nullfill_left(polars_df, base_col, right_col)
 			try:
 				# TODO: this breaks in situations like when we add Brites before Bos, since Brites has three run accessions with no sample_index,
 				# resulting in assertionerror but no printed conflicts
+
+				# BE AWARE THAT THIS WILL FIRE IF ONE OF THEM HAS NULL VALUES WHERE THE OTHER DOES NOT
 				assert_series_equal(polars_df[base_col], polars_df[right_col].alias(base_col))
 				polars_df = polars_df.drop(right_col)
 				self.logging.debug(f"All values in {base_col} and {right_col} are the same after an filling in each other's nulls. Dropped {right_col}.")
@@ -804,11 +1153,27 @@ class NeighLib:
 				self.logging.debug(f"Not equal after filling in nulls (or nullfill errored so they're definitely not equal)")
 		
 			# everything past this point in this for loop only fires if the assertion error happened!
-			if base_col in kolumns.list_throw_error:
-				self.logging.error(f"[kolumns.list_throw_error] {base_col} --> Fatal error. There should never be lists in this column.")
-				print_cols = [base_col, right_col, index_column, self.cfg.indicator_column] if self.cfg.indicator_column in polars_df.columns else [base_col, right_col, index_column]
-				self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(print_cols), f"conflicts")
+			if base_col in kolumns.list_throw_error_strict:
+				self.logging.error(f"[kolumns.list_throw_error_strict] {base_col} --> Fatal error. There should never be lists in this column.")
+				print_cols = [base_col, right_col, index_column]
+				#print_cols = [base_col, right_col, index_column, self.cfg.indicator_column] if self.cfg.indicator_column in polars_df.columns else [base_col, right_col, index_column]
+				if len(polars_df.filter(pl.col(base_col) != pl.col(right_col))) == 0:
+					self.logging.error("Conflict seems to be from null values only -- consider using kolumns.list_throw_error instead of kolumns.list_throw_error_strict")
+					assert_series_equal(polars_df[base_col], polars_df[right_col].alias(base_col)) # this will provide more helpful output than super_print_pl
+				else:
+					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(print_cols), f"conflicts")
 				exit(1)
+
+			elif base_col in kolumns.list_throw_error:
+				print_cols = [base_col, right_col, index_column]
+				#print_cols = [base_col, right_col, index_column, self.cfg.indicator_column] if self.cfg.indicator_column in polars_df.columns else [base_col, right_col, index_column]
+				if len(polars_df.filter(pl.col(base_col) != pl.col(right_col))) == 0:
+					self.logging.debug("[kolumns.list_throw_error] Found conflicts, but they're nulls, so who cares?")
+					polars_df = polars_df.drop(right_col) # TODO: is this right?
+				else:
+					self.logging.error(f"[kolumns.list_throw_error] {base_col} --> Fatal error. There should never be lists in this column.")
+					self.super_print_pl(polars_df.filter(pl.col(base_col) != pl.col(right_col)).select(print_cols), f"conflicts")
+					assert_series_equal(polars_df[base_col], polars_df[right_col].alias(base_col)) # this will provide more helpful output than super_print_pl
 
 			elif base_col in kolumns.special_taxonomic_handling:
 				# same as kolumns.list_fallback_or_null, only different in logging output
@@ -857,10 +1222,10 @@ class NeighLib:
 					polars_df = self.cast_to_list(polars_df, base_col)
 					polars_df = self.cast_to_list(polars_df, right_col)
 				polars_df = self.concat_columns_list(polars_df, base_col, right_col, True)
-				#self.logging.debug(self.get_rows_where_list_col_more_than_one_value(polars_df, base_col).select([self.get_index_column(polars_df), base_col]))
+				#self.logging.debug(self.get_rows_where_list_col_more_than_one_value(polars_df, base_col).select([self.guess_index_column(polars_df), base_col]))
 
 			assert base_col in polars_df.columns
-			assert right_col not in polars_df.columns
+			assert right_col not in polars_df.columns, f"Caught {right_col} in dataframe after it should have been removed"
 
 		right_columns = [col for col in polars_df.columns if col.endswith("_right")]
 		if len(right_columns) > 0:
@@ -912,23 +1277,74 @@ class NeighLib:
 			.select("BioProject").unique().to_series().to_list()
 		)
 	
-	def rancheroize_polars(self, polars_df, drop_non_mycobact_columns=True, nullify=True, flatten=True, disallow_right=True, check_index=True, norename=False, drop_unwanted_columns=True, index=None):
-		self.logging.debug(f"Dataframe shape before rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
+	def rancheroize_polars(self, polars_df:  pl.DataFrame,
+			drop_non_mycobact_columns=True,
+			nullify=True,
+			flatten=True,
+			disallow_right=True,
+			check_index=True,
+			norename=False,
+			drop_unwanted_columns=True,
+			index=None,         # name of column NOT in dataframe you want to rename the index to, ex "__index__runacc"
+			rename_index=None,  # name of column NOT in dataframe you want to rename the index to, ex "__index__runacc"
+			name=None):         # name of dataframe -- only used for logging
+		# Examples of how index and rename_index work together:
+		# If dataframe has columns ['run', 'BioSample', 'date_collected'] and you call rancheroize_polars(index="run", rename_index="__index__runacc",
+		# the 'run' column will be renamed to '__index__runacc' and '__index__runacc' will act as your index.
+		#
+		# If you are going to be swapping your dataframe's index at some point, or running any group_by() stuff on it, it's
+		# highly recommended your index columns be either {INDEX_PREFIX}_run or  {INDEX_PREFIX}_sample as ranchero has special handling
+		# to help keep BioSamples and runs working as expecting -- so, if your input dataframe has the aforementioned columns,
+		# it's best to rancheroize_polars(index='run', rename_index='__index__run') if INDEX_PREFIX=='__index__'.
+		#
+		# You can use rename_index to force an index that doesn't start with INDEX_PREFIX but this isn't recommended as some ranchero
+		# functions depend on knowing what a dataframe's index is.
+		df_name = "Dataframe" if name is None else name
+		self.logging.debug(f"{df_name} shape before rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
+		self.logging.debug(f"{df_name} has these columns before rancheroizing: {polars_df.columns}")
+		
+		# A rancheroized dataframe should always have some kind of index. This one might have one already.
+		if not self.has_one_index_column(polars_df):
+			polars_df = self.strip_index_marker(polars_df) # in case has_one_index_column() returned false because there was more than one index
+			if index is None or index == '':
+				self.logging.warning(f"Guessing {df_name}'s index...")
+				index = self.get_index(polars_df, guess=True)
+			else:
+				index = index.removeprefix(INDEX_PREFIX) # for consistency in case the user (me) goofs when calling the function
+			polars_df = self.mark_index(polars_df, index)
+		elif index is not None and index != '': # and self.has_one_index_column(polars_df) is true
+			current_index = self.get_index(polars_df, guess=False)		
+			if current_index != index and current_index.removeprefix(INDEX_PREFIX) != index:
+				if not defined(rename_index):
+					errorL1 = f"Attempted to rancheroize {df_name} with pre-existing index {current_index}, but was told index = {index}"
+					errorL2 = "and no value was given for rename_index.\nIf you want to rename the index of an existing dataframe,"
+					errorL3 = "either do so before calling rancheroize() or define rename_index when calling rancheroize().\n"
+					errorL4 = "If you want to swap from a run-based index to a sample-based index, use run_to_sample_index()."
+					self.logging.error(errorL1+errorL2+errorL3+errorL4)
+					raise ValueError
+				polars_df = polars_df.rename({current_index: rename_index})
+				if not rename_index.startswith(INDEX_PREFIX):
+					polars_df = self.mark_index(polars_df, rename_index)
+		index = self.get_index(polars_df, guess=False) # necessary whether or not it was defined already!! if already defined this will update to the marked index
+		
+		if rename_index is not None and rename_index != '':
+			if rename_index not in polars_df.columns: # we may have renamed it already!
+				if not rename_index.startswith(INDEX_PREFIX):
+					self.logging.warning(f"Renaming index ({index}) to {rename_index} which doesn't start with INDEX_PREFIX ({INDEX_PREFIX}) and therefore may not be properly tracked")
+				polars_df = polars_df.rename({index: rename_index})
+				index = rename_index
 		if drop_unwanted_columns:
 			polars_df = self.drop_known_unwanted_columns(polars_df)
 		if drop_non_mycobact_columns:
 			polars_df = self.drop_non_tb_columns(polars_df)
 		if nullify:
 			polars_df = self.drop_null_columns(self.nullify(polars_df))
-			
-			# check we didn't mess with the index
+			# check we didn't mess with the index, which can happen with null stuff
 			if check_index and index is not None:
 				assert index in polars_df.columns
 				assert self.get_null_count_in_column(polars_df, index) == 0
 			elif check_index:
-				assert self.get_null_count_in_column(polars_df, self.get_index_column(polars_df)) == 0
-
-		print(index)
+				assert self.get_null_count_in_column(polars_df, self.guess_index_column(polars_df)) == 0
 		if flatten:
 			polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False) # this makes merging better for "geo_loc_name_sam"
 		if disallow_right:
@@ -971,43 +1387,46 @@ class NeighLib:
 					assert key in polars_df.columns
 		
 		# do not flatten list cols again, at least not yet. use the equivalence columns for standardization.
-		self.logging.debug("Checking index...")
+		self.logging.debug(f"Checking {df_name}'s index...")
 		polars_df = self.check_index(polars_df)
-		self.logging.debug(f"Dataframe shape after rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
-
-
-
-		# DEBUG REMOVE
-		"""
-		if 'clade' in polars_df.columns:
-			null_clade = self.get_count_of_x_in_column_y(polars_df, None, 'clade')
-			if null_clade > 0:
-				print("Found null values for clade at bottom of rancheroize")
-				self.print_value_counts(polars_df, ['clade'])
-				exit(1)
-		else:
-			print("clade not in polars df at end of rancheroize")
-		"""
-
-
+		self.logging.debug(f"{df_name}'s shape after rancheroizing: {polars_df.shape[0]}x{polars_df.shape[1]}")
+		self.logging.debug(f"{df_name} has these columns after rancheroizing: {polars_df.columns}")
 
 		return polars_df
 
+	@staticmethod
+	def sort_list_str_col(polars_df: pl.DataFrame, col: str, safe=True) -> pl.DataFrame:
+		"""
+		Sort lists of strings in a List(Utf8) column alphabetically.
+		"""
+		if safe:
+			return polars_df.with_columns(pl.col(col).list.eval(
+				pl.element()
+			)
+			.map_elements(
+				lambda lst: sorted(lst, key=lambda x: (x is not None, x)),
+				return_dtype=pl.List(pl.Utf8)
+			)
+			.alias(col)
+		)
+		else: # way faster but might explode
+			return polars_df.with_columns(pl.col(col).list.sort().alias(col))
+
 	def is_sample_indexed(self, polars_df):
-		index = self.get_index_column(polars_df)
+		index = self.guess_index_column(polars_df)
 		return True if index in kolumns.equivalence['sample_index'] else False
 
 	def is_run_indexed(self, polars_df):
-		index = self.get_index_column(polars_df)
+		index = self.guess_index_column(polars_df)
 		return True if index in kolumns.equivalence['run_index'] else False
 
 	def add_list_len_col(self, polars_df, list_col, new_col):
 		return polars_df.with_columns(pl.col(list_col).list.len().alias(new_col))
 
-	def coerce_to_not_list_if_possible(self, polars_df, column, index_column=None, prefix_arrow=False):
+	def coerce_to_not_list_if_possible(self, polars_df, column, prefix_arrow=False):
 		arrow = '-->' if prefix_arrow else ''
-		if index_column is not None:
-			assert column != index_column
+		if self.get_index_subname(polars_df) is not None:
+			assert column != self.get_index_subname(polars_df)
 		if polars_df.schema[column] == pl.List:
 			if len(self.get_rows_where_list_col_more_than_one_value(polars_df, column)) == 0:
 				print(f"{arrow}Can delist") if self.logging.getEffectiveLevel() == 10 else None
@@ -1025,7 +1444,7 @@ class NeighLib:
 	def flatten_list_col_as_set(self, polars_df, column):
 		polars_df = self.flatten_one_nested_list_col(polars_df, column) # recursive
 		polars_df = polars_df.with_columns(pl.col(column).list.unique().alias(f"{column}"))
-		polars_df = self.coerce_to_not_list_if_possible(polars_df, column, index_column=self.get_index_column(polars_df))
+		polars_df = self.coerce_to_not_list_if_possible(polars_df, column)
 		return polars_df
 
 	def flatten_all_list_cols_as_much_as_possible(self, polars_df, hard_stop=False, force_strings=False, just_these_columns=None,
@@ -1038,7 +1457,9 @@ class NeighLib:
 		"""
 		# Do not run check index first, as it will break when this is run right after run-to-sample conversion
 		if force_index is None:
-			index_column = self.get_index_column(polars_df)
+			index_column = self.get_index(polars_df)
+			if index_column is None:
+				raise ValueError("Dataframe doesn't have an index column. Set it using NeighLib.mark_index().")
 		else:
 			index_column = force_index
 
@@ -1072,13 +1493,15 @@ class NeighLib:
 				col_dtype[col] = dtype
 		
 		for col, datatype in col_dtype.items(): # TYPES DO NOT UPDATE AUTOMATICALLY!
+
+			self.logging.debug(f"->col {col} has stored datatype {datatype}, current datatype {polars_df.schema[col]}")
 			
 			if col in drop_zone.silly_columns:
 				polars_df.drop(col)
 				what_was_done.append({'column': col, 'intype': datatype, 'outtype': pl.Null, 'result': 'dropped'})
 				continue
 			
-			if datatype == pl.List and datatype.inner != datetime.datetime:
+			if datatype == pl.List and datatype.inner != datetime.datetime and not self.is_nested_list_dtype(polars_df.schema[col]):
 
 				if polars_df.schema[col] != pl.List:
 					# fixes issues with the 'strain' column previously being a list
@@ -1111,7 +1534,7 @@ class NeighLib:
 							polars_df = self.drop_nulls_from_possible_list_column(polars_df, kolumn)
 							current_dataframe_height = polars_df.shape[1]
 							assert dataframe_height == current_dataframe_height
-							polars_df = self.coerce_to_not_list_if_possible(polars_df, kolumn, index_column, prefix_arrow=True)
+							polars_df = self.coerce_to_not_list_if_possible(polars_df, kolumn, prefix_arrow=True)
 					
 					if polars_df.schema[col] == pl.List: # since it might not be after coerce_to_not_list_if_possible()
 						long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(['sample_index', 'clade', 'organism', 'lineage', 'strain'])
@@ -1166,7 +1589,7 @@ class NeighLib:
 								long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(self.valid_cols(long_boi, ['sample_index', 'clade', 'organism', 'lineage', 'strain']))
 								self.logging.debug(f"Non-1 {col} values after attempting to de-long them")
 								self.logging.debug(long_boi)
-							polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+							polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 						else:
 							self.logging.debug(f"Taxoncore column {col} will not be adjusted further")
 				
@@ -1199,7 +1622,7 @@ class NeighLib:
 						pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
 					])
 					print(f"-->Set null in conflicts, now trying to delist") if self.logging.getEffectiveLevel() == 10 else None
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'null conflicts'})
 					continue
 				
@@ -1207,7 +1630,7 @@ class NeighLib:
 					print(f"{col}\n-->[kolumns.list_to_set_uniq]") if self.logging.getEffectiveLevel() == 10 else None
 					polars_df = polars_df.with_columns(pl.col(col).list.unique())
 					print("-->Used uniq, now trying to delist") if self.logging.getEffectiveLevel() == 10 else None
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set-and-shrink'})
 					continue
 					
@@ -1221,7 +1644,7 @@ class NeighLib:
 						if self.logging.getEffectiveLevel() == 10:
 							print_cols = self.valid_cols(bad_ones, ['sample_index', 'run_index', col, 'continent' if col != 'continent' else 'country'])
 							self.super_print_pl(bad_ones.select(print_cols), "Conflicts")
-						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 						polars_df = polars_df.with_columns(
 							pl.when(pl.col(col).list.len() <= 1).then(pl.col(col)).otherwise(None).alias(col)
 						)
@@ -1238,13 +1661,16 @@ class NeighLib:
 						polars_df = polars_df.with_columns(
 							pl.when(pl.col(col).list.len() <= 1).then(pl.col(col).first()).otherwise(None).alias(col)
 						)
-						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 						assert polars_df.select(pl.count(col)).item() == non_nulls_in_this_column
 
 				else:
-					self.logging.warning(f"{col}-->Not sure how to handle, will treat it as a set")
+					# list.unique() does not work on nested lists so you better hope you removed them earlier!
+					self.logging.warning(f"{col} (type {type(polars_df.schema[col])})-->Not sure how to handle, will treat it as a set")
+					assert polars_df.schema[col] == pl.List
+					print(polars_df.schema[col])
 					polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
-					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, index_column, prefix_arrow=True)
+					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set (no rules)'})
 					continue
 
@@ -1269,6 +1695,10 @@ class NeighLib:
 		return polars_df
 
 	def rstrip(self, polars_df, column, strip_char=" "):
+
+		# TODO: REPLACE WITH POLARS RSTRIP, WHICH ALREADY STRIPS ALL WHITESPACE
+
+
 		return polars_df.with_columns([
 			pl.when(pl.col(column).str.ends_with(" "))
 			.then(pl.col(column).str.slice(-1))
@@ -1277,154 +1707,12 @@ class NeighLib:
 		])
 	
 	def recursive_rstrip(self, polars_df, column, strip_char=" "):
+
+		# TODO: REPLACE WITH POLARS RSTRIP, WHICH ALREADY STRIPS ALL WHITESPACE
+
 		while polars_df[column].str.ends_with(" ").any():
 			self.logging.info("Recursing...")
 			polars_df = self.rstrip(polars_df, column, strip_char)
-		return polars_df
-
-	def check_index(self, polars_df, 
-			manual_index_column=None, 
-			force_NCBI_runs=_cfg_force_SRR_ERR_DRR_run_index, 
-			force_BioSamples=_cfg_force_SAMN_SAME_SAMD_sample_index,
-			rstrip=False, # VERY SLOW AND NOT WELL TESTED!
-			dupe_index_handling=_cfg_dupe_index_handling
-			):
-		"""
-		Check a polars dataframe's apparent index, which is expected to be either run accessions or sample accessions, for the following issues:
-		* pl.null/None values
-		* duplicates
-		* incompatiable index columns (eg, two run index columns)
-
-		Unless manual_index_column is not none, this function will use kolumns.equivalence to figure out what your index column(s) are.
-		"""
-		dupe_index_handling = self._sentinal_handler(dupe_index_handling)
-		force_NCBI_runs = self._sentinal_handler(force_NCBI_runs)
-		force_BioSamples = self._sentinal_handler(force_BioSamples)
-
-		# if index column is manually set, it's okay if get_index() fails
-		if manual_index_column is not None:
-			try:
-				apparent_index_column = self.get_index_column(polars_df)
-				if manual_index_column not in polars_df.columns:
-					self.logging.error(f"Manual index column set to {manual_index_column}, but that column isn't in the dataframe!")
-					raise ValueError
-				elif manual_index_column != apparent_index_column:
-					self.logging.debug(f"Manual index column set to {manual_index_column}, which is in the dataframe, but there's additional index columns too: {apparent_index_column}")
-					index_column = manual_index_column
-				else:
-					index_column = manual_index_column
-			except ValueError:
-				self.logging.debug(f"Index manually set to {manual_index_column}, no other valid indeces found")
-				index_column = manual_index_column
-		else:
-			index_column = self.get_index_column(polars_df)
-
-		if rstrip:
-			polars_df = self.recursive_rstrip(polars_df, index_column, strip_char=" ")
-		
-		# handle get_index_column() error cases
-		if type(index_column) == list:
-			if index_column[0] == 2:
-				self.logging.error(f"Dataframe has multiple possible sample based indeces: {index_column[1]}")
-				raise ValueError
-			elif index_column[0] == 3:
-				# in theory you could get away with this, since there is a sample index, but I won't support that
-				self.logging.error(f"Dataframe has multiple possible run indeces: {index_column[1]}")
-				raise ValueError
-			elif index_column[0] == 4:
-				self.logging.error(f"Dataframe has multiple possible run indeces: {index_column[1]}")
-				raise ValueError
-			elif index_column[0] == 5:
-				self.logging.error(f"Could not find any valid index column. You can set valid index columns in kolumns.py's equivalence dictionary.")
-				self.logging.error(f"Current possible run index columns (key for kolumns.equivalence['run_index']): {kolumns.equivalence['run_index']}")
-				self.logging.error(f"Current possible sample index columns (key for kolumns.equivalence['sample_index']): {kolumns.equivalence['sample_index']}")
-				self.logging.error(f"Your dataframe's columns: {polars_df.columns}")
-				raise ValueError
-			else:
-				raise ValueError
-		assert polars_df.schema[index_column] != pl.List # just to be super-extra-double sure
-
-		# drop any nulls in the index column -- these needs to be before checking for duplicates
-		nulls = self.get_null_count_in_column(polars_df, index_column, warn=False, error=False)
-		if nulls > 0:
-			self.logging.warning(f"Dropped {nulls} row(s) with null value(s) in index column {index_column}")
-			polars_df = polars_df.filter(pl.col(index_column).is_not_null())
-			nulls = self.get_null_count_in_column(polars_df, index_column, warn=False, error=False)
-			if nulls > 0:
-				self.logging.error(f"Failed to remove null values from index column {index_column}")
-				raise ValueError
-		
-		# check for duplicates
-		assert polars_df.schema[index_column] == pl.Utf8
-		
-		duplicate_df = polars_df.filter(polars_df[index_column].is_duplicated())
-		n_dupe_indeces = len(duplicate_df)
-		#if len(polars_df) != len(polars_df.unique(subset=[index_column], keep="any")):
-		if n_dupe_indeces > 0:
-			self.logging.debug(f"Found {n_dupe_indeces} dupes in {index_column}, will handle according to prefernces")
-			if dupe_index_handling == 'allow':
-				self.logging.warning(f"Reluctantly keeping {n_dupe_indeces} duplicate values in index {index_column} as per dupe_index_handling")
-			elif dupe_index_handling in ['error', 'verbose_error']:
-				self.logging.error("Duplicates in index found!") # print above and below verbose dataframe
-				if dupe_index_handling == 'error':
-					raise ValueError(f"Found {n_dupe_indeces} duplicates in index column")
-				else: # verbose_error
-					self.dfprint(duplicate_df)
-					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
-					raise ValueError(f"Found {n_dupe_indeces} duplicate indeces in index column (dumped to dupes_in_index.tsv)")
-			elif dupe_index_handling in ['warn', 'verbose_warn', 'silent']:
-				subset = polars_df.unique(subset=[index_column], keep="any")
-				if dupe_index_handling == 'warn':
-					self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in index {index_column}, "
-						"will keep one instance per dupe")
-				elif dupe_index_handling == 'verbose_warn':
-					duplicate_df = duplicate_df.select(self.valid_cols(duplicate_df, [index_column, 'run_index', 'sample_index', 'submitted_files_bytes']))
-					self.dfprint(duplicate_df.sort(index_column))
-					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
-					self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in index {index_column} (dumped to dupes_in_index.tsv), "
-						"will keep one instance per dupe")
-				polars_df = subset
-			elif dupe_index_handling == 'dropall':
-				subset = polars_df.unique(subset=[index_column], keep="none")
-				self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in index {index_column}, will drop all of them")
-				polars_df = subset
-			else:
-				raise ValueError(f"Unknown value provided for dupe_index_handling: {dupe_index_handling}")
-		else:
-			self.logging.debug(f"Did not find any duplicates in {index_column}")
-		# if applicable, make sure there's no nonsense in our index columns -- also, we're checking run AND sample columns if both are present,
-		# to prevent issues if we do a run-to-sample conversion later
-		# also, thanks to earlier checks, we know there should only be a maximum of one sample index and one run index.
-		for column in polars_df.columns:
-			if column in kolumns.equivalence['sample_index'] and force_BioSamples and polars_df.schema[column] != pl.List:
-				good = (
-					polars_df[column].str.starts_with("SAMN") |
-					polars_df[column].str.starts_with("SAME") |
-					polars_df[column].str.starts_with("SAMD")
-				)
-				invalid_rows = polars_df.filter(~good).drop([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_index'] + kolumns.equivalence['run_index'])])
-				valid_rows = polars_df.filter(good)
-				if len(invalid_rows) > 0:
-					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
-					print(invalid_rows)
-					return valid_rows
-			elif column in kolumns.equivalence['run_index'] and force_NCBI_runs and polars_df.schema[column] != pl.List:
-				good = (
-					polars_df[column].str.starts_with("SRR") |
-					polars_df[column].str.starts_with("ERR") |
-					polars_df[column].str.starts_with("DRR")
-				)
-				invalid_rows = polars_df.filter(~good).drop([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_index'] + kolumns.equivalence['run_index'])])
-				valid_rows = polars_df.filter(good)
-				if len(invalid_rows) > 0:
-					self.logging.warning(f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR (will be dropped, leaving {len(valid_rows)} afterwards):")
-					print(invalid_rows)
-					return valid_rows
-			else:
-				continue
-		# double check no funny business
-		duplicates = polars_df.filter(polars_df[index_column].is_duplicated())
-		assert polars_df.filter(polars_df[index_column].is_duplicated()).shape[0] == 0
 		return polars_df
 
 	def drop_non_tb_columns(self, polars_df):
@@ -1434,19 +1722,36 @@ class NeighLib:
 	def drop_known_unwanted_columns(self, polars_df):
 		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.silly_columns])
 
+	@staticmethod
+	def list_nesting_depth(dtype: pl.DataType):
+		depth, cur = 0, dtype
+		while isinstance(cur, pl.List):
+			depth += 1
+			cur = cur.inner
+		return depth
+
+	def is_nested_list_dtype(self, dtype: pl.DataType) -> bool:
+		return self.list_nesting_depth(dtype) >= 2
+
+	def nested_list_columns(self, polars_df: pl.DataFrame) -> list[str]:
+		return [name for name, datatype in polars_df.schema.items() if self.is_nested_list_dtype(datatype)]
+
 	def flatten_one_nested_list_col(self, polars_df, column):
-		polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
-		if polars_df[column].schema == pl.List(pl.List):
-			polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten().drop_nulls()))
-			#polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten())) # might leave hanging nulls (does earlier drop_nulls fix this though?)
-			#polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
-		if polars_df[column].schema == pl.List(pl.List):
-			polars_df = self.flatten_one_nested_list_col(polars_df, column) # this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
+		polars_df = self.drop_nulls_from_possible_list_column(polars_df, column)
+		if self.is_nested_list_dtype(polars_df.schema[column]):
+			i = 1
+			while i < self.list_nesting_depth(polars_df.schema[column]):
+				#polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten())) # might leave hanging nulls (does earlier drop_nulls fix this though?)
+				#polars_df = polars_df.with_columns(pl.col(column).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
+				polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten().drop_nulls()))
+				i+=1
+		assert not self.is_nested_list_dtype(polars_df.select(column).schema)
 		return polars_df
 
 	def flatten_nested_list_cols(self, polars_df):
 		"""There are other ways to do this, but this one doesn't break the schema, so we're sticking with it"""
-		nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
+		#nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
+		nested_lists = self.nested_list_columns(polars_df)
 		for col in nested_lists:
 			self.logging.debug(f"Unnesting {col}")
 			polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
@@ -1511,13 +1816,18 @@ class NeighLib:
 			self.logging.debug(f"Called encode_as_str() on {column}, which already has pl.Utf8 type. Doing nothing...")
 			return polars_df
 
+		elif datatype in [pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.Float32, pl.Float64]:
+			raise TypeError("Not implemented yet")
+			return polars_df
+
 		else:
 			raise ValueError(f"Tried to make {column} into a string column, but we don't know what to do with type {datatype}")
 
 	def stringify_all_list_columns(self, polars_df):
 		self.logging.debug(f"Forcing ALL list columns into strings")
 		for col, datatype in polars_df.schema.items():
-			polars_df = self.encode_as_str(polars_df, col)
+			if datatype == pl.List or datatype == pl.Object:
+				polars_df = self.encode_as_str(polars_df, col)
 		return polars_df
 
 	def add_column_of_just_this_value(self, polars_df, column, value):
@@ -1558,10 +1868,13 @@ class NeighLib:
 			df_to_write.write_csv(path, separator='\t', include_header=True, null_value=null_value)
 			self.logging.info(f"Wrote dataframe to {path}")
 		except pl.exceptions.ComputeError:
-			print("WARNING: Failed to write to TSV due to ComputeError. This is likely a data type issue.")
+			self.logging.error("Failed to write to TSV due to ComputeError. This is likely a data type issue.")
 			debug = pl.DataFrame({col:  f"Was {dtype1}, now {dtype2}" for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if col in df_to_write.columns and dtype2 != pl.String and dtype2 != pl.List(pl.String)})
 			self.super_print_pl(debug, "Potentially problematic that may have caused the TSV write failure:")
 			exit(1)
+
+	def col_to_list(self, polars_df, col):
+		return pl.Series(polars_df.select(col)).to_list()
 	
 	def assert_unique_columns(self, pandas_df):
 		"""Assert all columns in a !!!PANDAS!!! dataframe are unique -- useful if converting to polars """

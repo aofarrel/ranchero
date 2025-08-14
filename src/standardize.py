@@ -1,6 +1,6 @@
 import sys
 from datetime import datetime
-from src.statics import host_species, sample_sources, kolumns, countries, regions
+from src.statics import host_disease, host_species, sample_sources, kolumns, countries, regions
 from .config import RancheroConfig
 import polars as pl
 from tqdm import tqdm
@@ -8,10 +8,11 @@ from collections import OrderedDict # dictionaries are ordered in Python 3.7+, b
 from . import _NeighLib as NeighLib
 
 globals().update({f"_cfg_{name}": object() for name in [
-	"rm_phages"
+	"rm_phages", "mycobacterial_mode"
 ]})
 _SENTINEL_TO_CONFIG = {
-	_cfg_rm_phages: "rm_phages"
+	_cfg_rm_phages: "rm_phages",
+	_cfg_mycobacterial_mode: "mycobacterial_mode"
 }
 
 class ProfessionalsHaveStandards():
@@ -48,8 +49,10 @@ class ProfessionalsHaveStandards():
 			NeighLib.print_only_where_col_not_null(polars_df, 'date_collected_month', cols_of_interest=kolumns.id_columns+'date_collected'+'date_collected_year')
 			exit(1)
 		
+		# Because this one is VERY open to interpretation and I don't have an MD, we will also have a "raw value" column.
 		if 'isolation_source' in polars_df.columns and not skip_sample_source:
 			self.logging.info("Standardizing isolation sources...")
+			polars_df = polars_df.with_columns(pl.col('isolation_source').alias('isolation_source_raw'))
 			polars_df = self.standardize_sample_source(polars_df) # must be before taxoncore and host, no need to force_strings as its already forced
 		
 		if 'host' in polars_df.columns:
@@ -174,6 +177,8 @@ class ProfessionalsHaveStandards():
 		if write_col not in polars_df.columns:
 			self.logging.debug(f"Write column {write_col} not in polars_df yet so we'll add it")
 			polars_df = polars_df.with_columns(pl.lit(None).alias(write_col)) if write_col not in polars_df.columns else polars_df
+
+		# to start off, we define several polars expressions
 		
 		# matching expression
 		if substrings and polars_df.schema[match_col] == pl.Utf8:
@@ -200,6 +205,7 @@ class ProfessionalsHaveStandards():
 		else:
 			write_col_is_empty = pl.col(write_col).is_null()
 
+		# use those expressions to actually do something
 		if status_cols:
 			polars_df = polars_df.with_columns([
 				# match status
@@ -256,13 +262,31 @@ class ProfessionalsHaveStandards():
 
 	def standardize_host_disease(self, polars_df):
 		assert 'host_disease' in polars_df.columns
-		for host_disease, simplified_host_disease in sample_sources.host_disease_exact_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=True, overwrite=True)
-		for host_disease, simplified_host_disease in sample_sources.host_disease.items():
-			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=False, overwrite=True)
+
+		# exact matches
+		if self._sentinal_handler(_cfg_mycobacterial_mode):
+			for disease, simplified_disease in host_disease.host_disease_exact_match_mycobacterial.items():
+				polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
+		for disease, simplified_disease in host_disease.host_disease_exact_match.items():
+			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
+		
+		# fuzzy matches
+		if self._sentinal_handler(_cfg_mycobacterial_mode):
+			for disease, simplified_host_disease in host_disease.host_disease_substring_match_mycobacterial.items():
+				polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
+		for disease, simplified_host_disease in host_disease.host_disease_substring_match.items():
+			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
 		return polars_df
 
 	def standardize_sample_source_as_list(self, polars_df, write_hosts=True, write_lineages=True, write_host_disease=True):
+		"""
+		Sample source (rancheroized as isolation_source) is kind of a mess, because submitters can interpret it as very different things:
+		* host organism species
+		* host organism information
+		* fluid/organ/body part the sample was isolated from
+		* environmental information (soil type, etc)
+		* geographic location
+		"""
 		assert 'isolation_source' in polars_df.columns
 		assert polars_df.schema['isolation_source'] == pl.List
 
@@ -298,6 +322,7 @@ class ProfessionalsHaveStandards():
 					.alias(strain_column)
 				])
 
+		# TODO: maybe rewrite this section to use dictionary_match()
 		if write_hosts and 'host' in polars_df.columns:
 			self.logging.info("Extracting host information from isolation_source...")
 			human = pl.lit(['Homo sapiens']) if polars_df.schema['host'] == pl.List else pl.lit('Homo sapiens') # high-confidence
@@ -360,8 +385,8 @@ class ProfessionalsHaveStandards():
 
 		if write_host_disease:
 			self.logging.info("Extracting host_disease...")
-			for host_disease, simplified_host_disease in sample_sources.host_disease_exact_match.items():
-				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=host_disease, value=simplified_host_disease, substrings=False, overwrite=False, remove_match_from_list=True)
+			for disease, simplified_disease in host_disease.host_disease_exact_match.items():
+				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=False, remove_match_from_list=True)
 			# DEBUGPRINT
 			#NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
 
@@ -411,7 +436,6 @@ class ProfessionalsHaveStandards():
 				#.otherwise(pl.col('isolation_source'))
 				#.alias('isolation_source')
 			])
-		
 		for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source.items(), desc="Checking for fuzzy matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=False, remove_match_from_list=True)
 		for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source_exact_match.items(), desc="Checking for exact matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
@@ -463,17 +487,13 @@ class ProfessionalsHaveStandards():
 			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=True)
 		return polars_df
 	
-	def standarize_hosts(self, polars_df, eager=True):
+	def standarize_hosts(self, polars_df):
 		if polars_df.schema['host'] == pl.List:
 			#self.logging.info(f"The host column has type list. We will take the first value as the source of truth.") # done BEFORE most standardization
 			#polars_df = polars_df.with_columns(pl.col('host').list.first().alias('host'))
 			polars_df = polars_df.with_columns(pl.col('host').list.join(", ").alias('host'))
 		assert polars_df.schema['host'] == pl.Utf8
-		if eager:
-			polars_df = self.standardize_hosts_eager(polars_df)
-		else:
-			polars_df = self.standardize_hosts_lazy(polars_df)
-		polars_df = polars_df.drop('host')
+		polars_df = self.standardize_hosts_eager(polars_df).drop('host')
 		return polars_df
 
 	def standardize_hosts_eager(self, polars_df):
@@ -718,7 +738,7 @@ class ProfessionalsHaveStandards():
 			)
 
 		if 'date_collected_year' in polars_df.columns:
-			polars_df = NeighLib.try_nullfill(polars_df, 'date_collected', 'date_collected_year')[0]
+			polars_df = NeighLib.try_nullfill_left(polars_df, 'date_collected', 'date_collected_year')[0]
 			polars_df.drop('date_collected_year')
 
 		# this is going to be annoying to handle properly and might not ever be helpful -- low priority TODO
@@ -755,8 +775,8 @@ class ProfessionalsHaveStandards():
 				.then(pl.lit('badger'))
 				.otherwise(pl.col('host_commonname'))
 				.alias('host_commonname')
-			])
-		return polars_df.drop('anonymised_badger_id_sam')
+			]).drop('anonymised_badger_id_sam')
+		return polars_df
 
 	def unmask_mice(self, polars_df):
 		if 'mouse_strain_sam' in polars_df.columns:
@@ -775,8 +795,8 @@ class ProfessionalsHaveStandards():
 				.then(pl.lit('Mus musculus'))
 				.otherwise(pl.col('host_scienname'))
 				.alias('host_scienname')
-			])
-		return polars_df.drop('mouse_strain_sam')
+			]).drop('mouse_strain_sam')
+		return polars_df
 
 	# because polars runs with_columns() matches in parallel, this is probably the most effecient way to do this. but having four functions for it is ugly.
 	def taxoncore_GO(self, polars_df, match_string, i_group, i_organism, exact=False):
@@ -821,6 +841,9 @@ class ProfessionalsHaveStandards():
 		# TODO: I really don't like that we're iterating like this as it sort of blocks the advantage of using polars.
 		# Is there a better way of doing this? Tried a few things but so far this one seems the most reliable.
 		if self.cfg.taxoncore_ruleset is None:
+			raise ValueError("A taxoncore ruleset failed to initialize, so we cannot use function taxoncore_iterate_rules!")
+		elif self.cfg.taxoncore_ruleset is 'None':
+			# something about how I changed defaults is causing this... well, strs are invalid anyway so. whatever.
 			raise ValueError("A taxoncore ruleset failed to initialize, so we cannot use function taxoncore_iterate_rules!")
 		
 		for when, strain, lineage, organism, bacterial_group, comment in tqdm((entry.values() for entry in self.cfg.taxoncore_ruleset), desc="Standardizing taxonomy", total=len(self.cfg.taxoncore_ruleset),  ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
@@ -1021,7 +1044,7 @@ class ProfessionalsHaveStandards():
 		polars_df = polars_df.with_columns(pl.lit(None).alias('likely_country')) # needs to be initialized since it's in an otherwise()
 		assert 'def_country' not in polars_df.columns
 		polars_df = polars_df.with_columns(pl.lit(None).alias('def_country')) # needs to be initialized since it's in an otherwise()
-		assert 'region_as_list' not in polars_df.columns
+		assert 'geoloc_info_unhandled' not in polars_df.columns
 		assert 'neo_region' not in polars_df.columns
 		
 		# We can allow a pre-existing region column though
@@ -1145,13 +1168,15 @@ class ProfessionalsHaveStandards():
 			.and_(pl.col('region').is_null()))
 			.then(pl.col("geoloc_info").list.drop_nulls())
 			.otherwise(None)
-			.alias('region_as_list')
+			.alias('geoloc_info_unhandled')
 		])
-		NeighLib.print_only_where_col_not_null(polars_df, 'region_as_list')
-		#polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['region_as_list'])
-		polars_df = NeighLib.encode_as_str(polars_df, 'region_as_list')
-		polars_df = polars_df.with_columns(pl.coalesce(["region", "region_as_list"]).alias("neo_region"))
-		polars_df = polars_df.drop(['region', 'region_as_list', 'geoloc_info'])
+		if self.logging.getEffectiveLevel() == 10:
+			self.logging.debug("Found some stuff in geoloc_info we're not sure how to handle, will convert to region")
+			NeighLib.print_only_where_col_list_is_big(polars_df, 'geoloc_info_unhandled')
+		#polars_df = NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['geoloc_info_unhandled'])
+		polars_df = NeighLib.encode_as_str(polars_df, 'geoloc_info_unhandled')
+		polars_df = polars_df.with_columns(pl.coalesce(["region", "geoloc_info_unhandled"]).alias("neo_region"))
+		polars_df = polars_df.drop(['region', 'geoloc_info_unhandled', 'geoloc_info'])
 		polars_df = polars_df.rename({'neo_region': 'region'})
 		polars_df = polars_df.with_columns(pl.col("region").str.strip_chars_start(" "))
 
@@ -1179,7 +1204,7 @@ class ProfessionalsHaveStandards():
 	def validate_col_country(self, polars_df):
 		# TODO: now we have some that aren't just three bytes
 		assert 'country' in polars_df.columns
-		assert 'region_as_list' not in polars_df.columns
+		assert 'geoloc_info_unhandled' not in polars_df.columns
 		invalid_rows = polars_df.filter(pl.col('country').str.len_bytes() != 3)
 		if len(invalid_rows) > 0:
 			self.logging.error(

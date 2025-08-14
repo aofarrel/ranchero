@@ -1,0 +1,78 @@
+read_file:
+  # Automatically cast types when reading a file
+  auto_cast_types: True
+  # Automatically parse dates when reading a file
+  auto_parse_dates: False
+  # Automatically rancheroize dataframes upon file read
+  auto_rancheroize: True
+  # Automatically standardize dataframes upon file read (dataframe must be rancheroized)
+  auto_standardize: True
+  # Ignore polars read errors when parsing a file -- recommended to keep this as true
+  ignore_polars_read_errors: True
+
+
+# When doing things that might modify the index, check it for integrity/lack of duplicates
+check_index: True
+
+# How to handle duplicate values when running check_index().
+#
+# - error: Throw a fatal error that includes the number of duplicate values
+# - verbose_error: As error, but attempt to print all duplicated values, and dump a TSV
+# - warn: pl.DataFrame.unique(subset=[index_column], keep='any') + print a non-fatal warning
+# - verbose_warn: As warn, but attempt to print all duplicated values, and dump a TSV
+# - silent: pl.DataFrame.unique(subset=[index_column], keep='any') + print to logging.debug
+# - allow: Allow duplicate values. NOT RECOMMENDED; THIS WILL BREAK MERGING DATAFRAMES! Will print a warning!
+# - dropall: pl.DataFrame.unique(subset=[index_column], keep='none') + warn
+dupe_index_handling: 'verbose_warn'
+
+# Values in run_index column must start with SRR, ERR, or DRR
+force_SRR_ERR_DRR_run_index: True
+# Values in sample_index column must start with SAMN, SAME, or SAMD
+force_SAMN_SAME_SAMD_sample_index: False
+
+# How to handle columns relating to host information found in "attrs" in BQ JSONs, which are much less useful
+# if they had been combined into a single column like we would locational data n stuff, but can add a ton of
+# columns with barely any filled-in values
+#   dictionary: Create a single 'host_info' column with a list(dict()) of key-value pairs
+#   drop: Drop them
+#   columns: Treat like anything else in attrs -- each key becomes its own column
+# What we consider to be "host information columns" is defined in kolumns.host_info
+host_info_handling: 'dictionary'
+
+# Indicator column when merging dataframes
+indicator_column: 'collection'
+
+# Write intermediate files to the disk
+intermediate_files: False
+
+# Log level
+# logging.DEBUG = 10
+# logging.INFO = 20
+# logging.WARNING = 30
+# logging.ERROR = 40
+loglevel: 20
+
+# Mycobacterial mode -- Taxonomic information, lineage, and host disease stuff specific to the Actinomycetota
+# genus of Mycobacterium, including tuberculosis, leprosy, NTM, and previous genus members like Mycolicibacterium
+mycobacterial_mode: True
+
+# If 'platform' and 'layout' columns exist and have type pl.Utf8 (string), remove all samples that aren't
+# "PAIRED" for 'layout' and "ILLUMINA" for 'platform'
+paired_illumina_only: False
+
+# Try to (mostly) use polars when normalizing the dataframe
+polars_normalize: True
+
+# Try to remove phages when standardizing taxonomic information
+rm_phages: True
+
+# Ruleset for standardizing taxonomic information -- updated by prepare_taxoncore_dictionary(),
+# so leave this as None here
+taxoncore_ruleset: None
+
+# When column equals key, filter out rows that have anything in that key's value list
+# Example: "assay_type": ['Tn-Seq', 'ChIP-Seq'] --> If there's a column called "assay_type", any rows that
+# have the value "Tn-Seq" or "ChIP-Seq" will be removed upon rancheroization
+unwanted:
+  "assay_type": ['Tn-Seq', 'ChIP-Seq']
+

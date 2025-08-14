@@ -142,16 +142,22 @@ class Merger:
 		merging dataframes multiple times. If right_name is None, or indicator is explictly set to None, a right_name
 		column will be created temporarily but dropped before returning.
 		"""
-		self.logging.info(f"Merging {left_name} and {right_name} upon {merge_upon}")
+		self.logging.debug(f"Preparing to merge {left_name} and {right_name} upon {merge_upon}...")
 		n_rows_left, n_rows_right = left.shape[0], right.shape[0]
 		n_cols_left, n_cols_right = left.shape[1], right.shape[1]
 		assert n_rows_left != 0 and n_rows_right != 0
 		assert n_cols_left != 0 and n_cols_right != 0
 		if indicator is _DEFAULT_TO_CONFIGURATION:
 			indicator = self.cfg.indicator_column
+		self.logging.debug(f"Dropping null columns from {left_name} and {right_name}...")
+		left, right = NeighLib.drop_null_columns(left), NeighLib.drop_null_columns(right)
 
-		left = NeighLib.check_index(NeighLib.drop_null_columns(left), force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon)
-		right = NeighLib.check_index(NeighLib.drop_null_columns(right), force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon)
+		# merge_upon is not necessarily the index of either dataframe, but in the short term we want it to act like one (that is to say, fully
+		# unique, no nulls, etc)
+		self.logging.debug(f"Checking {left_name}'s index...")
+		left = NeighLib.check_index(left, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=left_name)
+		self.logging.debug(f"Checking {right_name}'s index...")
+		right = NeighLib.check_index(right, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=right_name)
 
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:
@@ -166,6 +172,7 @@ class Merger:
 				else:
 					print(df.filter(pl.col(merge_upon).is_null()))
 				raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
+		self.logging.info(f"Merging {left_name} and {right_name} upon {merge_upon}")
 
 		# right/left-hand dataframe's index's values (SRR16156818, SRR12380906, etc) ONLY -- all other columns excluded
 		assert left.schema[merge_upon] == right.schema[merge_upon]
@@ -205,8 +212,8 @@ class Merger:
 			exclusive_right_values = pl.DataFrame()
 		else:
 			self.logging.info(f"--> Exclusive to {right_name}: {len(exclusive_right_values)}")
-			#if len(exclusive_right_values) > 0:
-			#	self.logging.debug(f"--> Some of the exclusive right values: {exclusive_right_values}")
+			if len(exclusive_right_values) > 0:
+				self.logging.debug(f"-----> Some of the exclusive right values: {exclusive_right_values}")
 
 		# TODO: this is here just so we have better testing of list merges, but later it's probably better to just
 		# put something like this at the end by concat_list()ing pl.lit() the name into the column
@@ -232,7 +239,9 @@ class Merger:
 			self.logging.debug("These dataframes do not have any non-index columns in common.")
 			if n_cols_right == n_cols_left:
 				initial_merge = left.sort(merge_upon).merge_sorted(right.sort(merge_upon), merge_upon).unique().sort(merge_upon)
-				self.logging.info(f"Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe. Final dataframe has {initial_merge.shape[0]} rows (difference: {initial_merge.shape[0] - n_rows_left})")
+				infostr1 = f"Merged a {n_rows_left}x{n_cols_left} df with a {n_rows_right}x{n_cols_right} df upon {merge_upon}. "
+				infostr2 = f"Final dataframe is {initial_merge.shape} and index {NeighLib.get_index(initial_merge)}.  "
+				self.logging.info(infostr1 + infostr2)
 				merged_dataframe = initial_merge
 			else:
 				merged_dataframe = left.join(right, merge_upon, how="outer_coalesce").unique()
@@ -263,7 +272,7 @@ class Merger:
 			for left_column in yargh:
 				assert f"{merge_upon}_right" not in left.columns
 				if left_column in right.columns:
-					merged_columns.append(f"\n\t* {left_column}")
+					merged_columns.append(left_column)
 
 					if left_column in drop_zone.silly_columns:
 						left, right = left.drop(left_column), right.drop(left_column)
@@ -412,12 +421,22 @@ class Merger:
 			really_merged = NeighLib.merge_right_columns(initial_merge, fallback_on_left=fallback_on_left, escalate_warnings=escalate_warnings, force_index=force_index)
 			really_merged_no_dupes = really_merged.unique() # this doesn't actually help with duplicate indeces
 			duplicated_indices = really_merged_no_dupes.filter(pl.col(merge_upon).is_duplicated())
-			assert duplicated_indices.shape[0] == 0 # TODO: unless we allow dupes in index i guess
-			self.logging.info(f"""Merged a {n_rows_left} row dataframe with a {n_rows_right} rows dataframe.
-			Final dataframe has {really_merged_no_dupes.shape[0]} rows (difference: {really_merged_no_dupes.shape[0] - n_rows_left})
-			The columns that were merged were:{''.join(thing for thing in merged_columns)}""")
+			assert duplicated_indices.shape[0] == 0 # TODO: unless we allow dupes in index i guess?? why would we do that though
 			merged_dataframe = really_merged_no_dupes
 
+			# print stats
+			left_added_columns = [thing for thing in left.columns if thing not in merged_columns]
+			rite_added_columns = [thing for thing in right.columns if thing not in merged_columns]
+			infostr1 = f"Merged a {n_rows_left}x{n_cols_left} df with a {n_rows_right}x{n_cols_right} df upon {merge_upon}. "
+			infostr2 = f"Final dataframe is {merged_dataframe.shape} and index {NeighLib.get_index(merged_dataframe)}. "
+			infostr3 = f"The columns that were merged were: "
+			infostr4 = f"\n\t* {'\n\t* '.join(thing for thing in merged_columns)}"
+			infostr5 = f"\nThe left dataframe added {len(left_added_columns)} columns: "
+			infostr6 = f"\n\t* {'\n\t* '.join(left_added_columns)}"
+			infostr7 = f"\nThe right dataframe added {len(rite_added_columns)} columns: "
+			infostr8 = f"\n\t* {'\n\t* '.join(rite_added_columns)}"
+			self.logging.info(infostr1 + infostr2 + infostr3 + infostr4 + infostr5 + infostr6 + infostr7 + infostr8)
+			
 		self.logging.debug("Checking merged dataframe for unexpected rows...")
 		self.check_if_unexpected_rows(merged_dataframe, merge_upon=merge_upon, 
 			intersection_values=intersection_values, exclusive_left_values=exclusive_left_values, exclusive_right_values=exclusive_right_values, 

@@ -1,3 +1,6 @@
+import sys
+assert sys.version_info >= (3, 9), f"Use Python 3.9 or newer -- you are using {sys.version_info[0]}.{sys.version_info[1]}"
+
 from .config import RancheroConfig
 from .neigh import NeighLib
 Configuration = RancheroConfig()  # creates a default config
@@ -12,7 +15,6 @@ from .standardize import ProfessionalsHaveStandards
 _Standardizer = ProfessionalsHaveStandards(Configuration)
 from .read_file import FileReader
 _FileReader = FileReader(Configuration)
-
 
 
 # exposed classes of global instances
@@ -30,7 +32,9 @@ print_schema = _NeighLib.print_schema
 add_column_with_this_value = _NeighLib.add_column_of_just_this_value
 dfprint = _NeighLib.dfprint
 fix_index = _NeighLib.check_index
+get_index = _NeighLib.get_index
 translate_HPRC_IDs = _NeighLib.translate_HPRC_IDs
+check_index = _NeighLib.check_index
 
 from_tsv = _FileReader.polars_from_tsv
 from_bigquery = _FileReader.polars_from_bigquery
