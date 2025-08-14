@@ -551,9 +551,9 @@ class FileReader():
 		if self.cfg.intermediate_files: NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
 
-	def polars_run_to_sample(self, polars_df, sample_index='sample_index', run_index='run_index'):
+	def polars_run_to_sample(self, polars_df, sample_index='sample_index', run_index='__index__run'):
 		"""Public wrapper for run_to_sample_index()"""
-		return self.run_to_sample_index(polars_df, sample_index=sample_index, run_index='run_index')
+		return self.run_to_sample_index(polars_df, sample_index=sample_index, run_index=run_index)
 
 	def get_not_unique_in_col(self, polars_df, column):
 		return polars_df.filter(pl.col(column).is_duplicated())
@@ -670,31 +670,10 @@ class FileReader():
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
 		NeighLib.check_index(polars_df, manual_index_column=run_index)
+		assert polars_df.filter(pl.col(run_index).is_duplicated()).shape[0] == 0 # handled by check_index
 		assert sample_index in polars_df.columns
 		assert run_index in polars_df.columns
 		self.logging.debug(f"Sample index {sample_index} is in columns, and so is run index {run_index}")
-
-		self.logging.debug("Before changing the dataframe, null counts in each column are as follows:")
-		self.logging.debug(polars_df.null_count())
-		duplicated_samples = polars_df.filter(pl.col(run_index).is_duplicated())
-		if duplicated_samples.shape[0] > 0:
-			if drop_bad_news:
-				self.logging.warning(f"Found {duplicated_samples.shape[0]} duplicated run indeces in {run_index}. Dropping...")
-				polars_df = polars_df.filter(~pl.col(run_index).is_duplicated())
-			else:
-				self.logging.error(f"""Found {duplicated_samples.shape[0]} duplicated run indeces in {run_index}.
-					To drop these in-place instead of erroring, set drop_bad_news to True. Here's some of those dupes:""")
-				NeighLib.super_print_pl(duplicated_samples)
-				exit(1)
-		else:
-			self.logging.debug("Did not find any duplicates in the run_index column")
-		
-
-		self.logging.debug("After duplicated sample check, null counts in each column are as follows:")
-		self.logging.debug(polars_df.null_count())
-
-		polars_df = NeighLib.check_index(polars_df, manual_index_column=run_index)
-		self.logging.debug("Ran check_index as a double-check and saved return to polars_df")
 
 		self.logging.debug("After check_index(), null counts in each column are as follows:")
 		self.logging.debug(polars_df.null_count())
@@ -722,21 +701,15 @@ class FileReader():
 			polars_df = NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
+		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)
+		new_index_name = NeighLib.get_hypothetical_index_fullname(sample_index)
+		version_with_nested_lists = NeighLib.mark_index(version_with_nested_lists, sample_index, rm_existing_index=True)
 		polars_df = NeighLib.null_lists_of_len_zero(
 			NeighLib.flatten_all_list_cols_as_much_as_possible(
-				self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)
+				version_with_nested_lists
 			)
 		)
-		duplicated_samples = polars_df.filter(pl.col(sample_index).is_duplicated())
-		if duplicated_samples.shape[0] > 0:
-			if drop_bad_news:
-				self.logging.warning(f"Found {duplicated_samples.shape[0]} duplicated sample indeces in {sample_index}. Dropping...")
-				polars_df = polars_df.filter(~pl.col(sample_index).is_duplicated())
-			else:
-				self.logging.error(f"""Found {duplicated_samples.shape[0]} duplicated sample indeces in {sample_index}.
-					To drop these in-place instead of erroring, set drop_bad_news to True. Here's {run_index} where {sample_index} is null:""")
-				NeighLib.super_print_pl(duplicated_samples)
-				exit(1)
+		polars_df = NeighLib.check_index(polars_df, new_index_name)
 		return polars_df
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df, rancheroize=False, keep_all_primary_search_and_host_info=True):

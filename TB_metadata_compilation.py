@@ -139,7 +139,6 @@ def inital_file_parse():
 	start, tba6 = time.time(),Ranchero.from_bigquery("./inputs/BQ/tba6_no_tax_table_bq_2024-09-19.json_modified.json")
 	print(f"Parsed tba6 file from bigquery in {time.time() - start:.4f} seconds")
 	start, tba6 = time.time(), Ranchero.drop_non_tb_columns(tba6)
-	tba6 = tba6.drop(['insdc_center_name_sam']) # this and 'center_name' are a nightmare to standardize so we'll just leave one of them as-is
 	print(f"Dropped non-TB-related columns in {time.time() - start:.4f} seconds")
 
 	start = time.time()

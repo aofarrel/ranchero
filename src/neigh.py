@@ -51,7 +51,7 @@ class NeighLib:
 
 	# --------- INDEX FUNCTIONS --------- #
 
-	def mark_index(self, polars_df: pl.DataFrame, wannabe_index_column: str) -> pl.DataFrame:
+	def mark_index(self, polars_df: pl.DataFrame, wannabe_index_column: str, rm_existing_index=False) -> pl.DataFrame:
 		"""Attempts to mark wannabe_index_column as an index using INDEX_PREFIX, checking
 		beforehand that there isn't already a marked index
 
@@ -61,6 +61,10 @@ class NeighLib:
 		"""
 		hypothetical_marked_index = self.get_hypothetical_index_fullname(wannabe_index_column)
 		hypothetical_unmarked_index = self.get_hypothetical_index_basename(wannabe_index_column)
+
+		if hypothetical_marked_index == wannabe_index_column:
+			self.logging.info("Index is already marked!")
+			return polars_df
 
 		# is this column (or some hypothetical iteration of it) in the dataframe?
 		if wannabe_index_column not in polars_df.columns:
@@ -81,11 +85,28 @@ class NeighLib:
 		elif self.has_zero_index_columns(polars_df):
 			return polars_df.rename({wannabe_index_column: hypothetical_marked_index})
 		
-		# wannabe is in polars_df, but we already have at least one index -- even if that index is just the marked form of wannabe, we should not have both!
+		# wannabe is in polars_df, but we already have precisely one existing index
+		elif self.has_one_index_column(polars_df):
+
+			# is there a marked and unmarked version of the wannabe_index_column?
+			# we already ensured wannabe_index_column is in polars_df, and already handled hypothetical == wannabe
+			if hypothetical_marked_index in polars_df.columns:
+				assert_series_equal(polars_df[wannabe_index_column].rename(hypothetical_marked_index), polars_df[hypothetical_marked_index])
+				self.logging.warning(f"Somehow {wannabe_index_column} and {hypothetical_marked_index} are both in the dataframe, but they're equal, so we'll just remove {wannabe_index_column}")
+				return polars_df.drop(wannabe_index_column)
+			elif rm_existing_index:
+				polars_df = self.strip_index_marker(polars_df)
+				return polars_df.rename({wannabe_index_column: hypothetical_marked_index})
+			else:
+				self.logging.error("Another index already eixsts in the dataframe (set rm_existing_index to True if you want to remove automatically)")
+				raise ValueError("Multiple indeces detected, and rm_existing_index is not True")
+		elif rm_existing_index:
+			polars_df = self.strip_index_marker(polars_df)
+			return polars_df.rename({wannabe_index_column: hypothetical_marked_index})
 		else:
-			assert_series_equal(polars_df[wannabe_index_column].rename(hypothetical_marked_index), polars_df[hypothetical_marked_index])
-			self.logging.warning(f"Both {wannabe_index_column} and {hypothetical_marked_index} are both already in df, but they're equal, so we'll just drop {wannabe_index_column}...")
-			return polars_df.drop(wannabe_index_column)			
+			self.logging.error("Multiple indeces detected, and rm_existing_index is not True")
+			raise ValueError("Multiple indeces detected, and rm_existing_index is not True")
+
 
 	def get_index(self, polars_df: pl.DataFrame, guess=False) -> str | None:
 		if self.has_one_index_column(polars_df):
@@ -1373,6 +1394,24 @@ class NeighLib:
 
 		return polars_df
 
+	@staticmethod
+	def sort_list_str_col(polars_df: pl.DataFrame, col: str, safe=True) -> pl.DataFrame:
+		"""
+		Sort lists of strings in a List(Utf8) column alphabetically.
+		"""
+		if safe:
+			return polars_df.with_columns(pl.col(col).list.eval(
+				pl.element()
+			)
+			.map_elements(
+				lambda lst: sorted(lst, key=lambda x: (x is not None, x)),
+				return_dtype=pl.List(pl.Utf8)
+			)
+			.alias(col)
+		)
+		else: # way faster but might explode
+			return polars_df.with_columns(pl.col(col).list.sort().alias(col))
+
 	def is_sample_indexed(self, polars_df):
 		index = self.guess_index_column(polars_df)
 		return True if index in kolumns.equivalence['sample_index'] else False
@@ -1454,13 +1493,15 @@ class NeighLib:
 				col_dtype[col] = dtype
 		
 		for col, datatype in col_dtype.items(): # TYPES DO NOT UPDATE AUTOMATICALLY!
+
+			self.logging.debug(f"->col {col} has stored datatype {datatype}, current datatype {polars_df.schema[col]}")
 			
 			if col in drop_zone.silly_columns:
 				polars_df.drop(col)
 				what_was_done.append({'column': col, 'intype': datatype, 'outtype': pl.Null, 'result': 'dropped'})
 				continue
 			
-			if datatype == pl.List and datatype.inner != datetime.datetime:
+			if datatype == pl.List and datatype.inner != datetime.datetime and not self.is_nested_list_dtype(polars_df.schema[col]):
 
 				if polars_df.schema[col] != pl.List:
 					# fixes issues with the 'strain' column previously being a list
@@ -1624,7 +1665,10 @@ class NeighLib:
 						assert polars_df.select(pl.count(col)).item() == non_nulls_in_this_column
 
 				else:
-					self.logging.warning(f"{col}-->Not sure how to handle, will treat it as a set")
+					# list.unique() does not work on nested lists so you better hope you removed them earlier!
+					self.logging.warning(f"{col} (type {type(polars_df.schema[col])})-->Not sure how to handle, will treat it as a set")
+					assert polars_df.schema[col] == pl.List
+					print(polars_df.schema[col])
 					polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[col], 'result': 'set (no rules)'})
@@ -1678,19 +1722,36 @@ class NeighLib:
 	def drop_known_unwanted_columns(self, polars_df):
 		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.silly_columns])
 
+	@staticmethod
+	def list_nesting_depth(dtype: pl.DataType):
+		depth, cur = 0, dtype
+		while isinstance(cur, pl.List):
+			depth += 1
+			cur = cur.inner
+		return depth
+
+	def is_nested_list_dtype(self, dtype: pl.DataType) -> bool:
+		return self.list_nesting_depth(dtype) >= 2
+
+	def nested_list_columns(self, polars_df: pl.DataFrame) -> list[str]:
+		return [name for name, datatype in polars_df.schema.items() if self.is_nested_list_dtype(datatype)]
+
 	def flatten_one_nested_list_col(self, polars_df, column):
-		polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
-		if polars_df[column].schema == pl.List(pl.List):
-			polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten().drop_nulls()))
-			#polars_df = polars_df.with_columns(pl.col(col).list.eval(pl.element().flatten())) # might leave hanging nulls (does earlier drop_nulls fix this though?)
-			#polars_df = polars_df.with_columns(pl.col(col).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
-		if polars_df[column].schema == pl.List(pl.List):
-			polars_df = self.flatten_one_nested_list_col(polars_df, column) # this recursion should, in theory, handle list(list(list(str))) -- but it's not well tested
+		polars_df = self.drop_nulls_from_possible_list_column(polars_df, column)
+		if self.is_nested_list_dtype(polars_df.schema[column]):
+			i = 1
+			while i < self.list_nesting_depth(polars_df.schema[column]):
+				#polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten())) # might leave hanging nulls (does earlier drop_nulls fix this though?)
+				#polars_df = polars_df.with_columns(pl.col(column).flatten().list.drop_nulls()) # polars.exceptions.ShapeError: unable to add a column of length x to a Dataframe of height y
+				polars_df = polars_df.with_columns(pl.col(column).list.eval(pl.element().flatten().drop_nulls()))
+				i+=1
+		assert not self.is_nested_list_dtype(polars_df.select(column).schema)
 		return polars_df
 
 	def flatten_nested_list_cols(self, polars_df):
 		"""There are other ways to do this, but this one doesn't break the schema, so we're sticking with it"""
-		nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
+		#nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
+		nested_lists = self.nested_list_columns(polars_df)
 		for col in nested_lists:
 			self.logging.debug(f"Unnesting {col}")
 			polars_df = self.drop_nulls_from_possible_list_column(polars_df, col)
@@ -1807,7 +1868,7 @@ class NeighLib:
 			df_to_write.write_csv(path, separator='\t', include_header=True, null_value=null_value)
 			self.logging.info(f"Wrote dataframe to {path}")
 		except pl.exceptions.ComputeError:
-			print("WARNING: Failed to write to TSV due to ComputeError. This is likely a data type issue.")
+			self.logging.error("Failed to write to TSV due to ComputeError. This is likely a data type issue.")
 			debug = pl.DataFrame({col:  f"Was {dtype1}, now {dtype2}" for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if col in df_to_write.columns and dtype2 != pl.String and dtype2 != pl.List(pl.String)})
 			self.super_print_pl(debug, "Potentially problematic that may have caused the TSV write failure:")
 			exit(1)
