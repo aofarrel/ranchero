@@ -51,6 +51,8 @@ fix_index = NeighLib.check_index
 get_index = NeighLib.get_index
 translate_HPRC_IDs = NeighLib.translate_HPRC_IDs
 check_index = NeighLib.check_index
+valid_cols = NeighLib.valid_cols
+report = NeighLib.report
 
 # Extractor
 extract_primary_lineage = Extractor.extract_primary_lineage

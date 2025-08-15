@@ -15,18 +15,9 @@ class ProfessionalsHaveStandards():
 			self.taxoncore_ruleset = self.cfg.taxoncore_ruleset
 			self.NeighLib = naylib
 
-	def test_neighlib_cfg_update_mycobact(self, via_another_module=None):
-		self.NeighLib._testcfg_mycobact_is_false(via_another_module=True)
-
-	def _testcfg_mycobact_is_false(self):
-		assert self.cfg.mycobacterial_mode == False
-		print("✅ Successfully updated mycobacterial_mode in Standardizer")
-
-	def _testcfg_logger_is_debug(self):
-		self.logging.debug("✅ Successfully updated loglevel in Standardizer")
-
-	def test_neighlib_cfg_update(self, via_another_module=None):
-		self.NeighLib._testcfg_logger_is_debug(via_another_module=True)
+	def _default_fallback(self, cfg_var, value):
+		if value is None:
+			return self.cfg.get_config(cfg_var)
 
 	def standardize_everything(self, polars_df, add_expected_nulls=True, assume_organism="Mycobacterium tuberculosis", assume_clade="tuberculosis", skip_sample_source=False, force_strings=True,
 		organism_fallback=None, clade_fallback=None):
@@ -253,14 +244,14 @@ class ProfessionalsHaveStandards():
 		assert 'host_disease' in polars_df.columns
 
 		# exact matches
-		if self._sentinal_handler(_cfg_mycobacterial_mode):
+		if self.cfg.mycobacterial_mode:
 			for disease, simplified_disease in host_disease.host_disease_exact_match_mycobacterial.items():
 				polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
 		for disease, simplified_disease in host_disease.host_disease_exact_match.items():
 			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
 		
 		# fuzzy matches
-		if self._sentinal_handler(_cfg_mycobacterial_mode):
+		if self.cfg.mycobacterial_mode:
 			for disease, simplified_host_disease in host_disease.host_disease_substring_match_mycobacterial.items():
 				polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
 		for disease, simplified_host_disease in host_disease.host_disease_substring_match.items():
@@ -847,7 +838,7 @@ class ProfessionalsHaveStandards():
 				polars_df = self.taxoncore_GOLS(polars_df, when,  i_group=bacterial_group, i_organism=organism, i_lineage=lineage, i_strain=strain)
 		return polars_df
 
-	def sort_out_taxoncore_columns(self, polars_df, rm_phages="AAAA", force_strings=True):
+	def sort_out_taxoncore_columns(self, polars_df, force_strings=True):
 		"""
 		Some columns in polars_df will be in list all_taxoncore_columns. We want to use these taxoncore columns to create three new columns:
 		* i_organism should be of form "Mycobacterium" plus one more word, with no trailing "subsp." or "variant", if a specific organism can be imputed from a taxoncore column, else null
@@ -866,7 +857,6 @@ class ProfessionalsHaveStandards():
 		assert 'i_lineage' not in polars_df.columns
 		assert 'i_strain' not in polars_df.columns
 		assert 'taxoncore_list' not in polars_df.columns
-		rm_phages = self._sentinal_handler(rm_phages)
 		if group_column_name not in kolumns.columns_to_keep_after_rancheroize:
 			self.logging.warning(f"Bacterial group column will have name {group_column_name}, but might get removed later. Add {group_column_name} to kolumns.equivalence!")
 		merge_these_columns = [col for col in polars_df.columns if col in sum(kolumns.special_taxonomic_handling.values(), [])]
@@ -876,7 +866,7 @@ class ProfessionalsHaveStandards():
 				polars_df = polars_df.with_columns(pl.col(col).list.join(", ").alias(col))
 				self.logging.debug("->Joined into string")
 			#assert polars_df.schema[col] == pl.Utf8
-		if 'organism' in polars_df.columns and rm_phages:
+		if 'organism' in polars_df.columns and self.cfg.rm_phages:
 			polars_df = self.rm_all_phages(polars_df)
 		
 		# taxoncore_list used for most matches,
@@ -1203,4 +1193,21 @@ class ProfessionalsHaveStandards():
 			raise ValueError
 		if self.logging.getEffectiveLevel() == 10:
 			self.logging.debug("---- After absolutely everything ----")
-			self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_index', list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], alsoprint=['region', 'continent'])
+			self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_index',
+				list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], 
+				alsoprint=['region', 'continent'])
+
+	# Here be dragons
+	def test_neighlib_cfg_update_mycobact(self, via_another_module=None):
+		self.NeighLib._testcfg_mycobact_is_false(via_another_module=True)
+
+	def _testcfg_mycobact_is_false(self):
+		assert self.cfg.mycobacterial_mode == False
+		print("✅ Successfully updated mycobacterial_mode in Standardizer")
+
+	def _testcfg_logger_is_debug(self):
+		self.logging.debug("✅ Successfully updated loglevel in Standardizer")
+
+	def test_neighlib_cfg_update(self, via_another_module=None):
+		self.NeighLib._testcfg_logger_is_debug(via_another_module=True)
+			

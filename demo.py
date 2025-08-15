@@ -58,7 +58,7 @@ s7 = "Ranchero can also optionally drop all samples that aren't paired Illumina 
 print(s1+s2+s3+s4+s5+s6+s7)
 input("\n\nPress enter to parse a JSON from BigQuery as an example...\n\n")
 
-view_cols = ['run_index', # will only exist after rancheroization; we want it at the front
+view_cols = ['__index__run', # will only exist after rancheroization; we want it at the front
 	'acc', 'assay_type', 'center_name', 'instrument', 'librarylayout', 'librarysource', 'biosample', 'organism', 
 	'geo_loc_name_country_calc', 'geo_loc_name_country_continent_calc', 'geo_loc_name_sam', 'collection_date_sam', 
 	'genotype_sam_ss_dpl92', 'host_sam', 'isolation_source_sam', 'lat_lon_sam_s_dpl34', 
@@ -119,12 +119,12 @@ print(s1+s2+s3+s4)
 s1 = "\nTo address this, let's run standardize_countries(). This will convert countries into their ISO codes 3166 codes, as well as attempt to pull out information below a country level (state, province, town, etc)."
 s2 = "You might be thinking \"I bet that'll require a lot of string functions and be very slow.\" You are correct on the first point, but thanks to the speed of polars, we can get away with these sorts of things much faster than expected."
 print(s1+s2)
-Ranchero.super_print(mycobact_from_BigQuery.select(['run_index', 'geoloc_info']), "country information after rancheroize, but before standardize_countries()")
+Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'geoloc_info']), "country information after rancheroize, but before standardize_countries()")
 input("\n\nPress enter to standardize location information...\n\n")
 
 start = time.time()
 mycobact_from_BigQuery = Ranchero.standardize_countries(mycobact_from_BigQuery)
-Ranchero.super_print(mycobact_from_BigQuery.select(['run_index', 'continent', 'country', 'region']), f"dataframe after standardizing location (geoloc_info --> country, region, continent) -- completed in {time.time() - start} seconds")
+Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'continent', 'country', 'region']), f"dataframe after standardizing location (geoloc_info --> country, region, continent) -- completed in {time.time() - start} seconds")
 print("Neat, right?")
 input("\n\nPress enter to continue...\n\n")
 
@@ -133,21 +133,21 @@ s1 = 'Ranchero has a built-in dictionary of common and scientific names that it 
 s2 = 'Because some animals have referred to by only amibigious names, like "bovine" (which is probably Bos taurus but could be Bos indicus) there is also a confidence score. '
 s3 = '1 is low confidence, 2 is moderate, 3 is high.'
 print(s1+s2+s3)
-Ranchero.super_print(mycobact_from_BigQuery.select(['run_index', 'host']), "country information after rancheroize, but before standardize_hosts()")
+Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'host']), "country information after rancheroize, but before standardize_hosts()")
 input("\n\nPress enter to standardize host information...\n\n")
 
 start = time.time()
 mycobact_from_BigQuery = Ranchero.standardize_hosts(mycobact_from_BigQuery)
-Ranchero.super_print(mycobact_from_BigQuery.select(['run_index', 'host_scienname', 'host_commonname', 'host_confidence']), f"dataframe after standardizing hosts (host --> host_scienname, host_commonname, 'host_confidence') -- completed in {time.time() - start} seconds")
+Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'host_scienname', 'host_commonname', 'host_confidence']), f"dataframe after standardizing hosts (host --> host_scienname, host_commonname, 'host_confidence') -- completed in {time.time() - start} seconds")
 input("\n\nPress enter to continue...\n\n")
 
 print("In addition to wrangling your cattle, Ranchero can also attempt to standardize the taxonomic information of your samples.")
-Ranchero.super_print(mycobact_from_BigQuery.select(Ranchero.valid_cols(mycobact_from_BigQuery, ['run_index', 'strain_sam_ss_dpl139', 'subtype_sam', 'organism', 'pathotype_sam', 'serotype_sam', 'serovar_sam', 'genotype_sam_ss_dpl92', 'scientific_name_sam', 'subgroup_sam', 'mlva___spoligotype_sam'])), "dataframe before standardizing taxonomic information")
+Ranchero.super_print(mycobact_from_BigQuery.select(Ranchero.valid_cols(mycobact_from_BigQuery, ['__index__run', 'strain_sam_ss_dpl139', 'subtype_sam', 'organism', 'pathotype_sam', 'serotype_sam', 'serovar_sam', 'genotype_sam_ss_dpl92', 'scientific_name_sam', 'subgroup_sam', 'mlva___spoligotype_sam'])), "dataframe before standardizing taxonomic information")
 input("\n\nPress enter to standardize taxonomic information...\n\n")
 
 start = time.time()
 mycobact_from_BigQuery = Ranchero.taxoncore(mycobact_from_BigQuery)
-Ranchero.super_print(mycobact_from_BigQuery.select(['run_index', 'strain', 'lineage', 'organism', 'clade']), f"dataframe after standardizing taxonomic information (all that stuff --> strain, lineage, organism (as in scientific name), clade (within Mycobacterium genus) -- completed in {time.time() - start} seconds")
+Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'strain', 'lineage', 'organism', 'clade']), f"dataframe after standardizing taxonomic information (all that stuff --> strain, lineage, organism (as in scientific name), clade (within Mycobacterium genus) -- completed in {time.time() - start} seconds")
 s1 = 'You\'ll notice that for samples where we don\'t know the MTB lineage, we say "tuberculosis: unclassified" as we don\'t know if it\'s animal-adapted lineage or a human-adapted one. '
 s2 = "Additionally, SRR21747047 had \"S035\" in the \"strain_sam_ss_dpl139\" column but that was not included as a strain in the final data table. "
 s3 = "This is because S035 as a strain-name isn't in Ranchero's built-in taxonomic dictionary, as I'm not aware of literature charcterizing it, and because this field sometimes is used for sample IDs. "
@@ -156,12 +156,12 @@ print(s1+s2+s3+s4)
 input("\n\nPress enter to continue...\n\n")
 
 print('Finally, let\'s standardize what tissue/environment your samples are taken from. This is very open to interpretation, so unlike country metadata, Ranchero doesn\'t try to cover *absolutely everything* in the Mycobacterium genus and will leave some values "as reported" (not shown in this example). Additionally, since some people use this column for geographic or host information, Ranchero will attempt to pull that information if present here and put it in the appropriate column.')
-Ranchero.super_print(mycobact_from_BigQuery.select(['run_index', 'isolation_source']), "sample source information after rancheroize, but before standardize_sample_source()")
+Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'isolation_source']), "sample source information after rancheroize, but before standardize_sample_source()")
 input("\n\nPress enter to standardize sample source...\n\n")
 
 start = time.time()
 mycobact_from_BigQuery = Ranchero.standardize_sample_source(mycobact_from_BigQuery)
-Ranchero.super_print(mycobact_from_BigQuery.select(['run_index', 'isolation_source']), f"sample source information after standardization -- completed in {time.time() - start} seconds")
+Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'isolation_source']), f"sample source information after standardization -- completed in {time.time() - start} seconds")
 input("\n\nPress enter to contine...\n\n")
 
 print("\nLet's compare the dataframe before and after all that rancheroizing and standardizing.")
