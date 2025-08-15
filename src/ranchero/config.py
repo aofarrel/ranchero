@@ -140,7 +140,7 @@ class RancheroConfig:
 	def prepare_taxoncore_dictionary(self, tsv=None):
 		if tsv is None:
 			tsv_path = resources.files(__package__).joinpath(
-				"statics/taxoncore_v3_with_stricto_sensu.tsv"
+				"statics/taxoncore_v4.tsv"
 			)
 		else:
 			tsv_path = tsv

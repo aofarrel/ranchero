@@ -4,7 +4,6 @@ inputs/*
 Intermediate/*
 src/__pycache__/*
 src/dictionaries/__pycache__/*
-*.tsv
 tba5_per_sample.tsv
 *.pyc
 /2024-tba3-redo-compilations
@@ -24,3 +23,6 @@ bq-results-20250801-215940-1754085716223.json_modified.json
 src/dist/ranchero-0.1.0.tar.gz
 src/dist/ranchero-0.1.0-py3-none-any.whl
 /ranchero.egg-info
+ranchero_output_archive/*
+cases.tsv
+dupes_in_index.tsv
