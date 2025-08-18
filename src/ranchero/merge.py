@@ -153,9 +153,9 @@ class Merger:
 		# merge_upon is not necessarily the index of either dataframe, but in the short term we want it to act like one (that is to say, fully
 		# unique, no nulls, etc)
 		self.logging.debug(f"Checking {left_name}'s index...")
-		left = self.NeighLib.check_index(left, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=left_name)
+		left = self.NeighLib.check_index(left, force_INSDC_runs=False, force_INSDC_samples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=left_name)
 		self.logging.debug(f"Checking {right_name}'s index...")
-		right = self.NeighLib.check_index(right, force_NCBI_runs=False, force_BioSamples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=right_name)
+		right = self.NeighLib.check_index(right, force_INSDC_runs=False, force_INSDC_samples=False, manual_index_column=merge_upon, allow_bad_name=True, df_name=right_name)
 
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:
