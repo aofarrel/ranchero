@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ranchero"
 version = "0.1.0rc20"
 description = "Ranchero: metadata wrangling for bioinformatics"
-readme = "README.md"
+readme = "readme_pypi.md"
 requires-python = ">=3.9"
 license = "GPL-3.0"
 authors = [
