@@ -287,83 +287,62 @@ class FileReader():
 		self.logging.debug(f"Processed {SRR_id} from {BioSample}")
 		return blessed_dataframe
 
-	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=None): # check_index has a default fallback
+	def _cleanup_efetch_dictionary(self, xmltodict_dict, index_by_file, group_by_file, check_index, xml_name):
 		"""
-		1. Convert the output of efetch into an XML format that is actually correct (harder than you'd expect)
-		2. Convert the resulting dictionary into a Polars dataframe that is actually useful (also hard)
-
-		For #1 we have to account for at least three different ways edirect can spit out something:
-		  a) Actually valid XML file
-		  b) Several <EXPERIMENT_PACKAGE_SET>s, one of which is unmatched
-		  c) Like b but there's also additional <?xml version="1.0" encoding="UTF-8"  ?> headers thrown in for fun
-		 """
-		check_index = self._default_fallback("check_index", check_index)
-
-		import xml
-		import xmltodict
-		with open(efetch_xml, "r") as file:
-			xml_content = file.read()
+		Takes in the dictionary parsed by from_efetch() and makes it significantly less cursed.
+		Regardless of whether or not we had to fix the XML file, cursed_dictionary kind of looks like this:
 		
-		try:
-			cursed_dictionary = xmltodict.parse(xml_content)
-			better_xml = None
-		except xml.parsers.expat.ExpatError:
-			better_xml = self.fix_efetch_file(efetch_xml)
-			with open(better_xml, "r") as file:
-				xml_content = file.read()
-			cursed_dictionary = xmltodict.parse(xml_content)
-		xml_name = os.path.basename(efetch_xml) if better_xml is None else os.path.basename(better_xml) # for logging
+		 {"EXPERIMENT_PACKAGE_SET":
+			{"EXPERIMENT_PACKAGE":
+				[ # "list_of_experiments"
+					{ # this an "actual experiment" dict, index[0] of list_of_experiments
+						{'EXPERIMENT': dict with SRX ID, library layout and stategy, instrument, etc}
+						{'SUBMISSION': dict including center_name, SUB ID, etc}
+						{'Organization': dict with stuff about submitter}
+						{'STUDY': dict with stuff about the BioProject}
+						{'SAMPLE': dict with very basic stuff about BioSample}
+						{'Pool': ignore this one, it's a multiplexing thing I think, sometimes it's missing}
+						{'RUN_SET': 
+							{
+								'@runs': '1',
+								'@bases': '10705886485',
+								'@spots': '500788',
+								'@bytes': '4550349867', 
+								'RUN': dict(*) with keys:  @accession, @alias, @total_spots, @total_bases, @size,
+														@load_done, @published, @is_public, @cluster_name,
+		 												@has_taxanalysis, @static_data_available, IDENTIFIERS,
+														EXPERIMENT_REF, RUN_ATTRIBUTES(**), pool, SRAFiles, CloudFiles,
+														Statistics, Databases, Bases
+							}
+						}
+					},
+					{ # the next "actual experiment" dict, index[1] of list_of_experiments
+						{'EXPERIMENT': as above }
+						{'SUBMISSION': as above }
+						{'Organization': as above }
+						{'STUDY': as above }
+						{'SAMPLE': as above }
+						{'Pool': as above }
+						{'RUN_SET': as above }
+					}
+				]
+			}
+		 }
+		 CAVEATS:
+		     (*)  RUN is sometimes a list of dictionaries if dealing with a multi-run BioSample
+		     (**) RUN_ATTRIBUTES sometimes is missing if from web-view
 		
-		# Regardless of whether or not we had to fix the XML file, cursed_dictionary kind of looks like this:
-		#
-		# {"EXPERIMENT_PACKAGE_SET":
-		# 	{"EXPERIMENT_PACKAGE":
-		# 		[ # "list_of_experiments"
-		#			{ # this an "actual experiment" dict, index[0] of list_of_experiments
-		#	 			{'EXPERIMENT': dict with SRX ID, library layout and stategy, instrument, etc}
-		#	 			{'SUBMISSION': dict including center_name, SUB ID, etc}
-		#	 			{'Organization': dict with stuff about submitter}
-		#	 			{'STUDY': dict with stuff about the BioProject}
-		#	 			{'SAMPLE': dict with very basic stuff about BioSample}
-		#	 			{'Pool': ignore this one, it's a multiplexing thing I think, sometimes it's missing}
-		#	 			{'RUN_SET': 
-		#	 				{
-		#	 					'@runs': '1',
-		#	 					'@bases': '10705886485',
-		#	 					'@spots': '500788',
-		#	 					'@bytes': '4550349867', 
-		#	 					'RUN': dict(*) with keys:  @accession, @alias, @total_spots, @total_bases, @size,
-		#												@load_done, @published, @is_public, @cluster_name,
-		#  												@has_taxanalysis, @static_data_available, IDENTIFIERS,
-		# 												EXPERIMENT_REF, RUN_ATTRIBUTES(**), pool, SRAFiles, CloudFiles,
-		# 												Statistics, Databases, Bases
-		#	 				}
-		#				}
-		# 			},
-		# 			{ # the next "actual experiment" dict, index[1] of list_of_experiments
-		# 				{'EXPERIMENT': as above }
-		# 				{'SUBMISSION': as above }
-		# 				{'Organization': as above }
-		# 				{'STUDY': as above }
-		# 				{'SAMPLE': as above }
-		# 				{'Pool': as above }
-		# 				{'RUN_SET': as above }
-		# 			}
-		#		]
-		# 	}
-		# }
-		# CAVEATS:
-		#     (*)  RUN is sometimes a list of dictionaries if dealing with a multi-run BioSample
-		#     (**) RUN_ATTRIBUTES sometimes is missing if from web-view
-		#
-		# This is, as the name implies, extremely cursed, so we'll try to make this make a bit more sense.
-		# It appears that every "actual_experiment" contains one run accession and one BioSample. This means
-		# we are basically indexed by run accession (SRR), and that BioSamples can be repeated.
+		 This is, as the name implies, extremely cursed, so we'll try to make this make a bit more sense.
+		 It appears that every "actual_experiment" contains one run accession and one BioSample. This means
+		 we are basically indexed by run accession (SRR), and that BioSamples can be repeated.
+
+
+
+		"""
 		blessed_dataframes = list()
 		run_attributes_present = None # TODO: make this a bool flag for preventing constant debug prints?
 		assert len(cursed_dictionary) == 1
 		for EXPERIMENT_PACKAGE_SET, EXPERIMENT_PACKAGE in cursed_dictionary.items():
-			print("for EXPERIMENT_PACKAGE_SET, EXPERIMENT_PACKAGE")
 			assert EXPERIMENT_PACKAGE_SET == "EXPERIMENT_PACKAGE_SET"
 			assert type(EXPERIMENT_PACKAGE) == dict
 			assert list(EXPERIMENT_PACKAGE.keys()) == ["EXPERIMENT_PACKAGE"]
@@ -428,8 +407,41 @@ class FileReader():
 						for thing in actual_experiment:
 							self.logging.error(thing)
 						exit(1)
-		blessed_dataframe = pl.concat(blessed_dataframes, how='diagonal')
-		if self.logging.getEffectiveLevel() == 10: self.NeighLib.super_print_pl(blessed_dataframe.select(self.NeighLib.valid_cols(blessed_dataframe, ['SRR_id', 'BioSample', 'TAG', 'VALUE'])), "XML as converted")
+		return pl.concat(blessed_dataframes, how='diagonal')
+
+
+	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=None): # check_index has a default fallback
+		"""
+		1. Convert the output of efetch into an XML format that is actually correct (harder than you'd expect)
+		2. Convert the resulting dictionary into a Polars dataframe that is actually useful (also hard)
+
+		For #1 we have to account for at least three different ways edirect can spit out something:
+		  a) Actually valid XML file
+		  b) Several <EXPERIMENT_PACKAGE_SET>s, one of which is unmatched
+		  c) Like b but there's also additional <?xml version="1.0" encoding="UTF-8"  ?> headers thrown in for fun
+		 """
+		check_index = self._default_fallback("check_index", check_index)
+
+		import xml
+		try:
+			import xmltodict
+		except ImportError:
+			self.logging.error("This function requires xmltodict, but it doesn't appear to be installed")
+		with open(efetch_xml, "r") as file:
+			xml_content = file.read()
+		
+		try:
+			cursed_dictionary = xmltodict.parse(xml_content)
+			better_xml = None
+		except xml.parsers.expat.ExpatError:
+			better_xml = self.fix_efetch_file(efetch_xml)
+			with open(better_xml, "r") as file:
+				xml_content = file.read()
+			cursed_dictionary = xmltodict.parse(xml_content)
+		xml_name = os.path.basename(efetch_xml) if better_xml is None else os.path.basename(better_xml) # for logging
+		blessed_dataframe = self._cleanup_efetch_dictionary(cursed_dictionary, index_by_file, group_by_file, check_index, xml_name)
+		if self.logging.getEffectiveLevel() == 10:
+			self.NeighLib.super_print_pl(blessed_dataframe.select(self.NeighLib.valid_cols(blessed_dataframe, ['SRR_id', 'BioSample', 'TAG', 'VALUE'])), "XML as converted")
 		
 		# TODO: add check for BioSample containing 'COULDNT_PARSE_BIOSAMPLE'
 		
@@ -442,8 +454,6 @@ class FileReader():
 				blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(file_index).agg(
 						[c for c in blessed_dataframe.columns if c != file_index]
 				), force_index=file_index)
-			if check_index: blessed_dataframe = self.NeighLib.check_index(blessed_dataframe, df_name=xml_name) # must come AFTER the group_by option 
-			return blessed_dataframe
 		else:
 			# TODO: sum() submitted_file_sizes
 			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'run_index': 'run'}), 'run')
@@ -453,8 +463,8 @@ class FileReader():
 			blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_index).agg(
 				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != run_index]
 			), force_index=run_index)
-			if check_index: blessed_dataframe = self.NeighLib.check_index(blessed_dataframe, df_name=xml_name)
-			return blessed_dataframe
+		if check_index: blessed_dataframe = self.NeighLib.check_index(blessed_dataframe, df_name=xml_name)
+		return blessed_dataframe
 
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
@@ -551,16 +561,16 @@ class FileReader():
 
 	def polars_explode_delimited_rows(self, polars_df, column="run_index", delimiter=";", drop_new_non_unique=True):
 		"""
-		column 			some_other_column		
+		column			some_other_column		
 		"SRR123;SRR124"	12
-		"SRR125" 		555
+		"SRR125"		555
 
 		becomes
 
-		column 			some_other_column		
+		column			some_other_column		
 		"SRR123"		12
 		"SRR124"		12
-		"SRR125" 		555
+		"SRR125"		555
 		"""
 		exploded = (polars_df.with_columns(pl.col(column).str.split(delimiter)).explode(column)).unique()
 		if len(polars_df) == len(polars_df.select(column).unique()) and len(exploded) != len(exploded.select(column).unique()) and drop_new_non_unique:
