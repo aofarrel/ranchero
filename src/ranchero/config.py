@@ -1,7 +1,6 @@
 import os
 import csv
 import sys
-import json
 import logging
 import polars as pl
 import tqdm

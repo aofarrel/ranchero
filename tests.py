@@ -19,8 +19,6 @@ import ranchero as ranchero
 ### Configuration ###
 def hellish_cfg_tests():
 
-	# Logging is tested seperately because we handle it via the very silly method of destroying all other logger handlers
-
 	# Do not change the order any of these functions are run in!
 	def cfg_default_mycobact():
 		assert ranchero.Configuration.get_config("mycobacterial_mode") == True
@@ -54,11 +52,11 @@ def hellish_cfg_tests():
 		print("✅ cfg.mycobacterial_mode in NeighLib context via Standardizer retains changes across functions")
 		ranchero.Configuration.set_config({"mycobacterial_mode": True})
 		assert ranchero.Configuration.get_config("mycobacterial_mode") == True # back to default
-	def cfg_chnage_Standardizer_intrafunction():
+	def cfg_change_Standardizer_intrafunction():
 		assert ranchero.Configuration.get_config("mycobacterial_mode") == True
 		ranchero.Configuration.set_config({"mycobacterial_mode": False})
 		ranchero.Standardizer._testcfg_mycobact_is_false()
-	def cfg_chnage_Standardizer_interfunction():
+	def cfg_change_Standardizer_interfunction():
 		ranchero.Standardizer._testcfg_mycobact_is_false()
 		print("✅ cfg.mycobacterial_mode in Standardizer context retains changes across functions")
 		ranchero.Configuration.set_config({"mycobacterial_mode": True})
@@ -70,9 +68,10 @@ def hellish_cfg_tests():
 	cfg_change_NeighLib_interfunction()
 	cfg_change_NeighLib_intrafunction_via_Standardizer()
 	cfg_change_NeighLib_interfunction_via_Standardizer()
-	cfg_chnage_Standardizer_intrafunction()
-	cfg_chnage_Standardizer_interfunction()
+	cfg_change_Standardizer_intrafunction()
+	cfg_change_Standardizer_interfunction()
 	
+	# Logging is tested seperately because we handle it via the very silly method of destroying all other logger handlers
 	# Change loglevel on NeighLib
 	def change_loglevel_NeighLib():
 		assert ranchero.Configuration.get_config("loglevel") != 10
