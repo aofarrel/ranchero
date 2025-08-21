@@ -30,6 +30,9 @@ force_INSDC_runs: True
 # Values in sample_index column must start with SAMN, SAME, or SAMD
 force_INSDC_samples: False
 
+# When querying gcloud for metadata, which metadata fields can be returned?
+gs_metadata: ["creation_time", "md5_hash", "size"]
+
 # How to handle columns relating to host information found in "attrs" in BQ JSONs, which are much less useful
 # if they had been combined into a single column like we would locational data n stuff, but can add a ton of
 # columns with barely any filled-in values

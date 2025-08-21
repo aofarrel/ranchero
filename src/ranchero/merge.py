@@ -9,7 +9,7 @@ class Merger:
 
 	def __init__(self, configuration, naylib):
 		if configuration is None:
-			raise ValueError("No configuration was passed to NeighLib class. Ranchero is designed to be initialized with a configuration.")
+			raise ValueError("No configuration was passed to Merger class. Ranchero is designed to be initialized with a configuration.")
 		else:
 			self.cfg = configuration
 			self.logging = self.cfg.logger

@@ -5,7 +5,7 @@ import logging
 import polars as pl
 import tqdm
 import yaml
-from typing import Literal, TypedDict
+from typing import get_args, get_origin, Literal, TypeAlias, TypedDict
 import importlib.resources as resources
 loggerhead = {10: "DEBUG", 20: "INFO", 30: "WARN", 40: "ERROR"}
 
@@ -17,7 +17,35 @@ if sys.version_info >= (3, 10):
 else:
 	from typing_extensions import TypeAlias
 
-# valid options for dupe_index_handling
+# currently unused
+class ReadFileParameters(TypedDict):
+	auto_cast_types: bool
+	auto_parse_dates: bool
+	auto_rancheroize: bool
+	auto_standardize: bool
+	ignore_polars_read_errors: bool
+
+# valid options for gs_metadata (any combination of these)
+# as of Google Cloud SDK 535.0.0
+GSMetadataOption: TypeAlias = Literal[
+	"bucket",
+	"content_type",
+	"crc32c_hash",
+	"creation_time",
+	"etag",
+	"generation",
+	"md5_hash",
+	"metageneration",
+	"name",
+	"size",
+	"storage_class",
+	"storage_class_update_time",
+	"storage_url",
+	"update_time"
+]
+GSMetadataOptions: TypeAlias = list[GSMetadataOption]
+
+# valid options for dupe_index_handling (only one allowed)
 DupeIndexOptions: TypeAlias = Literal[
 	"error",
 	"verbose_error", 
@@ -29,7 +57,7 @@ DupeIndexOptions: TypeAlias = Literal[
 	"keep_most_data" # be aware this sorts the dataframe
 ]
 
-# valid options for host_info_handling
+# valid options for host_info_handling (only one allowed)
 HostInfoOptions: TypeAlias = Literal[
 	"dictionary",
 	"drop",
@@ -37,7 +65,6 @@ HostInfoOptions: TypeAlias = Literal[
 ]
 
 class ConfigParameters(TypedDict):
-	#read_file: dict
 	auto_cast_types: bool
 	auto_parse_dates: bool
 	auto_rancheroize: bool
@@ -47,6 +74,7 @@ class ConfigParameters(TypedDict):
 	dupe_index_handling: DupeIndexOptions
 	force_INSDC_runs: bool
 	force_INSDC_samples: bool
+	gs_metadata: GSMetadataOptions
 	host_info_handling: HostInfoOptions
 	indicator_column: str
 	intermediate_files: bool
@@ -55,50 +83,46 @@ class ConfigParameters(TypedDict):
 	paired_illumina_only: bool
 	polars_normalize: bool
 	rm_phages: bool
+	taxoncore_ruleset: None # not sure I like this...
 	unwanted: bool
-
-	# not sure if this is how I want to handle this...
-	taxoncore_ruleset: None
-
-ConfigParametersList = list(ConfigParameters.__annotations__)
-
-class ReadFileParameters(TypedDict):
-	auto_cast_types: bool
-	auto_parse_dates: bool
-	auto_rancheroize: bool
-	auto_standardize: bool
-	ignore_polars_read_errors: bool
 
 class RancheroConfig:
 
-	# this isn't a replacement for proper type checking
-	def is_in_ReadFileParameters(self, key) -> bool:
-		return key in ReadFileParameters.__annotations__
-	def is_in_ConfigParameters(self, key) -> bool:
-		return key in ConfigParameters.__annotations__
+	def __init__(self):
+		defaults = self.read_config()
+		self._check_and_set_parameters(defaults)
+		self.logger = self._setup_logger()
+		self.taxoncore_ruleset = self.prepare_taxoncore_dictionary()
 
-	def print_config_raw(self) -> None:
-		print(self.__dict__)
+	def set_config(self, parameter_dictionary) -> None:
+		"""
+		For updating at least one option in an EXISTING instance. Special handling for logger.
+		"""
+		self._check_and_set_parameters(parameter_dictionary)
+		if "loglevel" in parameter_dictionary.keys():
+			# destroy the old logger, make a new one
+			logging.getLogger().handlers.clear()
+			self.logger = self._setup_logger()
 
-	def print_config(self) -> None:
-		this_config = self.__dict__.copy()
-		print("Configuration:")
-		for keys, values in this_config.items():
-			if keys == "unwanted":
-				for keys, values in self.unwanted.items():
-					print(f"* Unwanted {keys}: {values}")
-			elif keys == 'read_file':
-				print("File read options:")
-				for k, v in self.read_file.items():
-					print(f"--> {k}: {v}")
-			elif keys == 'taxoncore_ruleset' and this_config['taxoncore_ruleset'] is not None:
-				print(f"* {keys}: Initialized with {len(this_config['taxoncore_ruleset'])} values")
-			elif keys == 'loglevel':
-				print(f"* {keys}: {values} ({loggerhead[values]})")
-			elif keys == 'logger': # redundant
-				pass
-			else:
-				print(f"* {keys}: {values}")
+	def _check_and_set_parameters(self, parameters) -> None:
+		"""
+		Checks and sets parameters. Does not set the logger nor taxoncore dict, so should not be called
+		externally.
+		"""
+		for option, value in parameters.items():
+			self.check_is_in_ConfigParameters(option)
+			#expected_type = ConfigParameters.__annotations__[option]
+			#origin = get_origin(expected_type)
+			#args = get_args(expected_type)
+			#real_type = origin or expected_type
+			setattr(self, option, value)
+
+	def check_is_in_ConfigParameters(self, key) -> None:
+		if key in ConfigParameters.__annotations__:
+			return
+		raise ValueError(
+			f"Config passed parameter {key!r} but that doesn't seem valid? Valid parameters: {ConfigParameters.__annotations__}"
+		)
 
 	def read_config(self, path=None) -> ConfigParameters:
 		# Just reads the file, doesn't actually set anything in and of itself
@@ -109,8 +133,6 @@ class RancheroConfig:
 			with open(path, 'r') as file:
 				config = yaml.safe_load(file)
 		typed_config: ConfigParameters = config # doesn't enforce typing in and of itself
-		for keys in typed_config:
-			assert self.is_in_ConfigParameters(keys)
 		return typed_config
 
 	def get_config(self, option) -> str:
@@ -118,24 +140,7 @@ class RancheroConfig:
 			raise ValueError(f"Option {option!r} doesn't exist")
 		else:
 			return getattr(self, option)
-
-	def initialize_config(self, overrides) -> None:
-		for option, value in overrides.items():
-			global ConfigParametersIterable
-			if option not in ConfigParametersList:
-				raise ValueError(f"Config initialized with option {option!r} but that doesn't seem valid? Valid parameters: {ConfigParametersList}")
-			setattr(self, option, value)
-
-	def set_config(self, overrides) -> None:
-		for option, value in overrides.items():
-			if not hasattr(self, option):
-				raise ValueError(f"Option {option!r} doesn't exist")
-			setattr(self, option, value)
-			if option == 'loglevel':
-				# destroy the old logger, make a new one
-				logging.getLogger().handlers.clear()
-				self.logger = self._setup_logger()
-
+			
 	def prepare_taxoncore_dictionary(self, tsv=None):
 		if tsv is None:
 			tsv_path = resources.files(__package__).joinpath(
@@ -169,11 +174,25 @@ class RancheroConfig:
 	#	""" Sets up a TQDM instance"""
 	#	tqdm.pandas(ascii='➖🌱🐄', bar_format='{desc:<10.9}{percentage:3.0f}%|{bar:12}{r_bar}') # we gotta make it cute!
 
+	def print_config_raw(self) -> None:
+		print(self.__dict__)
 
-	def __init__(self):
-		""" Creates a fallback configuration if read_config() isn't run"""
-		defaults = self.read_config()
-		self.initialize_config(defaults)
-		self.logger = self._setup_logger()
-		self.taxoncore_ruleset = self.prepare_taxoncore_dictionary()
-		#self.print_config_raw()
+	def print_config(self) -> None:
+		this_config = self.__dict__.copy()
+		print("Configuration:")
+		for keys, values in this_config.items():
+			if keys == "unwanted":
+				for keys, values in self.unwanted.items():
+					print(f"* Unwanted {keys}: {values}")
+			elif keys == 'read_file': # TODO: bring this back?
+				print("File read options:")
+				for k, v in self.read_file.items():
+					print(f"--> {k}: {v}")
+			elif keys == 'taxoncore_ruleset' and this_config['taxoncore_ruleset'] is not None:
+				print(f"* {keys}: Initialized with {len(this_config['taxoncore_ruleset'])} values")
+			elif keys == 'loglevel':
+				print(f"* {keys}: {values} ({loggerhead[values]})")
+			elif keys == 'logger': # redundant
+				pass
+			else:
+				print(f"* {keys}: {values}")

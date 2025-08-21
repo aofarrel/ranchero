@@ -7,6 +7,10 @@ from polars.testing import assert_series_equal
 import polars.selectors as cs
 from .config import RancheroConfig
 INDEX_PREFIX = "__index__"
+
+# https://peps.python.org/pep-0661/
+_DEFAULT_TO_CONFIGURATION = object()
+
 class NeighLib:
 	def __init__(self, configuration: RancheroConfig = None):
 		if configuration is None:
@@ -16,7 +20,7 @@ class NeighLib:
 			self.logging = self.cfg.logger
 
 	def _default_fallback(self, cfg_var, value):
-		if value is None:
+		if value == _DEFAULT_TO_CONFIGURATION:
 			return self.cfg.get_config(cfg_var)
 
 	# --------- INDEX FUNCTIONS --------- #
@@ -140,9 +144,9 @@ class NeighLib:
 			guess=True,
 			try_to_fix=True,
 			manual_index_column=None,
-			force_INSDC_runs=None,     # has a default fallback
-			force_INSDC_samples=None,  # has a default fallback
-			dupe_index_handling=None,  # has a default fallback
+			force_INSDC_runs=_DEFAULT_TO_CONFIGURATION,
+			force_INSDC_samples=_DEFAULT_TO_CONFIGURATION,
+			dupe_index_handling=_DEFAULT_TO_CONFIGURATION,
 			allow_bad_name=False,  # for merge_upon checks, etc
 			df_name=None           # for logging
 			):
