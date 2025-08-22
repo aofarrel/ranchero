@@ -34,7 +34,8 @@ equivalence = {
 		'host_commonname': ['host_commonname', 'host_streetname'],
 		'host_scienname': ['host_scienname'],
 		'instrument': ['instrument', 'Instrument'],
-		'isolation_source': ['isolation_source', 'sample_type_sam_ss_dpl131', 'sample_source', 'tissue_sam_ss_dpl145', 'env_medium_sam', 'host_tissue_sampled_sam_s_dpl239', 'isolation_source_sam', 'isolation_type_sam', 'isolation_source_sam_ss_dpl261', 'isolation_source_host_associated_sam_s_dpl264', 'specimen_sam', 'culture_collection_sam_ss_dpl468', 'host_body_product_sam', 'bio_material_sam', 'tissue_source_sam', 'subsource_note_sam', 'env_biome_sam', 'env_feature_sam', 'env_material_sam', 'source_name_sam', 'isolation_source_host_associated_sam_s_dpl263', 'isolate_sam_ss_dpl100', 'plant_product_sam', 'isolation_source_run', 'sample_type_run_s_dpl517', 'isolate_run', 'sample_type_exp'],
+		'isolation_source': ['isolation_source', 'sample_type_sam_ss_dpl131', 'sample_source', 'tissue_sam_ss_dpl145', 'env_medium_sam', 'host_tissue_sampled_sam_s_dpl239', 'isolation_source_sam', 'isolation_type_sam', 'isolation_source_sam_ss_dpl261', 'isolation_source_host_associated_sam_s_dpl264', 'specimen_sam', 'culture_collection_sam_ss_dpl468', 'host_body_product_sam', 'bio_material_sam', 'tissue_source_sam', 'subsource_note_sam', 'env_biome_sam', 'env_feature_sam', 'env_material_sam', 'source_name_sam', 'isolation_source_host_associated_sam_s_dpl263', 'plant_product_sam', 'isolation_source_run', 'sample_type_run_s_dpl517', 'isolate_run', 'sample_type_exp'],
+		'isolate_sam_ss_dpl100': ['isolate_sam_ss_dpl100'], # this has special handling due to usually being a sample name, but sometimes being actually useful isolation source information
 		'latlon': ['latlon', 'lat_lon_sam_s_dpl34', 'lat_lon', 'latitude_and_longitude_sam', 'lat_lon_run'],
 		'lat': ['lat', 'geographic_location__latitude__sam'],
 		'lon': ['lon', 'geographic_location__longitude__sam'],

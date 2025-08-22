@@ -432,6 +432,15 @@ class ProfessionalsHaveStandards():
 		# AFTER we have cleaned up very obvious things, from now on, write to a NEW COLUMN to help avoid accidentally overwriting past iterations (eg "culture from sputum" --> "sputum" or "culture")
 		polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'neo_isolation_source', None)
 
+		# Special handling for isolate_sam_ss_dpl100, which is usually sample names (booooo) but sometimes we can extract useful information from it.
+		# In older versions this was merged into the isolation_source column via kolumns, but since it added so many sample names it really slowed
+		# everything down for very little benefit. What we're gonna do here is search only isolate_sam_ss_dpl100, and only for a subset of isolation sources,
+		# and then ignore everything else in it.
+		if 'isolate_sam_ss_dpl100' in polars_df.columns:
+			for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source_exact_match.items(), desc="Checking isolate_sam_ss_dpl100 (exact)", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+				polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
+			polars_df.drop('isolate_sam_ss_dpl100')
+
 		for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			this_and_that = pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any().and_(pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any())
 			polars_df = polars_df.with_columns([
@@ -446,7 +455,7 @@ class ProfessionalsHaveStandards():
 				#.otherwise(pl.col('isolation_source'))
 				#.alias('isolation_source')
 			])
-		for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source.items(), desc="Checking for fuzzy matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+		for sample_source, simplified_sample_source in tqdm(sample_sources.comprehensive_fuzzy.items(), desc="Checking for fuzzy matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=False, remove_match_from_list=True)
 		for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source_exact_match.items(), desc="Checking for exact matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
@@ -493,7 +502,7 @@ class ProfessionalsHaveStandards():
 		assert polars_df.schema['isolation_source'] == pl.Utf8
 		for sample_source, simplified_sample_source in sample_sources.sample_source_exact_match.items():
 			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=True)
-		for sample_source, simplified_sample_source in sample_sources.sample_source.items():
+		for sample_source, simplified_sample_source in sample_sources.comprehensive_fuzzy.items():
 			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=True)
 		return polars_df
 	

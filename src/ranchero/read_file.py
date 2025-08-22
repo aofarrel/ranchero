@@ -526,7 +526,7 @@ class FileReader():
 
 		We do this seperately so we can avoid converting the entire dataframe in and out of pandas.
 		"""
-		rancheroize = self._default_fallback("auto_rancheroize", auto_rancheroize)
+		rancheroize = self._default_fallback("auto_rancheroize", rancheroize)
 		attributes_rows = pandas_attributes_series.shape[0]
 		assert polars_df.shape[0] == attributes_rows, f"Polars dataframe has {polars_df.shape[0]} rows, but the pandas_attributes has {attributes_rows} rows" 
 		

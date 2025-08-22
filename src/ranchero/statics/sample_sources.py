@@ -75,6 +75,8 @@ sample_sources_nonspecific = sample_sources_I_should_hope_so + sample_sources_no
 sample_source_exact_match = {
 	'BAL': 'bronchoalveolar lavage',
 	'Bed': 'environmental (bed)',
+	'blood': 'blood',
+	'Blood C&S': 'blood (C&S)',
 	'bronchial': 'bronchial (unspecified)',
 	'Clinical': 'clinical (unspecified)',
 	'CSF': 'cerebrospinal fluid',
@@ -83,7 +85,9 @@ sample_source_exact_match = {
 	'Hospitol': 'hospital', # common typo
 	'laboratory': 'laboratory-obtained strain',
 	'tissue': 'tissue (unspecified)',
+	'Pleural Fluid': 'pleural fluid',
 	'pus': 'pus',
+	'Urine': 'urine',
 }
 
 if_this_and_that_then = [
@@ -122,11 +126,14 @@ if_this_and_that_then = [
 	['(?i)ascit', '(?i)fluid', 'peritoneal fluid (ascitic)'],
 ]
 
+
+################################################################################################################
 # These are considered mutually exclusive, and whichever ones are listed first will take precident
 # This means, generally speaking, we want more specific first and less specific last... with the
 # exception of things that are likely in silico or experimental evolution, as those ones are often
 # not appropriate to include in later analysis
-sample_source = {
+
+comprehensive_fuzzy = {
 	
 	# simulated/in silico matches should ALWAYS be done first, as there are many reasons you may not want
 	# them in your analysis (no shade to the submitters of course it's just not appropriate for some things)
