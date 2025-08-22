@@ -5,7 +5,7 @@ def drop_lowcount_columns(polars_df, cutoff=3, verbose=True):
 	dropped = []
 	starting_columns = len(polars_df.columns)
 	for column in polars_df.columns:
-		if column == 'plaftorm' or column == 'librarylayout' or column == 'taxid':
+		if column == 'platform' or column == 'librarylayout' or column == 'taxid':
 			continue
 		counts = polars_df.select([pl.col(column).value_counts(sort=True)])
 		if len(counts) < cutoff:
