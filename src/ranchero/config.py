@@ -5,17 +5,10 @@ import logging
 import polars as pl
 import tqdm
 import yaml
-from typing import get_args, get_origin, Literal, TypeAlias, TypedDict
+from typing import TypedDict, TypeAlias, Literal, get_args, get_origin, Union
+import types as _types
 import importlib.resources as resources
 loggerhead = {10: "DEBUG", 20: "INFO", 30: "WARN", 40: "ERROR"}
-
-# This takes a lot of inspiration from how polars handles configuration,
-# but I'm still not happy with it (nor does it actually enforce types).
-
-if sys.version_info >= (3, 10):
-	from typing import TypeAlias
-else:
-	from typing_extensions import TypeAlias
 
 # currently unused
 class ReadFileParameters(TypedDict):
@@ -83,8 +76,94 @@ class ConfigParameters(TypedDict):
 	paired_illumina_only: bool
 	polars_normalize: bool
 	rm_phages: bool
-	taxoncore_ruleset: None # not sure I like this...
-	unwanted: bool
+	taxoncore_ruleset: None | str # not sure I like this...
+	unwanted: dict
+
+def _validate_against_annotation(option: str, value, expected_type) -> None:
+	"""
+	Raises TypeError/ValueError if value doesn't conform to expected_type.
+	TODO: This seems really, really slow?
+	"""
+	origin = get_origin(expected_type)
+	args = get_args(expected_type)
+
+	# Literal["a","b",...] -- only one option in list of valids is allowed (dupe_index_handling, host_info_handling)
+	if origin is Literal:
+		allowed = args
+		if value not in allowed:
+			raise ValueError(
+				f"Invalid value {value!r} for {option}. Must be one of {sorted(allowed)}"
+			)
+		return
+
+	# list[Literal[...]] -- multiple options in list of valids is allowed (gs_metadata)
+	if origin is list:
+		if not isinstance(value, list):
+			raise TypeError(f"{option} must be a list, got {type(value).__name__}")
+		if args:
+			item_ann = args[0]
+			item_origin = get_origin(item_ann)
+			if item_origin is Literal:
+				allowed = set(get_args(item_ann))
+				invalid = [v for v in value if v not in allowed]
+				if invalid:
+					raise ValueError(
+						f"Invalid values {invalid} for {option}. "
+						f"Valid options: {sorted(allowed)}"
+					)
+			else:
+				# list of plain types: list[int], list[str], etc.
+				item_real = item_origin or item_ann
+				if not isinstance(item_real, type):
+					raise TypeError(
+						f"Unsupported item annotation for {option}: {item_ann!r}"
+					)
+				for v in value:
+					if not isinstance(v, item_real):
+						raise TypeError(
+							f"{option} items must be {item_real}, got {type(v)}"
+						)
+		return
+
+	# Union[...] or X | Y -- multiple allowed types (taxoncore_ruleset)
+	if origin in (Union, getattr(_types, "UnionType", Union)):
+		last_exc = None
+		for arm in args:
+			try:
+				_validate_against_annotation(option, value, arm)
+				return
+			except (TypeError, ValueError) as e:
+				last_exc = e
+		raise TypeError(
+			f"Value for {option!r} did not match any allowed types {args}: {last_exc}"
+		)
+
+	# various iterations of "nope"
+	if expected_type in (type(None), None, pl.Null, getattr(_types, "NoneType", type(None))):
+		if value is not None:
+			raise TypeError(f"{option} must be None, got {type(value).__name__}")
+		return
+
+	# normal python classes
+	if isinstance(expected_type, type):
+		if expected_type is int and isinstance(value, bool):
+			# bool is a subclass of int so this prevents weirdness
+			raise TypeError(f"{option} must be int, got bool")
+		if not isinstance(value, expected_type):
+			raise TypeError(
+				f"Invalid type for {option}: expected {expected_type}, got {type(value)}"
+			)
+		return
+
+	# probably not worth doing this but maybe someday
+	#if origin and origin.__qualname__.endswith("Annotated"):
+	#	inner = args[0]
+	#	_validate_against_annotation(option, value, inner)
+	#	return
+
+	raise TypeError(
+		f"Unsupported type annotation for {option}: {expected_type!r}"
+	)
 
 class RancheroConfig:
 
@@ -111,10 +190,9 @@ class RancheroConfig:
 		"""
 		for option, value in parameters.items():
 			self.check_is_in_ConfigParameters(option)
-			#expected_type = ConfigParameters.__annotations__[option]
-			#origin = get_origin(expected_type)
-			#args = get_args(expected_type)
-			#real_type = origin or expected_type
+			expected_type = ConfigParameters.__annotations__[option]
+			#print(f"{option}: {value} ({expected_type})")
+			_validate_against_annotation(option, value, expected_type)
 			setattr(self, option, value)
 
 	def check_is_in_ConfigParameters(self, key) -> None:
