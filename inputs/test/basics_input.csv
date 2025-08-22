@@ -1,0 +1,8 @@
+acc,biosample,bases,country,bioproject
+run1/3,A,111,Atropia,foo
+run2/3,A,222,Atropia,buzz
+run3/3,A,333,Atropia,foo
+run1/2,B,11,Pineland,bar
+run2/2,B,22,Pineland,bizz
+run1/1,C,1,Cortina,foo
+,,,,

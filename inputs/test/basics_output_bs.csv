@@ -1,0 +1,4 @@
+BioSample,bases,country,BioProject,run_acc
+A,"[111,222,333]",Atropia,"[""foo"",""buzz""]","[""run1/3"",""run2/3"",""run3/3""]"
+B,"[11,22]",Pineland,"[""bar"",""bizz""]","[""run1/2"",""run2/2""]"
+C,[1],Cortina,"[""foo""]","[""run1/1""]"

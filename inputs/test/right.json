@@ -1,0 +1,10 @@
+[
+{"acc":"sampA_run1/3","biosample":"A","bases":111,"country":"Atropia","bioproject":"foo"},
+{"acc":"sampA_run2/3","biosample":"A","bases":222,"country":"missing","bioproject":"buzz"},
+{"acc":"sampA_run3/3","biosample":"A","bases":333,"country":"Atropia","bioproject":"foo"},
+{"acc":"sampB_run1/2","biosample":"B","bases":11,"country":"Pineland","bioproject":"bar"},
+{"acc":"sampB_run2/2","biosample":"B","bases":22,"country":"Super Pineland","bioproject":null},
+{"acc":"sampC_run1/1","biosample":"C","bases":1,"country":"Cortina","bioproject":"bazz"},
+{"acc":"sampD_run1/1","biosample":"D","bases":null,"country":"Atropia","bioproject":"foo"},
+{"acc":"sampF_run1/1","biosample":"F","bases":6,"country":"Atropia","bioproject":"bar"}
+]
