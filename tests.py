@@ -6,6 +6,8 @@ import polars as pl
 from polars.testing import assert_series_equal
 import polars.selectors as cs
 import traceback
+print("✅ Imported deps")
+
 
 verbose = False
 pl.Config.set_tbl_rows(15)
@@ -15,6 +17,9 @@ pl.Config.set_fmt_table_cell_list_len(10)
 pl.Config.set_tbl_width_chars(200)
 
 import ranchero as ranchero
+print("✅ Imported ranchero")
+
+ranchero.Configuration.print_config()
 
 ### Configuration ###
 def hellish_cfg_tests():
@@ -362,10 +367,72 @@ def file_parsing(folder="./inputs/test"):
 	def bigquery_sra_metadata_and_taxonomic(folder):
 		bq = ranchero.from_bigquery(f"{folder}/bq-333-samples.json", auto_rancheroize=False, auto_standardize=False, normalize_attributes=False)
 		raw_columns_sorted = sorted(bq.columns)
-		print(raw_columns_sorted)
+		assert raw_columns_sorted == ['acc', 'acc_1', 'assay_type', 'attributes', 'avgspotlen', 'bioproject', 'biosample', 'biosamplemodel_sam', 
+		'center_name', 'collection_date_sam', 'consent', 'datastore_filetype', 'datastore_provider', 'datastore_region', 'ena_first_public_run', 
+		'ena_last_update_run', 'experiment', 'geo_loc_name_country_calc', 'geo_loc_name_country_continent_calc', 'geo_loc_name_sam', 'ileft', 
+		'ilevel', 'instrument', 'iright', 'jattr', 'library_name', 'librarylayout', 'libraryselection', 'librarysource', 'mbases', 'mbytes', 'name', 
+		'organism', 'platform', 'rank', 'releasedate', 'run_file_version', 'sample_acc', 'sample_name', 'sample_name_sam', 'self_count', 'sra_study',
+		'tax_id', 'total_count']
 		print("✅ Read sra-metadata-and-taxonomic BQ file")
+		
 		bq = ranchero.normalize_attr(bq)
-		assert sorted(bq.columns) == ['BioProject', 'SRS_id', 'SRX_id', '__index__acc', 'acc_1', 'additional_platform_run', 
+		assert sorted(bq.columns) == ['acc', 'acc_1', 'additional_instrument_model_run', 'additional_platform_run', 'alias_sam',
+		'alternate_name_alias_sam', 'altitude_sam_s_dpl11', 'analysis_number_qiita1_sam', 'analysis_number_qiita_stool_sam', 'anonymised_bovine_id_sam',
+		'anonymized_name_sam', 'antibiotic_sam', 'antibody_sam_ss_dpl59', 'antibody_treatment_sam_s_dpl210', 'arrayexpress_species_sam',
+		'assay_type', 'assemblyname', 'avgspotlen', 'barcode_exp', 'bases', 'batch_sam_s_dpl12', 'bio_material_provider_sam',
+		'biomaterial_provider_sam', 'bioproject', 'biosample', 'biosample_sam', 'biosamplemodel_sam', 'birth_date_sam',
+		'birth_location_sam', 'birth_year_sam', 'bmtday_sam', 'breed_sam', 'broker_name_sam', 'bytes', 'cage_id_sam',
+		'cell_type_sam_ss_dpl37', 'center_name', 'center_name_exp', 'center_project_name_exp', 'chip_sam', 'clinical_group_sam',
+		'collected_by_run', 'collected_by_sam', 'collection_date_orig_sam', 'collection_date_run', 'collection_date_sam',
+		'collection_device_sam', 'collection_method_sam', 'collection_time_hour_sam', 'collection_time_sam', 'collection_timestamp_sam_s_dpl66',
+		'common_name_sam', 'concentration_sam', 'consent', 'country_sam', 'cultivar_sam', 'culture_collection_sam_ss_dpl468',
+		'culture_sam', 'cultures_sam', 'datastore_filetype', 'datastore_provider', 'datastore_region', 'design_description_sam',
+		'dev_stage_sam', 'developmental_stage_sam', 'disease_state_sam', 'dna_extracted_sam', 'dose_sam', 'drug_sam',
+		'duplicated_exp', 'ecotype_sam', 'elevation_sam_s_dpl25', 'elevation_units_sam', 'empo_1_sam', 'empo_2_sam',
+		'empo_3_sam', 'ena_checklist_sam_s_dpl67', 'ena_first_public_run', 'ena_first_public_sam', 'ena_first_public_sam_dt_dpl178',
+		'ena_last_update_run', 'ena_last_update_sam', 'ena_last_update_sam_ss_dpl537', 'env_biome_sam', 'env_broad_scale_run',
+		'env_broad_scale_sam', 'env_feature_sam', 'env_local_scale_run', 'env_local_scale_sam', 'env_material_sam', 'env_medium_run',
+		'env_medium_sam', 'env_package_sam', 'environment__biome__sam', 'environment__feature__sam', 'environment__material__sam',
+		'environmental_sample_sam', 'esrrb_sam', 'evaluation_sam', 'experiment', 'exposure_time_sam', 'expt_repeat_sam',
+		'external_id_sam', 'extra_sam', 'extraction_robot_exp', 'extraction_sam', 'extractionkit_lot_exp', 'fasta_file_run',
+		'filename2_sam', 'filename_sam', 'filetype_sam', 'forward_seq_sam', 'gender_sam', 'genome_number_sam', 'genotype_sam_ss_dpl92',
+		'geo_accession_exp', 'geo_loc_name_country_calc', 'geo_loc_name_country_continent_calc', 'geo_loc_name_run',
+		'geo_loc_name_sam', 'geographic_location__country_and_or_sea__sam', 'geographic_location__latitude__sam', 'geographic_location__longitude__sam',
+		'geographic_location__region_and_locality__sam', 'geographical_location_sam', 'gold_ecosystem_classification_sam',
+		'h37rv_genotype_sam', 'host_age_units_sam', 'host_body_habitat_sam', 'host_body_product_sam', 'host_body_site_sam',
+		'host_common_name_sam', 'host_disease_run', 'host_disease_sam', 'host_info', 'host_run', 'host_sam', 'host_scientific_name_sam',
+		'host_subject_id_old_sam', 'host_taxid_sam', 'host_tissue_sampled_sam_s_dpl239', 'host_weight_sam', 'host_weight_units_sam',
+		'human_skin_environmental_package_sam', 'iacuc_institute_sam', 'iacuc_protocol_id_sam', 'id_sam', 'identified_by_sam',
+		'ileft', 'ilevel', 'infected_sam', 'infection_sam', 'insdc_center_alias_sam', 'insdc_center_name_sam', 'insdc_first_public_sam',
+		'insdc_last_update_sam', 'insdc_status_sam', 'instrument', 'instrument_model_sam', 'intentional_duplicate_run',
+		'investigation_type_sam', 'iright', 'is_the_sequenced_pathogen_host_associated__sam', 'isol_growt_condt_sam',
+		'isol_growth_condt_sam', 'isolate_run', 'isolate_sam_ss_dpl100', 'isolation_country_sam', 'isolation_source_run',
+		'isolation_source_sam', 'jattr', 'lab_host_sam_s_dpl270', 'lat_lon_run', 'lat_lon_sam_s_dpl34', 'latitude_and_longitude_sam',
+		'latitude_sam', 'latitude_units_sam', 'lcmv_type_sam', 'letter_sam', 'library_id_sam', 'library_layout_sam',
+		'library_name', 'library_selection_sam', 'library_source_sam', 'library_strategy_sam', 'librarylayout', 'libraryselection',
+		'librarysource', 'life_stage_sam_s_dpl104', 'linker_exp', 'longitude_sam', 'longitude_units_sam', 'mastermix_lot_exp',
+		'mbases', 'mbytes', 'message_run', 'mlva___spoligotype_sam', 'mouse_strain_sam', 'mouse_tag_sam', 'ms_16s_sam',
+		'name', 'nominal_length_run', 'nr5a2_sam', 'num_replicons_sam', 'number_sam', 'organism', 'organism_run', 'organism_sam',
+		'orig_name_exp', 'ost_sam', 'passage_history_sam_s_dpl312', 'passage_sam', 'pathotype_sam', 'pcr_primers_exp',
+		'physical_specimen_location_sam', 'physical_specimen_remaining_sam', 'pi_sam', 'platform', 'platform_sam', 'plating_exp',
+		'primary_search', 'primer_date_exp', 'primer_exp', 'primer_plate_exp', 'processing_robot_exp', 'project_name_exp',
+		'project_name_sam', 'ptnumber_sam', 'rank', 'rea_sam', 'ref_biomaterial_sam', 'releasedate', 'replicate_sam_ss_dpl121',
+		'request_number_sam', 'reverse_seq_sam', 'run_center_exp', 'run_date_exp', 'run_file_create_date', 'run_file_version',
+		'run_id_exp', 'run_id_run', 'run_prefix_exp', 'samp_size_sam', 'sample_acc', 'sample_alias_sam_s_dpl38', 'sample_id_sam',
+		'sample_name', 'sample_name_old_sam', 'sample_name_sam', 'sample_plate_exp', 'sample_type_sam_ss_dpl131', 'scientific_name_sam',
+		'self_count', 'sequencing_institution_sam', 'sequencing_meth_exp', 'sequencing_method_sam', 'sequencing_sample_type_sam',
+		'serotype_sam', 'serovar_sam', 'sex_calc', 'similar_to_sam', 'source_material_id_sam_s_dpl48', 'source_name_sam',
+		'specimen_voucher_sam', 'spoligotype_sam', 'sra_accession_sam', 'sra_study', 'sra_title_run', 'strain_background_common_sam',
+		'strain_background_sam_s_dpl381', 'strain_genotype_sam_s_dpl382', 'strain_sam_ss_dpl139', 'strain_vendor_sam',
+		'sub_species_sam', 'subgroup_sam', 'subject_id_sam_s_dpl1092', 'submitter_id_sam', 'subtype_sam', 'target_gene_exp',
+		'target_subfragment_exp', 'tax_id', 'time_point_sam', 'time_point_units_sam', 'tissue_mg_sam', 'tissue_sam_ss_dpl145',
+		'title_sam', 'tm1000_8_tool_exp', 'tm300_8_tool_exp', 'tm50_8_tool_exp', 'tn_library_racks_sam', 'total_count',
+		'treatment_sam_ss_dpl55', 'tube_id_sam', 'type_material_sam', 'v_type_sam', 'vntr_sam', 'water_lot_exp', 'well_description_exp',
+		'well_id_exp', 'year_isolated_sam']
+		print("✅ and split into expected columns via normalize_attr()")
+
+		bq = ranchero.rancheroize(bq)
+		assert sorted(bq.columns) == ['BioProject', 'SRS_id', 'SRX_id', 'acc', 'acc_1', 'additional_platform_run', 
 		'alternate_name_alias_sam', 'analysis_number_qiita1_sam', 'analysis_number_qiita_stool_sam', 'antibody_treatment_sam_s_dpl210', 
 		'arrayexpress_species_sam', 'assay_type', 'barcode_exp', 'bases', 'bio_material_provider_sam', 'birth_date_sam', 'birth_location_sam', 
 		'birth_year_sam', 'bmtday_sam', 'bytes', 'cage_id_sam', 'center_name', 'chip_sam', 'clinical_group_sam', 'collection_device_sam', 
@@ -392,11 +459,7 @@ def file_parsing(folder="./inputs/test"):
 		'sub_species_sam', 'subgroup_sam', 'subtype_sam', 'target_gene_exp', 'target_subfragment_exp', 'tax_id', 'time_point_sam',
 		'time_point_units_sam', 'tissue_mg_sam', 'tm1000_8_tool_exp', 'tm300_8_tool_exp', 'tm50_8_tool_exp', 'total_count', 'tube_id_sam',
 		'type_material_sam', 'v_type_sam', 'vntr_sam', 'water_lot_exp', 'well_description_exp', 'well_id_exp']
-		print("✅ and split into expected columns via normalize_attr()")
-
-		# TODO: rancheroize doesn't seem to do anything for this dataframe?
-		#bq = ranchero.rancheroize(bq)
-		#rancheroized_columns_sorted = sorted(bq.columns)
+		print("✅ and rancheroized")
 
 		#bq = ranchero.standardize_everything(bq)
 		#standardized_columns_sorted = sorted(bq.columns)
@@ -506,8 +569,8 @@ def merge_stuff():
 
 
 	# Blocking a merge due to either of the dataframes having dupes in the merge_upon column
-file_parsing()
 hellish_cfg_tests()
+file_parsing()
 polars_null_handling()
 general_utilities()
 standardization()

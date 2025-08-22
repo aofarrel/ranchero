@@ -10,6 +10,9 @@ from .config import RancheroConfig  # should import the *class*
 
 barformat = '{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'
 
+# https://peps.python.org/pep-0661/
+_DEFAULT_TO_CONFIGURATION = object()
+
 class FileReader():
 
 	def __init__(self, configuration, naylib, professionals):
@@ -28,8 +31,9 @@ class FileReader():
 			self.Standardizer = professionals
 
 	def _default_fallback(self, cfg_var, value):
-		if value is None:
+		if value == _DEFAULT_TO_CONFIGURATION:
 			return self.cfg.get_config(cfg_var)
+		return value
 
 	def read_metadata_injection(self, injection_file, delimiter='\t', drop_columns=[]):
 		"""
@@ -52,9 +56,9 @@ class FileReader():
 	def polars_from_ncbi_run_selector(self,
 		csv,
 		drop_columns=list(),
-		check_index=None, # has a default fallback
-		auto_rancheroize=None, # has a default fallback
-		auto_standardize=None): # has a default fallback
+		check_index=_DEFAULT_TO_CONFIGURATION,
+		auto_rancheroize=_DEFAULT_TO_CONFIGURATION,
+		auto_standardize=_DEFAULT_TO_CONFIGURATION):
 		"""
 		1. Read CSV
 		2. Drop columns in drop_columns, if any
@@ -78,11 +82,11 @@ class FileReader():
 		index=None,
 		glob=True,
 		list_columns=None,
-		auto_parse_dates=None, # has a default fallback
-		auto_rancheroize=None, # has a default fallback
-		auto_standardize=None, # has a default fallback
-		check_index=None,      # has a default fallback
-		ignore_polars_read_errors=None, # has a default fallback
+		auto_parse_dates=_DEFAULT_TO_CONFIGURATION, 
+		auto_rancheroize=_DEFAULT_TO_CONFIGURATION, 
+		auto_standardize=_DEFAULT_TO_CONFIGURATION, 
+		check_index=_DEFAULT_TO_CONFIGURATION,      
+		ignore_polars_read_errors=_DEFAULT_TO_CONFIGURATION,
 		null_values=null_values.nulls_CSV):
 		"""
 		1. Read a TSV (or similar) and convert to Polars dataframe
@@ -483,8 +487,8 @@ class FileReader():
 
 
 	def polars_from_bigquery(self, bq_file, drop_columns=list(), normalize_attributes=True,
-		auto_rancheroize=None, # has a default fallback
-		auto_standardize=None): # has a default fallback
+		auto_rancheroize=_DEFAULT_TO_CONFIGURATION, 
+		auto_standardize=_DEFAULT_TO_CONFIGURATION): 
 		""" 
 		1. Reads a bigquery JSON into a polars dataframe
 		2. (optional) Splits the attributes columns into new columns (combines fixing the attributes column and JSON normalizing)
@@ -507,7 +511,7 @@ class FileReader():
 		polars_df = polars_df.drop(drop_columns)
 
 		if normalize_attributes and "attributes" in polars_df.columns:  # if column doesn't exist, return false
-			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df)
+			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df, rancheroize=auto_rancheroize)
 		if auto_rancheroize:
 			polars_df = self.NeighLib.rancheroize_polars(polars_df, index='acc', rename_index='__index__run')
 		if auto_standardize:
@@ -515,13 +519,14 @@ class FileReader():
 		return polars_df
 
 
-	def polars_json_normalize(self, polars_df, pandas_attributes_series, rancheroize=False, collection_date_sam_workaround=True):
+	def polars_json_normalize(self, polars_df, pandas_attributes_series, rancheroize=_DEFAULT_TO_CONFIGURATION, collection_date_sam_workaround=True):
 		"""
 		polars_df: polars df to concat to at the end
 		pandas_attributes_series: !!!pandas!!! series of dictionaries that will json normalized
 
 		We do this seperately so we can avoid converting the entire dataframe in and out of pandas.
 		"""
+		rancheroize = self._default_fallback("auto_rancheroize", auto_rancheroize)
 		attributes_rows = pandas_attributes_series.shape[0]
 		assert polars_df.shape[0] == attributes_rows, f"Polars dataframe has {polars_df.shape[0]} rows, but the pandas_attributes has {attributes_rows} rows" 
 		
@@ -745,7 +750,7 @@ class FileReader():
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(self.NeighLib.concat_dicts)
 			else:
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(self.NeighLib.concat_dicts)
-		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'])
+		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'], rancheroize=rancheroize)
 		if rancheroize: normalized = self.NeighLib.rancheroize_polars(normalized)
 		if cast_types: normalized = self.NeighLib.cast_politely(normalized)
 		if self.cfg.intermediate_files: self.NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')

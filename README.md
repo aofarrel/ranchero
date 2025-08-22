@@ -15,7 +15,7 @@ Ranchero is a Python solution to the dozens of different metadata formats used i
  * (tuberculosis only) Convert old-school strain names (Beijing, LAM, etc) to the modern lineage system (L2.2.1, L4.3, etc)
 
  ## Dependencies
- * Python 3.11-ish (3.9+ should be okay)
+ * Python >= 3.10
  * [pandas](https://pandas.pydata.org/) >= 2.0.0
  * [pyarrow](https://pypi.org/project/pyarrow/), even if not working with Apache Arrow datasets
  * [polars](https://github.com/pola-rs/polars) for Python == 1.27.0

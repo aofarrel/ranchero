@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ranchero"
-version = "0.1.0rc20"
+version = "0.1.0rc24"
 description = "Ranchero: metadata wrangling for bioinformatics"
 readme = "readme_pypi.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "GPL-3.0"
 authors = [
     { name = "Ash O'Farrell" }

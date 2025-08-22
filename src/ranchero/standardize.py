@@ -5,6 +5,10 @@ from .config import RancheroConfig
 import polars as pl
 from tqdm import tqdm
 from collections import OrderedDict # dictionaries are ordered in Python 3.7+, but OrderedDict has a better popitem() function we need
+
+# https://peps.python.org/pep-0661/
+_DEFAULT_TO_CONFIGURATION = object()
+
 class ProfessionalsHaveStandards():
 	def __init__(self, configuration, naylib):
 		if configuration is None:
@@ -16,8 +20,9 @@ class ProfessionalsHaveStandards():
 			self.NeighLib = naylib
 
 	def _default_fallback(self, cfg_var, value):
-		if value is None:
+		if value == _DEFAULT_TO_CONFIGURATION:
 			return self.cfg.get_config(cfg_var)
+		return value
 
 	def standardize_everything(self, polars_df, add_expected_nulls=True, assume_organism="Mycobacterium tuberculosis", assume_clade="tuberculosis", skip_sample_source=False, force_strings=True,
 		organism_fallback=None, clade_fallback=None):
