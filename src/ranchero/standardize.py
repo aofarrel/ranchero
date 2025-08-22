@@ -139,9 +139,10 @@ class ProfessionalsHaveStandards():
 		return polars_df.drop(kolumn for kolumn in kolumns.columns_to_drop_after_rancheroize if kolumn in polars_df.columns)
 
 	def dictionary_match(self, polars_df, match_col: str, write_col: str, key: str, value, 
-		substrings=False, 
-		overwrite=False, 
-		status_cols=False, 
+		substrings=False,
+		overwrite=False,
+		status_cols=False,
+		status_cols_reset=True,
 		remove_match_from_list=False):
 		"""
 		Replace a pl.Utf8 or pl.List(pl.Utf8) column's values with the values in a dictionary per its key-value pairs.
@@ -160,7 +161,7 @@ class ProfessionalsHaveStandards():
 
 		# to start off, we define several polars expressions
 		
-		# matching expression
+		# define found_a_match
 		if substrings and polars_df.schema[match_col] == pl.Utf8:
 			found_a_match = pl.col(match_col).str.contains(f"(?i){key}")
 		elif substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
@@ -171,49 +172,73 @@ class ProfessionalsHaveStandards():
 		elif not substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
 			found_a_match = pl.col(match_col).list.eval(pl.element().str.to_lowercase() == key.lower()).list.any()
 		else:
-			self.logging.warning(f"Invalid type {polars[match_col].schema} for match_col named {match_col}")
+			self.logging.warning(f"Invalid type {polars[match_col].schema} for match_col named {match_col}, cannot do matching")
 			return polars_df
+		self.logging.debug(f"defined polars expression found_a_match as {found_a_match}")
+
+		# define allowed_to_overwrite
+		allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 	
-		# write_col expression -- true if write column is empty list, empty string, or pl.Null
+		# define write_col_is_empty (empty list, empty string, pl.Null)
 		if polars_df.schema[write_col] == pl.List:
 			write_col_is_empty = ((pl.col(write_col).is_null()).or_(pl.col(write_col).list.len() < 1))
 			# also make sure we can write to the value to the list column
 			if type(value) is not list:
 				value = [value]
+				self.logging.debug("turned value into a list, since write_col is a list, to avoid type errors")
 		elif polars_df.schema[write_col] == pl.Utf8:
 			write_col_is_empty = ((pl.col(write_col).is_null()).or_(pl.col(write_col).str.len_bytes() == 0))
 		else:
 			write_col_is_empty = pl.col(write_col).is_null()
+		self.logging.debug(f"defined polars expression write_col_is_empty as {write_col_is_empty}")
+
+		# define matched_false and written_false (for status columns)
+		if status_cols_reset:
+			matched_false = False
+			written_false = False
+		else:
+			matched_false = pl.col('matched')
+			written_false = pl.col('written')
 
 		# use those expressions to actually do something
 		if status_cols:
 			polars_df = polars_df.with_columns([
 				# match status
-				pl.when(found_a_match).then(True).otherwise(pl.col('matched')).alias('matched'),
+				pl.when(found_a_match).then(True).otherwise(matched_false).alias('matched'),
 
 				# write status
-				pl.when((found_a_match).and_(
-					(pl.lit(overwrite) == True).or_(write_col_is_empty)
-				))
+				pl.when(
+					(found_a_match)
+					.and_(
+						(allowed_to_overwrite)
+						.or_(write_col_is_empty)
+					)
+				)
 				.then(True)
-				.otherwise(pl.col('written'))
+				.otherwise(written_false)
 				.alias('written'),
 
 				# actual writing
-				pl.when((found_a_match)
-				.and_(
-					(pl.lit(overwrite) == True).or_(write_col_is_empty)
-				))
+				pl.when(
+					(found_a_match)
+					.and_(
+						(allowed_to_overwrite)
+						.or_(write_col_is_empty)
+					)
+				)
 				.then(pl.lit(value))
 				.otherwise(pl.col(write_col))
 				.alias(write_col)
 			])
 		else:
 			polars_df = polars_df.with_columns([
-				pl.when((found_a_match)
-				.and_(
-					(pl.lit(overwrite) == True).or_(write_col_is_empty)
-				))
+				pl.when(
+					(found_a_match)
+					.and_(
+						(allowed_to_overwrite)
+						.or_(write_col_is_empty)
+					)
+				)
 				.then(pl.lit(value))
 				.otherwise(pl.col(write_col))
 				.alias(write_col)

@@ -69,6 +69,7 @@ fix_json = FileReader.fix_bigquery_file
 injector_from_tsv = FileReader.read_metadata_injection
 run_index_to_sample_index = FileReader.polars_run_to_sample
 explode_delimited_index = FileReader.polars_explode_delimited_rows
+normalize_attr = FileReader.polars_fix_attributes_and_json_normalize
 
 # Merger
 merge_dataframes = Merger.merge_polars_dataframes

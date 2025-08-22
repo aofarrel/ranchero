@@ -336,13 +336,108 @@ def file_parsing(folder="./inputs/test"):
 
 	# Read generic JSON
 	def read_json(folder):
-		left = ranchero.from_bigquery(f"{folder}/left.json", auto_standardize=False)
+		left = ranchero.from_bigquery(f"{folder}/left.json", auto_rancheroize=False, auto_standardize=False)
+		acc = pl.Series("acc", 
+			["sampC_run1/1", "sampA_run1/3", "sampA_run2/3", "sampA_run3/3", "sampB_run1/2", "sampB_run2/2", "sampD_run1/1", "sampE_run1/2", "sampE_run2/2"])
+		biosample = pl.Series("biosample",
+			["C", "A", "A", "A", "B", "B", "D", "E", "E"])
+		bases = pl.Series("bases",
+			[1, 111, 222, 333, 11, 22, None, 55555, 66666], strict=False)
+		country = pl.Series("country", 
+			["Cortina", "Atropia", "Atropia", "Atropia", "Pineland", "Pineland", "Atropia", "Kingdom of Parumphia", "Atropia"])
+		bioproject = pl.Series("bioproject", 
+			["missing", "foo", "buzz", "foo", "bar", "bizz", "foo", "nan", "NaN"])
+		assert_series_equal(acc, (pl.Series(left.select("acc"))))
+		assert_series_equal(biosample, (pl.Series(left.select("biosample"))))
+		assert_series_equal(bases, (pl.Series(left.select("bases"))))
+		assert_series_equal(country, (pl.Series(left.select("country"))))
+		assert_series_equal(bioproject, (pl.Series(left.select("bioproject"))))
+		print("✅ Read generic json file without standardize nor rancheroize")
 
 	# Read BigQuery NJSON on sra metadata table
+	def bigquery_sra_metadata_only(folder):
+		pass
 
 	# Read BigQuery NJSON on sra metadata table and that one taxonomic table
+	def bigquery_sra_metadata_and_taxonomic(folder):
+		bq = ranchero.from_bigquery(f"{folder}/bq-333-samples.json", auto_rancheroize=False, auto_standardize=False, normalize_attributes=False)
+		raw_columns_sorted = sorted(bq.columns)
+		print(raw_columns_sorted)
+		print("✅ Read sra-metadata-and-taxonomic BQ file")
+		bq = ranchero.normalize_attr(bq)
+		assert sorted(bq.columns) == ['BioProject', 'SRS_id', 'SRX_id', '__index__acc', 'acc_1', 'additional_platform_run', 
+		'alternate_name_alias_sam', 'analysis_number_qiita1_sam', 'analysis_number_qiita_stool_sam', 'antibody_treatment_sam_s_dpl210', 
+		'arrayexpress_species_sam', 'assay_type', 'barcode_exp', 'bases', 'bio_material_provider_sam', 'birth_date_sam', 'birth_location_sam', 
+		'birth_year_sam', 'bmtday_sam', 'bytes', 'cage_id_sam', 'center_name', 'chip_sam', 'clinical_group_sam', 'collection_device_sam', 
+		'collection_method_sam', 'collection_time_hour_sam', 'collection_time_sam', 'collection_timestamp_sam_s_dpl66', 'common_name_sam', 
+		'consent', 'cultivar_sam', 'culture_sam', 'datastore_provider', 'date_collected', 'date_collected_year', 'date_sequenced', 
+		'design_description_sam', 'dev_stage_sam', 'disease_state_sam', 'dna_extracted_sam', 'duplicated_exp', 'ecotype_sam', 
+		'elevation_sam_s_dpl25', 'elevation_units_sam', 'empo_1_sam', 'empo_2_sam', 'empo_3_sam', 'env_broad_scale_run', 'env_local_scale_run', 
+		'env_medium_run', 'env_package_sam', 'environment__feature__sam', 'esrrb_sam', 'expt_repeat_sam', 'extraction_robot_exp', 
+		'extractionkit_lot_exp', 'filetype_sam', 'gender_sam', 'genotype_sam_ss_dpl92', 'geoloc_info', 'gold_ecosystem_classification_sam', 
+		'h37rv_genotype_sam', 'host', 'host_age_units_sam', 'host_body_habitat_sam', 'host_body_site_sam', 'host_disease', 'host_disease_run', 
+		'host_info', 'host_subject_id_old_sam', 'host_weight_sam', 'host_weight_units_sam', 'human_skin_environmental_package_sam', 
+		'iacuc_institute_sam', 'iacuc_protocol_id_sam', 'ileft', 'ilevel', 'infected_sam', 'infection_sam', 'instrument', 'instrument_model_sam', 
+		'intentional_duplicate_run', 'iright', 'is_the_sequenced_pathogen_host_associated__sam', 'isol_growt_condt_sam', 'isolation_source', 
+		'jattr', 'lat', 'latitude_sam', 'latitude_units_sam', 'latlon', 'lcmv_type_sam', 'letter_sam', 'library_layout_sam', 
+		'library_selection_sam', 'library_source_sam', 'library_strategy_sam', 'librarylayout', 'libraryselection', 'librarysource', 
+		'life_stage_sam_s_dpl104', 'linker_exp', 'lon', 'longitude_sam', 'longitude_units_sam', 'mastermix_lot_exp', 'mbases', 'mbytes', 
+		'message_run', 'mlva___spoligotype_sam', 'mouse_strain_sam', 'mouse_tag_sam', 'ms_16s_sam', 'name', 'nr5a2_sam', 'organism', 'organism_run',
+		'organism_sam', 'orig_name_exp', 'ost_sam', 'pathotype_sam', 'pcr_primers_exp', 'physical_specimen_location_sam', 
+		'physical_specimen_remaining_sam', 'pi_sam', 'platform', 'platform_sam', 'plating_exp', 'primary_search', 'primer_date_exp', 'primer_exp',
+		'primer_plate_exp', 'processing_robot_exp', 'project_name_exp', 'ptnumber_sam', 'releasedate', 'request_number_sam', 'run_center_exp',
+		'run_date_exp', 'run_id_exp', 'run_prefix_exp', 'sample_index', 'sample_name_old_sam', 'sample_plate_exp', 'scientific_name_sam',
+		'self_count', 'sequencing_institution_sam', 'sequencing_meth_exp', 'serotype_sam', 'serovar_sam', 'similar_to_sam', 'spoligotype_sam',
+		'sra_study', 'strain_background_common_sam', 'strain_genotype_sam_s_dpl382', 'strain_sam_ss_dpl139', 'strain_vendor_sam',
+		'sub_species_sam', 'subgroup_sam', 'subtype_sam', 'target_gene_exp', 'target_subfragment_exp', 'tax_id', 'time_point_sam',
+		'time_point_units_sam', 'tissue_mg_sam', 'tm1000_8_tool_exp', 'tm300_8_tool_exp', 'tm50_8_tool_exp', 'total_count', 'tube_id_sam',
+		'type_material_sam', 'v_type_sam', 'vntr_sam', 'water_lot_exp', 'well_description_exp', 'well_id_exp']
+		print("✅ and split into expected columns via normalize_attr()")
+
+		# TODO: rancheroize doesn't seem to do anything for this dataframe?
+		#bq = ranchero.rancheroize(bq)
+		#rancheroized_columns_sorted = sorted(bq.columns)
+
+		#bq = ranchero.standardize_everything(bq)
+		#standardized_columns_sorted = sorted(bq.columns)
 
 	read_json(folder)
+	bigquery_sra_metadata_and_taxonomic(folder)
+
+### Standardization ###
+def standardization(folder="./inputs/test"):
+
+	def dictionary_match_on_str(folder):
+		df = ranchero.from_bigquery(f"{folder}/left.json", auto_standardize=False)
+		input_country_series = pl.Series("country", ["Cortina", "Atropia", "Atropia", "Atropia", "Pineland", "Pineland", "Atropia", "Kingdom of Parumphia", "Atropia"])
+		assert_series_equal(input_country_series, pl.Series(df.select("country")))
+		print("✅ Test dataframe has correct country data upon file read")
+
+		match_tests = { # order is important!
+		"neopinelandia": "match_is_superset_word",
+		" cortina ": "match_is_superset_spaces",
+		"Cortina": "exact",
+		"atropia": "case",
+		"pine": "substring_within_word",
+		"Atropia": None,
+		"Parumphia": "substring_outside_word"}
+
+		df_no_substrings = df
+		for input_country, match_type in match_tests.items():
+			df_no_substrings = ranchero.Standardizer.dictionary_match(df_no_substrings, "country", "match_type", input_country, match_type, substrings=False, overwrite=True, status_cols=True)
+		no_substring_match = pl.Series("match_type", ["exact", "case", "case", "case", None, None, "case", None, "case"], strict=False)
+		assert_series_equal(no_substring_match, pl.Series(df_no_substrings.select("match_type")))
+		print("✅ dictionary_match(substrings=False) handles exact matches and is case-insensitive but doesn't match substrings nor overwrites when output is None")
+
+		df_substrings = df
+		for input_country, match_type in match_tests.items():
+			df_substrings = ranchero.Standardizer.dictionary_match(df_substrings, "country", "match_type", input_country, match_type, substrings=True, overwrite=True, status_cols=True)
+		substring_match = pl.Series("match_type", ["exact", "case", "case", "case", "substring_within_word", "substring_within_word", "case", "substring_outside_word", "case"])
+		assert_series_equal(substring_match, pl.Series(df_substrings.select("match_type")))
+		print("✅ dictionary_match(substrings=True) handles exact matches and is case-insensitive and matches substrings, and can overwrite previous matches if new value is not None")
+
+	dictionary_match_on_str(folder)
+
 
 ### Merge stuff ###
 def merge_stuff():
@@ -411,13 +506,13 @@ def merge_stuff():
 
 
 	# Blocking a merge due to either of the dataframes having dupes in the merge_upon column
-
+file_parsing()
 hellish_cfg_tests()
 polars_null_handling()
 general_utilities()
+standardization()
 miscellanous_index_stuff()
 dupe_index_handling()
 run_to_sample_index_swap()
-file_parsing()
 merge_stuff()
 
