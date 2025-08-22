@@ -15,6 +15,11 @@ class Merger:
 			self.logging = self.cfg.logger
 			self.NeighLib = naylib
 
+		def _default_fallback(self, cfg_var, value):
+			if value == _DEFAULT_TO_CONFIGURATION:
+				return self.cfg.get_config(cfg_var)
+			return value
+
 	def aggregate_conflicting_metadata(self, polars_df, column_key):
 		"""
 		Returns a numeric representation of n_unique values for rows that have matching column_key values. This representation can later

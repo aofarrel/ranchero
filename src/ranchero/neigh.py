@@ -22,6 +22,7 @@ class NeighLib:
 	def _default_fallback(self, cfg_var, value):
 		if value == _DEFAULT_TO_CONFIGURATION:
 			return self.cfg.get_config(cfg_var)
+		return value
 
 	# --------- INDEX FUNCTIONS --------- #
 

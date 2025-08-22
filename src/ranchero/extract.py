@@ -15,6 +15,11 @@ class Extractor:
 			self.logging = self.cfg.logger
 			self.NeighLib = naylib
 
+		def _default_fallback(self, cfg_var, value):
+			if value == _DEFAULT_TO_CONFIGURATION:
+				return self.cfg.get_config(cfg_var)
+			return value
+
 	def extract_primary_lineage(self, polars_df, lineage_column, output_column):
 		"""CAVEAT: exepcts tbprofiler format (eg "lineage" or "La")"""
 		return polars_df.with_columns(
