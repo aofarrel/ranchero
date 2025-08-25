@@ -25,3 +25,4 @@ inputs/test/desired_behavior.md
 my_cool_c_auris_metadata.json
 src/pylintrc
 build.sh
+src/my_very_cool_c_auris_metadata.json

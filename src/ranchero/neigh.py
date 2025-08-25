@@ -1302,6 +1302,13 @@ class NeighLib:
 					polars_df = self.mark_index(polars_df, rename_index)
 		index = self.get_index(polars_df, guess=False) # necessary whether or not it was defined already!! if already defined this will update to the marked index
 		
+		# bigquery special handling, for consistency's sake
+		if index == self.get_hypothetical_index_fullname("acc"):
+			self.logging.warning(f"Changing index name from {index} to {self.get_hypothetical_index_fullname('run')}")
+			polars_df = polars_df.rename({index: self.get_hypothetical_index_fullname("run")})
+			index = self.get_index(polars_df, guess=True)
+			assert index == self.get_hypothetical_index_fullname('run')
+		
 		if rename_index is not None and rename_index != '':
 			if rename_index not in polars_df.columns: # we may have renamed it already!
 				if not rename_index.startswith(INDEX_PREFIX):
@@ -1572,14 +1579,15 @@ class NeighLib:
 					# TODO: use logger adaptors instead of this print cringe
 					print(f"{col}\n-->[kolumns.list_to_float_sum]") if self.logging.getEffectiveLevel() == 10 else None
 					if datatype.inner == pl.String:
-						print(f"-->Inner type is string, casting to pl.Int32 first") if self.logging.getEffectiveLevel() == 10 else None
+						print(f"-->Inner type is string, casting to pl.Int64 first") if self.logging.getEffectiveLevel() == 10 else None
 						polars_df = polars_df.with_columns(
 							pl.col(col).list.eval(
 								pl.when(pl.element().is_not_null())
-								.then(pl.element().cast(pl.Int32))
+								.then(pl.element().cast(pl.Int64))
 								.otherwise(None)
 							).alias(f"{col}_sum")
 						)
+
 					else:
 						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
 					polars_df = polars_df.drop(col)

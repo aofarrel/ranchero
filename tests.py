@@ -220,12 +220,32 @@ def general_utilities():
 ### Index stuff ###
 def miscellanous_index_stuff():
 
+	def rancheroize_renames_acc_to_run_when_index():
+		df = pl.DataFrame({
+			"__index__acc": ["SRR13684378", "SRR30310804", "SRR30310805", "SRR9291314"],
+			"sample_index": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
+		})
+		df = ranchero.rancheroize(df)
+		assert sorted(df.columns) == ["__index__run", "sample_index"]
+		print("✅ Rancheroize converts __index__acc to __index__run")
+
+	def rancheroize_renames_acc_to_run_when_not_index():
+		df = pl.DataFrame({
+			"acc": ["SRR13684378", "SRR30310804", "SRR30310805", "SRR9291314"],
+			"__index__sample": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
+		})
+		df = ranchero.rancheroize(df)
+		assert sorted(df.columns) == ["__index__sample", "run_index"]
+		print("✅ Rancheroize converts acc to run_index")
+
 	def removing_nulls_from_an_index_column():
 		df = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", None, "bizz.fq"]})
 		df = ranchero.check_index(df)
 		assert df.shape[0] == 3
 		print("✅ Removing nulls from an index column")
 
+	rancheroize_renames_acc_to_run_when_index()
+	rancheroize_renames_acc_to_run_when_not_index()
 	removing_nulls_from_an_index_column()
 
 def dupe_index_handling():
@@ -310,19 +330,19 @@ def run_to_sample_index_swap():
 	})
 	flipped = ranchero.run_index_to_sample_index(df)
 	flipped_goal = pl.DataFrame({
-		"__index__sample_index": ["SAMN17861658", "SAMN41021645", "SAMN12046450"],
+		"__index__sample": ["SAMN17861658", "SAMN41021645", "SAMN12046450"],
 		"organism": ["Homo sapiens", "Homo sapiens", "Homo sapiens"],
 		"purposely_conflicting_metadata": [["foo"], ["bar", "bizz"], ["buzz"]],
-		"run": [["SRR13684378"], ["SRR30310804", "SRR30310805"], ["SRR9291314"]],
+		"run_index": [["SRR13684378"], ["SRR30310804", "SRR30310805"], ["SRR9291314"]],
 	})
 	ranchero.check_index(flipped)
 	flipped = ranchero.NeighLib.sort_list_str_col(flipped, "purposely_conflicting_metadata", safe=False)
-	flipped = ranchero.NeighLib.sort_list_str_col(flipped, "run", safe=False)
+	flipped = ranchero.NeighLib.sort_list_str_col(flipped, "run_index", safe=False)
 	flipped_goal = ranchero.NeighLib.sort_list_str_col(flipped_goal, "purposely_conflicting_metadata", safe=False)
-	flipped_goal = ranchero.NeighLib.sort_list_str_col(flipped_goal, "run", safe=False)
+	flipped_goal = ranchero.NeighLib.sort_list_str_col(flipped_goal, "run_index", safe=False)
 	pl.testing.assert_frame_equal(
-		flipped.sort("__index__sample_index").select(['__index__sample_index', "organism", "purposely_conflicting_metadata", "run"]),
-		flipped_goal.sort("__index__sample_index").select(['__index__sample_index', "organism", "purposely_conflicting_metadata", "run"])
+		flipped.sort("__index__sample").select(['__index__sample', "organism", "purposely_conflicting_metadata", "run_index"]),
+		flipped_goal.sort("__index__sample").select(['__index__sample', "organism", "purposely_conflicting_metadata", "run_index"])
 	)
 	print("✅ Flipping run-indexed dataframe to sample-indexed dataframe")
 
@@ -574,13 +594,19 @@ def merge_stuff():
 
 
 	# Blocking a merge due to either of the dataframes having dupes in the merge_upon column
-hellish_cfg_tests()
-file_parsing()
+
+# dependencies
 polars_null_handling()
+
+# very basics
+hellish_cfg_tests()
+dupe_index_handling()
+miscellanous_index_stuff()
+file_parsing()
+
+# fancy stuff
+run_to_sample_index_swap()
 general_utilities()
 standardization()
-miscellanous_index_stuff()
-dupe_index_handling()
-run_to_sample_index_swap()
 merge_stuff()
 

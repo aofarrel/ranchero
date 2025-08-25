@@ -548,10 +548,6 @@ class FileReader():
 		if self.cfg.intermediate_files: self.NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
 
-	def polars_run_to_sample(self, polars_df, sample_index='sample_index', run_index='__index__run'):
-		"""Public wrapper for run_to_sample_index()"""
-		return self.run_to_sample_index(polars_df, sample_index=sample_index, run_index=run_index)
-
 	def get_not_unique_in_col(self, polars_df, column):
 		return polars_df.filter(pl.col(column).is_duplicated())
 		# polars_df.filter(pl.col(column).is_duplicated()).select(column).unique()
@@ -646,7 +642,8 @@ class FileReader():
 		return grouped_df_
 
 
-	def run_to_sample_index(self, polars_df, run_index='run_index', sample_index='sample_index', skip_rancheroize=False, drop_bad_news=True):
+	def run_to_sample_index(self, polars_df, current_run_index='__index__run', current_sample_index='sample_index',
+		output_run_index="run_index", output_sample_index="__index__sample", skip_rancheroize=False, drop_bad_news=True):
 		"""
 		Flattens an input file using polar. This is designed to essentially turn run accession indexed dataframes
 		into BioSample-indexed dataframes. This will typically create columns of type list.
@@ -666,47 +663,38 @@ class FileReader():
 		[SRR126]        | SAMN3        | [bar]
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
-		self.NeighLib.check_index(polars_df, manual_index_column=run_index)
-		assert polars_df.filter(pl.col(run_index).is_duplicated()).shape[0] == 0 # handled by check_index
-		assert sample_index in polars_df.columns
-		assert run_index in polars_df.columns
-		self.logging.debug(f"Sample index {sample_index} is in columns, and so is run index {run_index}")
+		assert polars_df.filter(pl.col(current_run_index).is_duplicated()).shape[0] == 0 # handled by check_index
+		assert current_run_index in polars_df.columns
+		assert current_sample_index in polars_df.columns
+		run_index_will_temporarily_be = self.NeighLib.get_hypothetical_index_basename(current_run_index)
+		samp_index_will_temporarily_be = self.NeighLib.get_hypothetical_index_fullname(current_sample_index)
+		assert run_index_will_temporarily_be not in polars_df.columns
+		assert samp_index_will_temporarily_be not in polars_df.columns
+		assert output_run_index not in polars_df.columns
+		assert output_sample_index not in polars_df.columns
 
-		self.logging.debug("After check_index(), null counts in each column are as follows:")
-		self.logging.debug(polars_df.null_count())
-		nulls_in_sample_index = polars_df.with_columns(pl.when(
-			pl.col(sample_index).is_null())
-			.then(pl.col(run_index))
-			.otherwise(None)
-			.alias(f"{run_index} with null {sample_index}")).drop_nulls(subset=f"{run_index} with null {sample_index}")
-		if nulls_in_sample_index.shape[0] > 0:
-			if drop_bad_news:
-				self.logging.warning(f"Found {nulls_in_sample_index.shape[0]} rows with null values for {sample_index}. Dropping...")
-				polars_df = polars_df.drop_nulls(subset=sample_index)
-			else:
-				self.logging.error(f"""Found {nulls_in_sample_index.shape[0]} rows with null values for {sample_index}.
-					To drop these in-place instead of erroring, set drop_bad_news to True. Here's {run_index} where {sample_index} is null:""")
-				self.NeighLib.super_print_pl(nulls_in_sample_index)
-				exit(1)
-		self.logging.debug("After handling of nulls in sample index, null counts in each column are as follows:")
-		self.logging.debug(polars_df.null_count())
+		# check the run index AND the sample index, since both are currently strings
+		# the check_index of current_sample_index does NOT overwrite the current df on purpose!
+		polars_df = self.NeighLib.check_index(polars_df, manual_index_column=current_run_index, allow_bad_name=True)
+		self.NeighLib.check_index(polars_df, manual_index_column=current_sample_index, allow_bad_name=True)
 
 		if not skip_rancheroize:
 			self.logging.debug("Rancheroizing run-indexed dataframe")
-			polars_df = self.NeighLib.rancheroize_polars(polars_df) # runs check_index()
-		else:
-			polars_df = self.NeighLib.check_index(polars_df) # it's your last chance to find non-SRR/ERR/DRR run indeces
+			polars_df = self.NeighLib.rancheroize_polars(polars_df) # runs check_index() too, and converts __index__acc
+		# we already ran check_index() earlier and didn't make any changes so need to run it again in the true case
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
-		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, run_index, sample_index)
-		new_index_name = self.NeighLib.get_hypothetical_index_fullname(sample_index)
-		version_with_nested_lists = self.NeighLib.mark_index(version_with_nested_lists, sample_index, rm_existing_index=True)
+		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, current_run_index, current_sample_index)
+		version_with_nested_lists = self.NeighLib.mark_index(version_with_nested_lists, current_sample_index, rm_existing_index=True)
 		polars_df = self.NeighLib.null_lists_of_len_zero(
 			self.NeighLib.flatten_all_list_cols_as_much_as_possible(
 				version_with_nested_lists
 			)
 		)
-		polars_df = self.NeighLib.check_index(polars_df, new_index_name)
+		print(polars_df.columns)
+		polars_df = self.NeighLib.check_index(polars_df)
+		polars_df = polars_df.rename({run_index_will_temporarily_be: output_run_index, samp_index_will_temporarily_be:output_sample_index})
+		polars_df = self.NeighLib.check_index(polars_df)
 		return polars_df
 
 	def polars_fix_attributes_and_json_normalize(self, polars_df,

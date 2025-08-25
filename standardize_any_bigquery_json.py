@@ -1,6 +1,7 @@
 VERBOSE = False
 JSON_PATH = "/Users/aofarrel/Downloads/bq-results-20250801-215940-1754085716223.json"
-OUT_PATH = "./my_very_cool_c_auris_metadata.json"
+OUT_PATH = "./my_very_cool_c_auris_metadata.tsv"
+INDEX_BY_BIOSAMPLE = True
 
 import time
 start = time.time()
@@ -18,36 +19,44 @@ else:
 
 ranchero.Configuration.set_config({"mycobacterial_mode": False})
 start = time.time()
-json = ranchero.from_bigquery(JSON_PATH, auto_rancheroize=False, normalize_attributes=True, auto_standardize=False)
+polars_df = ranchero.from_bigquery(JSON_PATH, auto_rancheroize=False, normalize_attributes=True, auto_standardize=False)
 print(f"Read BigQuery JSON in {time.time() - start:.4f} seconds")
 
 # this dumps some information that will help me make the standardization functions faster
 if VERBOSE:
-	ranchero.dfprint(pl.Series(json.select("isolate_sam_ss_dpl100")).value_counts(sort=True, parallel=True, normalize=True))
+	ranchero.dfprint(pl.Series(polars_df.select("isolate_sam_ss_dpl100")).value_counts(sort=True, parallel=True, normalize=True))
 	for kolumn in ranchero.statics.kolumns.equivalence["geoloc_info"]:
-		if kolumn in json.columns:
-			ranchero.dfprint(pl.Series(json.select(kolumn)).value_counts(sort=True, parallel=True, normalize=True))
+		if kolumn in polars_df.columns:
+			ranchero.dfprint(pl.Series(polars_df.select(kolumn)).value_counts(sort=True, parallel=True, normalize=True))
 		else:
 			print(f"{kolumn} not in dataframe")
 	for kolumn in ranchero.statics.kolumns.equivalence["isolation_source"]:
-		if kolumn in json.columns:
-			ranchero.dfprint(pl.Series(json.select(kolumn)).value_counts(sort=True, parallel=True, normalize=True))
+		if kolumn in polars_df.columns:
+			ranchero.dfprint(pl.Series(polars_df.select(kolumn)).value_counts(sort=True, parallel=True, normalize=True))
 		else:
 			print(f"{kolumn} not in dataframe")
 
 
-start, json = time.time(), ranchero.rancheroize(json)
+start, polars_df = time.time(), ranchero.rancheroize(polars_df)
 print(f"Rancheroized in {time.time() - start:.4f} seconds")
-start, json = time.time(), ranchero.standardize_countries(json)
+start, polars_df = time.time(), ranchero.standardize_countries(polars_df)
 print(f"Standardized countries in {time.time() - start:.4f} seconds")
-start, json = time.time(), ranchero.cleanup_dates(json)
+start, polars_df = time.time(), ranchero.cleanup_dates(polars_df)
 print(f"Standardized dates in {time.time() - start:.4f} seconds")
-start, json = time.time(), ranchero.standardize_sample_source(json)
+start, polars_df = time.time(), ranchero.standardize_sample_source(polars_df)
 print(f"Standardized sample source in {time.time() - start:.4f} seconds")
-start, json = time.time(), ranchero.standardize_hosts(json)
+start, polars_df = time.time(), ranchero.standardize_hosts(polars_df)
 print(f"Standardized hosts in {time.time() - start:.4f} seconds")
 
 if VERBOSE:
-	ranchero.dfprint(json.select(ranchero.valid_cols(json, ['__index__acc', 'BioProject', 'date_collected', 'host_scienname', 'isolation_source', 'isolation_source_raw', 'continent', 'country', 'region'])))
-ranchero.to_tsv(json, OUT_PATH)
+	ranchero.dfprint(polars_df.select(ranchero.valid_cols(polars_df, ['__index__run', 'BioProject', 'date_collected', 'host_scienname', 'isolation_source', 'isolation_source_raw', 'continent', 'country', 'region'])))
+
+if INDEX_BY_BIOSAMPLE:
+	polars_df = ranchero.run_index_to_sample_index(polars_df)
+	polars_df = polars_df.select(ranchero.valid_cols(polars_df, ["__index__sample", "run_index", "mbytes", "platform", "instrument", "BioProject", "organism", "assay_type", "librarylayout",	"bases", "date_sequenced",	"date_collected", "genotype_sam_ss_dpl92", "clade_sam",	"host_disease", "strain_sam_ss_dpl139", "host_info", "country", "continent", "region", "isolation_source", "host_scienname", "host_confidence", "host_commonname"]))
+
+ranchero.to_tsv(polars_df, OUT_PATH)
+
+
+
 
