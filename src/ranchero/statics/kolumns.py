@@ -48,14 +48,14 @@ equivalence = {
 		'platform': ['platform', 'Platform'], # platform_sam and platform_run seem to be something else
 		'primary_search': ['primary_search'],
 		'region': ['region'],
-		'run_index': ['run_index', 'acc', 'run', 'Run', 'run_accession', 'run_acc'],
-		'sample_index': ['sample_index', 'biosample', 'BioSample', 'Biosample', 'sample'],
+		'run_id': ['run_id', 'run_index', 'acc', 'run', 'Run', 'run_accession', 'run_acc'],
+		'sample_id': ['sample_id', 'sample_index', 'biosample', 'BioSample', 'Biosample', 'sample'],
 		'sra_study': ['sra_study', 'SRA Study'], # SRP ID
 		'strain': ['strain', 'strain_sam_ss_dpl139', 'strain_name_alias_sam', 'strain_geno', 'sub_strain_sam_s_dpl389', 'strain_genotype_sam_s_dpl382', 'cell_line_sam', 'cell_line_run'],
 		'SRX_id': ['SRX_id', 'experiment', 'Experiment'], # DO NOT USE experiment_sam! that is something totally different! 
 		'SRS_id': ['SRS_id', 'sample_acc'], # SRS/ERS/DRS accession
 	}
-id_columns = equivalence['run_index'] + equivalence['sample_index'] + equivalence['SRS_id'] + equivalence['SRX_id']
+id_columns = equivalence['run_id'] + equivalence['sample_id'] + equivalence['SRS_id'] + equivalence['SRX_id']
 assert len(set(sum(equivalence.values(), []))) == len(sum(equivalence.values(), []))  # effectively asserts no shared values (both within a key's value-lists, and across all other value-lists)
 
 # Once columns are merged, the "equivalence" columns are dropped since they have redundant information.
@@ -65,7 +65,7 @@ columns_to_drop_after_rancheroize = [item for value in equivalence.values() for 
 # primary_search tends to include values from these columns (this intentionally includes pre-rancheroized columns.)
 common_primary_search_values = [
 	# rancheroized
-	'BioProject', 'isolation_source', 'library_name', 'run_index', 'sample_index', 'sra_study', 'SRX_id', 'SRS_id',
+	'BioProject', 'isolation_source', 'library_name', 'run_id', 'sample_id', 'sra_study', 'SRX_id', 'SRS_id',
 	# not rancheroized but common
 	'acc', 'bioproject', 'biosample', 'experiment', 'isolate_run', 'isolate_sam_ss_dpl100', 'library_id', 'sample_name', 'sample_acc', 'sample_id_run']
 
@@ -108,7 +108,7 @@ list_to_set_uniq = [
 	'pheno_source',
 	'primary_search',
 	'geoloc_info_unhandled',
-	'run_index',
+	'run_id',
 	'sra_study',
 	'libraryselection',
 	'librarylayout',
@@ -130,7 +130,7 @@ list_to_list_silent = [
 list_throw_error = []
 
 # Throw an error, even if the mismatch is just a null thing
-list_throw_error_strict = ["BioSample", "sample_index"]
+list_throw_error_strict = ["BioSample", "sample_id"]
 
 # In: pl.List() of any type
 # Out: Inner type if flattening existing list, falling back on left or right if merge

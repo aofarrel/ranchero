@@ -7,7 +7,7 @@ pl.Config.set_tbl_width_chars(200)
 pl.Config.set_fmt_str_lengths(50)
 pl.Config.set_fmt_table_cell_list_len(5)
 
-table = Ranchero.from_tsv(sys.argv[1], auto_rancheroize=False, list_columns=["run_index"]) # collection is also a list col but not in all versions
+table = Ranchero.from_tsv(sys.argv[1], auto_rancheroize=False, list_columns=["run_id"]) # collection is also a list col but not in all versions
 
 # If you just want to view value counts without writing to a TSV, do this instead:
 Ranchero.NeighLib.print_value_counts(table, ['tbprof_drtype', 'tbprof_sublin', 'organism', 'lineage', 'continent', 'country'])

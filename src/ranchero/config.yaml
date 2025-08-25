@@ -25,9 +25,9 @@ check_index: True
 # - dropall: pl.DataFrame.unique(subset=[index_column], keep='none') + warn
 dupe_index_handling: 'verbose_warn'
 
-# Values in run_index column must start with SRR, ERR, or DRR
+# Values in run_id column must start with SRR, ERR, or DRR
 force_INSDC_runs: True
-# Values in sample_index column must start with SAMN, SAME, or SAMD
+# Values in sample_id column must start with SAMN, SAME, or SAMD
 force_INSDC_samples: False
 
 # When querying gcloud for metadata, which metadata fields can be returned?

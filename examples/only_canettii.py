@@ -13,7 +13,7 @@ _c_ = "\033[0;36m"
 print(f"Module import time: {time.time() - start:.4f}")
 start_from_scratch = True
 inject = True
-do_run_index_merges = True
+do_run_id_merges = True
 
 module_start = time.time()
 
@@ -29,7 +29,7 @@ def inital_file_parse():
 
 	# we don't need these columns for what we're tryna do
 	cool_columns = ['libraryselection', 'librarysource', 'librarylayout', 'platform', 'SRS_id',
-					'sample_index', 'run_index', 'assay_type', 'center_name', 'SRX_id', 'sra_study',
+					'sample_id', 'run_id', 'assay_type', 'center_name', 'SRX_id', 'sra_study',
 					'organism', 'clade', 'strain', 'lineage']
 	for column in tba6.columns:
 		if column not in cool_columns:
@@ -42,7 +42,7 @@ def inital_file_parse():
 	gc.collect()
 	return tba6
 
-def sample_index_merges(merged_runs):
+def sample_id_merges(merged_runs):
 	merged = merged_runs
 
 	# merged with sample-indexed data
@@ -60,10 +60,10 @@ def sample_index_merges(merged_runs):
 	print(f"{_b_}Processing diffs{_bb_}")
 
 	diffs = Ranchero.from_tsv("./inputs/pipeline/probable_diffs.txt", auto_rancheroize=False)
-	merged = Ranchero.merge_dataframes(merged, diffs, merge_upon="sample_index", right_name="diff", indicator="collection", drop_exclusive_right=False)
+	merged = Ranchero.merge_dataframes(merged, diffs, merge_upon="sample_id", right_name="diff", indicator="collection", drop_exclusive_right=False)
 	
 	denylist = Ranchero.from_tsv("./inputs/pipeline/denylist_2024-07-23_lessdupes.tsv", auto_rancheroize=False).drop('reason')
-	merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="sample_index", right_name="denylist", indicator="collection", drop_exclusive_right=False)
+	merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="sample_id", right_name="denylist", indicator="collection", drop_exclusive_right=False)
 
 	print(f"Merged with pipeline information in {time.time() - start:.4f} seconds")
 	return merged
@@ -71,7 +71,7 @@ def sample_index_merges(merged_runs):
 ########################################################################
 
 tba6_standardized = inital_file_parse()
-merged = sample_index_merges(tba6_standardized)
+merged = sample_id_merges(tba6_standardized)
 
 
 print(f"We started with {merged.shape[0]} samples for all of the genus")
@@ -79,12 +79,12 @@ merged_just_diffs = merged.filter(pl.col('collection').list.contains(pl.lit('dif
 print(f"Of which are {merged_just_diffs.shape[0]} seems to have made a diff file")
 merged_just_canettii_diffs = merged_just_diffs.filter(pl.col('organism') == pl.lit('Mycobacterium canettii'))
 print(f"Of which {merged_just_canettii_diffs.shape[0]} samples are canettii")
-Ranchero.to_tsv(merged_just_canettii_diffs.select('sample_index'), f"./ranchero_{rc}_just_canettii_diffs.tsv")
+Ranchero.to_tsv(merged_just_canettii_diffs.select('sample_id'), f"./ranchero_{rc}_just_canettii_diffs.tsv")
 
 print(f"We started with {merged.shape[0]} samples for all of the genus")
 merged_just_canettii = merged.filter(pl.col('organism') == pl.lit('Mycobacterium canettii'))
 print(f"Of which {merged_just_canettii.shape[0]} samples are canettii (including ones without a diff)")
-Ranchero.to_tsv(merged_just_canettii.select('sample_index'), f"./ranchero_{rc}_just_canettii.tsv")
+Ranchero.to_tsv(merged_just_canettii.select('sample_id'), f"./ranchero_{rc}_just_canettii.tsv")
 
 print(f"Finished entire module in {time.time() - module_start} seconds")
 

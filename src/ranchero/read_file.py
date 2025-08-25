@@ -449,7 +449,7 @@ class FileReader():
 		
 		# TODO: add check for BioSample containing 'COULDNT_PARSE_BIOSAMPLE'
 		
-		blessed_dataframe = blessed_dataframe.rename({'BioSample': 'sample_index', 'SRR_id': 'run_index'})
+		blessed_dataframe = blessed_dataframe.rename({'BioSample': 'sample_id', 'SRR_id': 'run_id'})
 
 		if index_by_file:
 			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'submitted_files': 'file'}), 'file')
@@ -460,13 +460,13 @@ class FileReader():
 				), force_index=file_index)
 		else:
 			# TODO: sum() submitted_file_sizes
-			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'run_index': 'run'}), 'run')
-			run_index = self.NeighLib.get_index(blessed_dataframe)
-			if blessed_dataframe.select(pl.col(run_index).n_unique() != pl.col(run_index).len()):
-				self.logging.warning(f"Found non-unique values for {run_index} (SRR_id)")
-			blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_index).agg(
-				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != run_index]
-			), force_index=run_index)
+			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'run_id': 'run'}), 'run')
+			run_id = self.NeighLib.get_index(blessed_dataframe)
+			if blessed_dataframe.select(pl.col(run_id).n_unique() != pl.col(run_id).len()):
+				self.logging.warning(f"Found non-unique values for {run_id} (SRR_id)")
+			blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_id).agg(
+				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != run_id]
+			), force_index=run_id)
 		if check_index: blessed_dataframe = self.NeighLib.check_index(blessed_dataframe, df_name=xml_name)
 		return blessed_dataframe
 
@@ -560,7 +560,7 @@ class FileReader():
 		)
 		return polars_df
 
-	def polars_explode_delimited_rows(self, polars_df, column="run_index", delimiter=";", drop_new_non_unique=True):
+	def polars_explode_delimited_rows(self, polars_df, column="run_id", delimiter=";", drop_new_non_unique=True):
 		"""
 		column			some_other_column		
 		"SRR123;SRR124"	12
@@ -586,23 +586,23 @@ class FileReader():
 			pass
 		return exploded
 
-	def run_to_sample_grouping_simple(self, polars_df, run_index, sample_index):
+	def run_to_sample_grouping_simple(self, polars_df, run_id, sample_id):
 		grouped_df = (
 			polars_df
-			.group_by(sample_index)
+			.group_by(sample_id)
 			.agg([
-				pl.concat_list(run_index).alias(run_index),
+				pl.concat_list(run_id).alias(run_id),
 				*[pl.concat_list(col).alias(col) for col in non_index_columns]
 			])
 		)
 		return grouped_df
 
-	def run_to_sample_grouping_clever_method(self, polars_df, run_index, sample_index):
+	def run_to_sample_grouping_clever_method(self, polars_df, run_id, sample_id):
 		"""
 		At the cost of a slower initial process, this ultimately saves 10-20 seconds upon being flattened.
 		"""
 		self.logging.debug("Using some tricks...")
-		non_index_columns = [col for col in polars_df.columns if col not in [run_index, sample_index]]
+		non_index_columns = [col for col in polars_df.columns if col not in [run_id, sample_id]]
 		listbusters, listmakers, listexisters = [], [], [col for col, dtype in polars_df.schema.items() if (isinstance(dtype, pl.List) and dtype.inner == pl.Utf8)]
 		
 		df_without_lists_of_string_columns = polars_df.select([
@@ -611,7 +611,7 @@ class FileReader():
 		])
 		
 		# get a dataframe that tells us the number of unique values with doing a group_by()
-		df_agg_nunique = df_without_lists_of_string_columns.group_by(sample_index).n_unique()
+		df_agg_nunique = df_without_lists_of_string_columns.group_by(sample_id).n_unique()
 		for other_column in non_index_columns:
 			# if non-index column isn't already a list (of any type), but is in df_without_lists_of_string_columns:
 			if polars_df.schema[other_column] is not pl.List and other_column in df_agg_nunique.columns:
@@ -625,9 +625,9 @@ class FileReader():
 
 		grouped_df_ = (
 			polars_df
-			.group_by(sample_index)
+			.group_by(sample_id)
 			.agg([
-				pl.concat_list(run_index).alias(run_index),
+				pl.concat_list(run_id).alias(run_id),
 				*[
 					(pl.first(col).alias(col) if col in listbusters else pl.concat_list(col).alias(col))
 					for col in non_index_columns
@@ -642,41 +642,41 @@ class FileReader():
 		return grouped_df_
 
 
-	def run_to_sample_index(self, polars_df, current_run_index='__index__run', current_sample_index='sample_index',
-		output_run_index="run_index", output_sample_index="__index__sample", skip_rancheroize=False, drop_bad_news=True):
+	def run_to_sample_index(self, polars_df, current_run_id='__index__run_id', current_sample_id='sample_id',
+		output_run_id="run_id", output_sample_id="__index__sample_id", skip_rancheroize=False, drop_bad_news=True):
 		"""
 		Flattens an input file using polar. This is designed to essentially turn run accession indexed dataframes
 		into BioSample-indexed dataframes. This will typically create columns of type list.
-		REQUIRES run index to be called "run_index" and sample index to be called "sample_index" exactly.
+		REQUIRES run index to be called "run_id" and sample index to be called "sample_id" exactly.
 
-		run_index | sample_index | foo
+		run_id | sample_id | foo
 		-------------------------------
 		SRR123    | SAMN1        | bar
 		SRR124    | SAMN1        | buzz
 		SRR125    | SAMN2        | bizz
 		SRR126    | SAMN3        | bar
 					 ⬇️
-		run_index       | sample_index | foo
+		run_id       | sample_id | foo
 		---------------------------------------
 		[SRR123,SRR124] | SAMN1        | [bar, buzz]
 		[SRR125]        | SAMN2        | [bizz]
 		[SRR126]        | SAMN3        | [bar]
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
-		assert polars_df.filter(pl.col(current_run_index).is_duplicated()).shape[0] == 0 # handled by check_index
-		assert current_run_index in polars_df.columns
-		assert current_sample_index in polars_df.columns
-		run_index_will_temporarily_be = self.NeighLib.get_hypothetical_index_basename(current_run_index)
-		samp_index_will_temporarily_be = self.NeighLib.get_hypothetical_index_fullname(current_sample_index)
-		assert run_index_will_temporarily_be not in polars_df.columns
+		assert polars_df.filter(pl.col(current_run_id).is_duplicated()).shape[0] == 0 # handled by check_index
+		assert current_run_id in polars_df.columns
+		assert current_sample_id in polars_df.columns
+		run_id_will_temporarily_be = self.NeighLib.get_hypothetical_index_basename(current_run_id)
+		samp_index_will_temporarily_be = self.NeighLib.get_hypothetical_index_fullname(current_sample_id)
+		assert run_id_will_temporarily_be not in polars_df.columns
 		assert samp_index_will_temporarily_be not in polars_df.columns
-		assert output_run_index not in polars_df.columns
-		assert output_sample_index not in polars_df.columns
+		assert output_run_id not in polars_df.columns
+		assert output_sample_id not in polars_df.columns
 
 		# check the run index AND the sample index, since both are currently strings
-		# the check_index of current_sample_index does NOT overwrite the current df on purpose!
-		polars_df = self.NeighLib.check_index(polars_df, manual_index_column=current_run_index, allow_bad_name=True)
-		self.NeighLib.check_index(polars_df, manual_index_column=current_sample_index, allow_bad_name=True)
+		# the check_index of current_sample_id does NOT overwrite the current df on purpose!
+		polars_df = self.NeighLib.check_index(polars_df, manual_index_column=current_run_id, allow_bad_name=True)
+		self.NeighLib.check_index(polars_df, manual_index_column=current_sample_id, allow_bad_name=True)
 
 		if not skip_rancheroize:
 			self.logging.debug("Rancheroizing run-indexed dataframe")
@@ -684,16 +684,15 @@ class FileReader():
 		# we already ran check_index() earlier and didn't make any changes so need to run it again in the true case
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
-		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, current_run_index, current_sample_index)
-		version_with_nested_lists = self.NeighLib.mark_index(version_with_nested_lists, current_sample_index, rm_existing_index=True)
+		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, current_run_id, current_sample_id)
+		version_with_nested_lists = self.NeighLib.mark_index(version_with_nested_lists, current_sample_id, rm_existing_index=True)
 		polars_df = self.NeighLib.null_lists_of_len_zero(
 			self.NeighLib.flatten_all_list_cols_as_much_as_possible(
 				version_with_nested_lists
 			)
 		)
-		print(polars_df.columns)
 		polars_df = self.NeighLib.check_index(polars_df)
-		polars_df = polars_df.rename({run_index_will_temporarily_be: output_run_index, samp_index_will_temporarily_be:output_sample_index})
+		polars_df = polars_df.rename({run_id_will_temporarily_be: output_run_id, samp_index_will_temporarily_be:output_sample_id})
 		polars_df = self.NeighLib.check_index(polars_df)
 		return polars_df
 
