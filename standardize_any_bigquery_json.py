@@ -14,7 +14,7 @@ print(f"Imported ranchero in {time.time() - start:.4f} seconds")
 if VERBOSE:
 	ranchero.Configuration.set_config({"loglevel": 20})
 else:
-	ranchero.Configuration.set_config({"loglevel": 40})
+	ranchero.Configuration.set_config({"loglevel": 30})
 
 
 ranchero.Configuration.set_config({"mycobacterial_mode": False})

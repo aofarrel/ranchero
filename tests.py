@@ -235,7 +235,6 @@ def miscellanous_index_stuff():
 			"__index__sample_id": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
 		})
 		df = ranchero.rancheroize(df)
-		print(df)
 		assert sorted(df.columns) == ["__index__sample_id", "run_id"]
 		print("✅ Rancheroize converts acc to run_id when index is something else")
 

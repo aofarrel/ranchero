@@ -268,7 +268,7 @@ class NeighLib:
 					self.polars_to_tsv(duplicate_df, "dupes_in_index.tsv")
 					self.logging.warning(f"Found {n_dupe_indeces} duplicate indeces in {df_name}'s index {index_to_check} (dumped to dupes_in_index.tsv), "
 						"will keep one instance per dupe")
-					self.dfprint(duplicate_df.select(self.valid_cols(duplicate_df, [index_to_check, 'run_id', 'sample_id', 'submitted_files_bytes'])).sort(index_to_check), str_len=120, width=120)
+					self.dfprint(duplicate_df.select(self.valid_cols(duplicate_df, [index_to_check, 'run_id', 'sample_id', 'submitted_files_bytes'])).sort(index_to_check), str_len=120, width=120, loglevel=30)
 				polars_df = subset
 			elif dupe_index_handling == 'dropall':
 				subset = polars_df.unique(subset=[index_to_check], keep="none")
@@ -309,7 +309,7 @@ class NeighLib:
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
 					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
-					print(invalid_rows)
+					self.dfprint(invalid_rows, loglevel=30)
 					return valid_rows
 			elif column in kolumns.equivalence['run_id'] and force_INSDC_runs and polars_df.schema[column] != pl.List:
 				good = (
@@ -321,7 +321,7 @@ class NeighLib:
 				valid_rows = polars_df.filter(good)
 				if len(invalid_rows) > 0:
 					self.logging.warning(f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR (will be dropped, leaving {len(valid_rows)} afterwards):")
-					print(invalid_rows)
+					self.dfprint(invalid_rows, loglevel=30)
 					return valid_rows
 			else:
 				continue
@@ -620,10 +620,12 @@ class NeighLib:
 		print(f"┃{header}┃")
 		print(f"┗{'━' * len(header)}┛")
 
-	@staticmethod
-	def dfprint(polars_df, cols=10, rows=20, str_len=40, list_len=10, width=140):
+	def dfprint(self, polars_df, cols=10, rows=20, str_len=40, list_len=10, width=140, loglevel=None):
 		with pl.Config(tbl_cols=cols, tbl_rows=rows, fmt_str_lengths=str_len, fmt_table_cell_list_len=list_len, tbl_width_chars=width):
-			print(polars_df)
+			if loglevel is None or loglevel >= self.logging.getEffectiveLevel():
+				print(polars_df)
+			else:
+				pass
 
 	@staticmethod
 	def super_print_pl(polars_df, header, select=None, str_len=45):
@@ -1216,7 +1218,7 @@ class NeighLib:
 				nulls = polars_df.filter(pl.col(column).list.eval(pl.element().is_null()).list.any())
 				if len(nulls) > 0:
 					self.logging.debug("Found lists with null values:")
-					print(polars_df.select(self.get_valid_id_columns(polars_df) + [column]))
+					self.dfprint(polars_df.select(self.get_valid_id_columns(polars_df) + [column]), loglevel=10)
 			return polars_df.with_columns(pl.col(column).list.drop_nulls())
 		return polars_df
 
@@ -1301,7 +1303,7 @@ class NeighLib:
 				if not rename_index.startswith(INDEX_PREFIX):
 					polars_df = self.mark_index(polars_df, rename_index)
 		index = self.get_index(polars_df, guess=False) # necessary whether or not it was defined already!! if already defined this will update to the marked index
-		
+
 		# bigquery special handling, for consistency's sake
 		if index == self.get_hypothetical_index_fullname("acc"):
 			self.logging.warning(f"Changing index name from {index} to {self.get_hypothetical_index_fullname('run_id')}")
@@ -1570,7 +1572,7 @@ class NeighLib:
 							if self.logging.getEffectiveLevel() == 10:
 								long_boi = polars_df.filter(pl.col(col).list.len() > 1).select(self.valid_cols(long_boi, ['sample_id', 'clade', 'organism', 'lineage', 'strain']))
 								self.logging.debug(f"Non-1 {col} values after attempting to de-long them")
-								self.logging.debug(long_boi)
+								self.dfprint(long_boi, loglevel=10)
 							polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
 						else:
 							self.logging.debug(f"Taxoncore column {col} will not be adjusted further")
