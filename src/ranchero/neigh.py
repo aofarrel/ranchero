@@ -303,25 +303,33 @@ class NeighLib:
 				good = (
 					polars_df[column].str.starts_with("SAMN") |
 					polars_df[column].str.starts_with("SAME") |
-					polars_df[column].str.starts_with("SAMD")
+					polars_df[column].str.starts_with("SAMD") |
+					polars_df[column].is_null() # we already dropped nulls from the index, so even if sample_id is the index column this is okay
 				)
-				invalid_rows = polars_df.filter(~good).drop([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_id'] + kolumns.equivalence['run_id'])])
+				invalid_rows = polars_df.filter(~good)
 				valid_rows = polars_df.filter(good)
+				columns_not_to_print = list(set([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_id'] + kolumns.equivalence['run_id'] + [index_to_check])]))
 				if len(invalid_rows) > 0:
-					self.logging.warning(f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD (will be dropped, leaving {len(valid_rows)} afterwards):")
-					self.dfprint(invalid_rows, loglevel=30)
+					msg_1 = f"Out of {len(polars_df)} samples, found {len(invalid_rows)} samples that don't start with SAMN/SAME/SAMD, "
+					msg_2 = f"whose rows will be dropped, leaving {len(valid_rows)} rows"
+					self.logging.warning(msg_1+msg_2)
+					self.dfprint(invalid_rows.drop(columns_not_to_print), loglevel=30)
 					return valid_rows
 			elif column in kolumns.equivalence['run_id'] and force_INSDC_runs and polars_df.schema[column] != pl.List:
 				good = (
 					polars_df[column].str.starts_with("SRR") |
 					polars_df[column].str.starts_with("ERR") |
-					polars_df[column].str.starts_with("DRR")
+					polars_df[column].str.starts_with("DRR") |
+					polars_df[column].is_null() # we already dropped nulls from the index, so even if run_id is the index column this is okay
 				)
-				invalid_rows = polars_df.filter(~good).drop([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_id'] + kolumns.equivalence['run_id'])])
+				invalid_rows = polars_df.filter(~good)
 				valid_rows = polars_df.filter(good)
+				columns_not_to_print = list(set([col for col in polars_df.columns if col not in (kolumns.equivalence['sample_id'] + kolumns.equivalence['run_id'] + [index_to_check])]))
 				if len(invalid_rows) > 0:
-					self.logging.warning(f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR (will be dropped, leaving {len(valid_rows)} afterwards):")
-					self.dfprint(invalid_rows, loglevel=30)
+					msg_1 = f"Out of {len(polars_df)} runs, found {len(invalid_rows)} runs that don't start with SRR/ERR/DRR, "
+					msg_2 = f"whose rows will be dropped, leaving {len(valid_rows)} rows"
+					self.logging.warning(msg_1+msg_2)
+					self.dfprint(invalid_rows.drop(columns_not_to_print), loglevel=30)
 					return valid_rows
 			else:
 				continue
