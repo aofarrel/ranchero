@@ -1,4 +1,3 @@
-import pandas as pd
 import polars as pl
 from contextlib import suppress
 import os
@@ -722,6 +721,7 @@ class FileReader():
 		* intermediate_files (set)
 		* verbose (set)
 		"""
+		self.logging.warning("Temporarily converting polars dataframe to pandas (this requires importing pandas which may add >10 seconds)")
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
 		cast_types = self._default_fallback('auto_cast_types', auto_cast_types)
 		rancheroize = self._default_fallback('auto_rancheroize', rancheroize)
