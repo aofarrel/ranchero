@@ -20,12 +20,16 @@ FileReader = FileReader(Configuration, NeighLib, Standardizer)
 from .extract import Extractor
 Extractor = Extractor(Configuration, NeighLib)
 
+from .query import Query
+Query = Query(Configuration, NeighLib)
+
 #from .analyze import *
 
 
 __all__ = [
 	"RancheroConfig",
 	"logger",
+	"Query",
 	"Extractor",
 	"Merger",
 	"Standardizer",

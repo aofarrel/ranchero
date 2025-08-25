@@ -1,0 +1,132 @@
+import subprocess
+import shutil
+import json
+import re
+import polars as pl
+from tqdm import tqdm
+from .statics import kolumns
+
+# https://peps.python.org/pep-0661/
+_DEFAULT_TO_CONFIGURATION = object()
+
+class Query:
+
+	def __init__(self, configuration, naylib):
+		if configuration is None:
+			raise ValueError("No configuration was passed to Query class. Ranchero is designed to be initialized with a configuration.")
+		else:
+			self.cfg = configuration
+			self.logging = self.cfg.logger
+			self.NeighLib = naylib
+
+	def _default_fallback(self, cfg_var, value):
+		if value == _DEFAULT_TO_CONFIGURATION:
+			return self.cfg.get_config(cfg_var)
+		return value
+
+	def add_aws_metadata(self, polars_df: pl.DataFrame, s3_column: str, output_size_column="bytes", no_sign_request=True, continue_on_s3_error=False):
+		"""
+		Get metadata (currently only size in bytes) of files/paths in a dataframe and save that to a new column.
+		"""
+		assert s3_column in polars_df
+		assert output_size_column not in polars_df.columns
+		if shutil.which("aws") is None:
+			self.logging.error("Couldn't find aws on $PATH")
+			exit(1)
+		joined_dfs = []
+		for s3_uri in tqdm(polars_df[s3_column]):
+			if continue_on_s3_error:
+				try:
+					temp_new_df = self._aws_s3_ls(s3_uri, no_sign_request=no_sign_request)
+				except subprocess.CalledProcessError as e:
+					self.logging.warning(f"Could not get metadata for {s3_uri}")
+					continue
+			else:
+				temp_new_df = self._aws_s3_ls(s3_uri, no_sign_request=no_sign_request)
+			joined_dfs.append(
+				polars_df.filter(pl.col(s3_column) == pl.lit(s3_uri)).join(
+					temp_new_df.rename({"s3_path_queried": s3_column, "bytes": output_size_column}), on=s3_column, how="left"
+				)
+			)
+		return pl.concat(joined_dfs, how='vertical', rechunk=True)
+
+	@staticmethod
+	def _aws_s3_ls(uri: str, no_sign_request=True):
+		"""
+		Get some metadata (currently just size in bytes) of a particular file via aws s3 ls
+
+		Currently doesn't support getting the datestamp/timestamp from last modified since
+		I'm not sure the best way to handle AWS's formatting of it. Also, AWS handles timezone
+		a little weirdly: https://github.com/aws/aws-cli/issues/5242
+
+		For simplicity's sake I set this up to only match the first hit. So if 
+		uri="s3://hprc-working/foo/bar/m84081_230623_212309_s3.hifi_reads.bc2015.bam"
+		but there's also a 
+		"s3://hprc-working/foo/bar/m84081_230623_212309_s3.hifi_reads.bc2015.bam.bai", a
+		downstream file if you would, I'm skipping that bai file.
+		"""
+		if no_sign_request:
+			aws_cmd = "aws", "s3", "ls", "--no-sign-request", uri
+		else:
+			aws_cmd = "aws", "s3", "ls", uri
+		result = subprocess.run(aws_cmd, check=True, capture_output=True, text=True)
+		rows = []
+		for line in result.stdout.strip().splitlines():
+			parts = line.strip().split(maxsplit=3)
+			if len(parts) == 4:
+				_, _, size_bytes, s3_path_queried_basename_only = parts # _, _, are datestamp and timestamp respectively
+				# s3_path_queried_basename_only is also unused but if we ever want downstream files too it may be helpful
+				rows.append([uri, int(size_bytes)])
+				break
+			else:
+				self.logging.error("Subprocess returned 0, but could not parse output from `aws s3 ls` command")
+				raise ValueError("Subprocess returned 0, but could not parse output from `aws s3 ls` command")
+		return pl.DataFrame(rows, schema=["s3_path_queried", "bytes"], orient="row")
+
+
+	def add_gcloud_metadata(self, polars_df: pl.DataFrame, gs_column: str, continue_on_gs_error=False, gs_metadata=_DEFAULT_TO_CONFIGURATION):
+		"""
+		Requires gcloud is on the path and, if necessary, authenticated.
+
+		TODO: allow user to define output column names? maybe via config?
+		"""
+		return_fields = self._default_fallback("gs_metadata", gs_metadata)
+		assert not any(column in return_fields for column in polars_df.columns)
+		if shutil.which("gcloud") is None:
+			self.logging.error("Couldn't find gcloud on $PATH")
+			exit(1)
+		for gs_uri in tqdm(polars_df[gs_column]):
+			if continue_on_gs_error:
+				try:
+					temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=gs_metadata)
+				except subprocess.CalledProcessError as e:
+					self.logging.warning(f"Could not get metadata for {gs_uri}")
+					continue
+			else:
+				temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=gs_metadata)
+			joined_dfs.append(
+				polars_df.filter(pl.col(gs_column) == pl.lit(gs_uri)).join(
+					temp_new_df.rename({"gs_uri": gs_column}), on=gs_column, how="left"
+				)
+			)
+		return pl.concat(joined_dfs, how='vertical', rechunk=True)
+
+	@staticmethod
+	def _gcloud_storage_objects_describe(uri: str, gs_metadata: list):
+		"""
+		Grabs all metadata for a given gs URI, then narrows down based on gs_metadata list.
+		"""
+		cmd = ["gcloud", "storage", "objects", "describe", obj, "--format", "json"]
+		result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+		metadata = json.loads(result.stdout)
+		print(metadata)
+		print(type(metadata))
+		output_df = pl.DataFrame({
+			"gs_uri": uri,
+			"created": metadata.get("timeCreated"),
+			"md5": metadata.get("md5Hash"),
+			"size": int(metadata.get("size", 0)),
+		})
+		return output_df.select(gs_metadata)
+
+

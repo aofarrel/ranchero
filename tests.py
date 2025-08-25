@@ -1,3 +1,5 @@
+SKIP_SLOW_TESTS = True
+
 import os
 import re
 import polars as pl
@@ -352,6 +354,15 @@ def run_to_sample_index_swap():
 def file_parsing(folder="./inputs/test"):
 
 	# Read TSV
+	def read_tsv(folder):
+		hprc = ranchero.from_tsv(f"{folder}/HPRC R2 Sequencing Data Index - hifi - sections.tsv", auto_rancheroize=False, auto_standardize=False, index="filename")
+		assert hprc.shape == (18, 51)
+		assert "__index__sample_id" not in hprc.columns
+		assert "__index__filename" in hprc.columns
+		assert hprc.select(["deepconsensus_coverage", "ntsm_score"]).dtypes == [pl.Float64, pl.Float64]
+		assert hprc.select(["lima_version", "lima_float_version"]).dtypes == [pl.Utf8, pl.Float64]
+		assert hprc.select(["mm_tag", "mm_review", "mm_remove"]).dtypes == [pl.Boolean, pl.Boolean, pl.Boolean]
+		print("✅ Read generic TSV file without standardize nor rancheroize")
 
 	# Read CSV via from_tsv(delimiter=","), and that CSV has internal commas within dquotes
 
@@ -489,8 +500,10 @@ def file_parsing(folder="./inputs/test"):
 		#bq = ranchero.standardize_everything(bq)
 		#standardized_columns_sorted = sorted(bq.columns)
 
+	read_tsv(folder)
 	read_json(folder)
-	bigquery_sra_metadata_and_taxonomic(folder)
+	if not SKIP_SLOW_TESTS:
+		bigquery_sra_metadata_and_taxonomic(folder)
 
 ### Standardization ###
 def standardization(folder="./inputs/test"):
@@ -593,7 +606,23 @@ def merge_stuff():
 	print("✅ dtype_list_int has correct schema")
 
 
-	# Blocking a merge due to either of the dataframes having dupes in the merge_upon column
+	# TODO Blocking a merge due to either of the dataframes having dupes in the merge_upon column
+	pass
+
+def query_other_tools(folder="./inputs/test"):
+	
+	def aws_get_size():
+		hprc = ranchero.from_tsv(f"{folder}/HPRC R2 Sequencing Data Index - hifi - sections.tsv", auto_rancheroize=False, auto_standardize=False, index="filename")
+		hprc = hprc.select(["__index__filename", "path"])
+		hprc = ranchero.Query.add_aws_metadata(hprc, s3_column="path")
+		print(hprc)
+
+	def gcp_get_other_stuff():
+		pass
+
+	aws_get_size()
+	gcp_get_other_stuff()
+
 
 # dependencies
 polars_null_handling()
@@ -610,3 +639,5 @@ general_utilities()
 standardization()
 merge_stuff()
 
+# even fancier stuff
+query_other_tools() # relies on file parsing and (polars built in only, so far anyway) merging
