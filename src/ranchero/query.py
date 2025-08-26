@@ -84,49 +84,79 @@ class Query:
 		return pl.DataFrame(rows, schema=["s3_path_queried", "bytes"], orient="row")
 
 
-	def add_gcloud_metadata(self, polars_df: pl.DataFrame, gs_column: str, continue_on_gs_error=False, gs_metadata=_DEFAULT_TO_CONFIGURATION):
+	def add_gcloud_metadata(self,
+			polars_df: pl.DataFrame,
+			gs_column: str,
+			output_prefix=None,
+			continue_on_gs_error=False,
+			gs_metadata=_DEFAULT_TO_CONFIGURATION):
 		"""
 		Requires gcloud is on the path and, if necessary, authenticated.
 
 		TODO: allow user to define output column names? maybe via config?
 		"""
 		return_fields = self._default_fallback("gs_metadata", gs_metadata)
-		assert not any(column in return_fields for column in polars_df.columns)
+		assert not any(f"{output_prefix}{column}" in return_fields for column in polars_df.columns)
 		if shutil.which("gcloud") is None:
 			self.logging.error("Couldn't find gcloud on $PATH")
 			exit(1)
+		joined_dfs = []
 		for gs_uri in tqdm(polars_df[gs_column]):
-			if continue_on_gs_error:
-				try:
-					temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=gs_metadata)
-				except subprocess.CalledProcessError as e:
-					self.logging.warning(f"Could not get metadata for {gs_uri}")
-					continue
+			if gs_uri is not None:
+				if continue_on_gs_error:
+					try:
+						temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=return_fields, output_prefix=output_prefix)
+					except subprocess.CalledProcessError as e:
+						self.logging.warning(f"Could not get metadata for {gs_uri}")
+						continue
+				else:
+					temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=return_fields, output_prefix=output_prefix)
+				self.logging.debug(temp_new_df)
+				temp_new_df = temp_new_df.rename({"gs_uri": gs_column})
 			else:
-				temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=gs_metadata)
+				# we still need to have a dummy df of just this row so it can be included in the pl.concat,
+				# or else we effectively drop any rows where gs_uri is null
+				temp_new_df = polars_df.filter(pl.col(gs_column) == pl.lit(gs_uri))
+
+			# join, whether or not we actually pinged Google this iteration
 			joined_dfs.append(
 				polars_df.filter(pl.col(gs_column) == pl.lit(gs_uri)).join(
-					temp_new_df.rename({"gs_uri": gs_column}), on=gs_column, how="left"
+					temp_new_df, on=gs_column, how="left"
 				)
 			)
+
 		return pl.concat(joined_dfs, how='vertical', rechunk=True)
 
 	@staticmethod
-	def _gcloud_storage_objects_describe(uri: str, gs_metadata: list):
+	def _gcloud_storage_objects_describe(uri: str, gs_metadata: list, output_prefix: str):
 		"""
 		Grabs all metadata for a given gs URI, then narrows down based on gs_metadata list.
 		"""
-		cmd = ["gcloud", "storage", "objects", "describe", obj, "--format", "json"]
+		assert uri is not None
+		assert uri != ""
+		cmd = ["gcloud", "storage", "objects", "describe", uri, "--format", "json"]
 		result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 		metadata = json.loads(result.stdout)
-		print(metadata)
-		print(type(metadata))
 		output_df = pl.DataFrame({
 			"gs_uri": uri,
-			"created": metadata.get("timeCreated"),
-			"md5": metadata.get("md5Hash"),
-			"size": int(metadata.get("size", 0)),
+			f"{output_prefix}bucket": metadata.get("bucket"),
+			f"{output_prefix}content_type": metadata.get("content_type"),
+			f"{output_prefix}crc32c_hash": metadata.get("crc32c_hash"),
+			f"{output_prefix}creation_time": metadata.get("creation_time"),
+			f"{output_prefix}etag": metadata.get("etag"),
+			f"{output_prefix}generation": metadata.get("generation"),
+			f"{output_prefix}md5_hash": metadata.get("md5_hash"),
+			f"{output_prefix}metageneration": metadata.get("metageneration"),
+			f"{output_prefix}name": metadata.get("name"),
+			f"{output_prefix}size": int(metadata.get("size")),
+			f"{output_prefix}storage_class": metadata.get("storage_class"),
+			f"{output_prefix}storage_class_update_time": metadata.get("storage_class_update_time"),
+			f"{output_prefix}storage_url": metadata.get("storage_url"),
+			f"{output_prefix}update_time": metadata.get("update_time")
 		})
-		return output_df.select(gs_metadata)
+		actual_out_columns = ["gs_uri"]
+		for out_column in gs_metadata:
+			actual_out_columns.append(f"{output_prefix}{out_column}")
+		return output_df.select(actual_out_columns)
 
 
