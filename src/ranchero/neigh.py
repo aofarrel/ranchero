@@ -1757,10 +1757,23 @@ class NeighLib:
 
 		* [] --> null
 		* [null] --> null
+		* [""] --> null
 		* ["bizz"] --> "bizz"
 		* ["foo", "bar"] --> "foo"
-		"""
+		* ["\"buzz\""] --> "buzz" (extra "" removed)
 
+		This is mostly useful for dealing with Terra data tables, where it's not uncommon to get one-element lists
+		"""
+		polars_df = polars_df.with_columns(
+			pl.col(column)
+			.list.drop_nulls()
+			.list.first()                 # take the 0th element, or null if list empty
+			.str.strip_chars('"')         # strip any rouge dquotes
+			.cast(pl.Utf8)                # cast to string
+			.alias(column)
+		)
+		# remove empty strings
+		return polars_df.with_columns(pl.when(pl.col(column) == pl.lit("")).then(None).otherwise(pl.col(column)).alias(column))
 
 	def encode_as_str(self, polars_df, column, L_bracket='[', R_bracket=']'):
 		""" Unnests list/object data (but not the way explode() does it) so it can be writen to CSV format
