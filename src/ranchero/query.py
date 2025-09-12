@@ -93,7 +93,9 @@ class Query:
 		"""
 		Requires gcloud is on the path and, if necessary, authenticated.
 
-		TODO: allow user to define output column names? maybe via config?
+		TODO:
+		* BUG: any rows where gs_column is pl.Null will be dropped 
+		* allow user to define output column names? maybe via config?
 		"""
 		return_fields = self._default_fallback("gs_metadata", gs_metadata)
 		assert not any(f"{output_prefix}{column}" in return_fields for column in polars_df.columns)
@@ -101,6 +103,9 @@ class Query:
 			self.logging.error("Couldn't find gcloud on $PATH")
 			exit(1)
 		joined_dfs = []
+
+		# Per row of the original dataframe, build a one-row dataframe containing the original df row's gs_uri,
+		# and whatever return_fields that gleans
 		for gs_uri in tqdm(polars_df[gs_column]):
 			if gs_uri is not None:
 				if continue_on_gs_error:
@@ -114,17 +119,23 @@ class Query:
 				self.logging.debug(temp_new_df)
 				temp_new_df = temp_new_df.rename({"gs_uri": gs_column})
 			else:
-				# we still need to have a dummy df of just this row so it can be included in the pl.concat,
+				# TODO: When gs_uri is pl.Null, we have nothing to query, so we should just return empty
+				# fields. We still need a dummy df of just this row so it can be included in the pl.concat,
 				# or else we effectively drop any rows where gs_uri is null
-				temp_new_df = polars_df.filter(pl.col(gs_column) == pl.lit(gs_uri))
+				#temp_new_df = polars_df.filter(pl.col(gs_column) == pl.lit(gs_uri)) --> doesn't work
+				continue
 
-			# join, whether or not we actually pinged Google this iteration
+			# join with original dataframe, whether or not we actually pinged Google this iteration
+			# TODO: this might break if gs_column is non-unique
 			joined_dfs.append(
 				polars_df.filter(pl.col(gs_column) == pl.lit(gs_uri)).join(
 					temp_new_df, on=gs_column, how="left"
 				)
 			)
-
+		if len(joined_dfs) == 0:
+			assert polars_df.shape[0] == polars_df.filter(pl.col(gs_column).is_null()).shape[0]
+			self.logging.warning(f"Column {gs_column} is null for all values, returning same dataframe as was input")
+			return polars_df
 		return pl.concat(joined_dfs, how='vertical', rechunk=True)
 
 	@staticmethod
