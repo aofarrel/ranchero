@@ -24,9 +24,11 @@ class Query:
 			return self.cfg.get_config(cfg_var)
 		return value
 
-	def add_aws_metadata(self, polars_df: pl.DataFrame, s3_column: str, output_size_column="bytes", no_sign_request=True, continue_on_s3_error=False):
+	def add_aws_size(self, polars_df: pl.DataFrame, s3_column: str, output_size_column="bytes", no_sign_request=True, continue_on_s3_error=False):
 		"""
-		Get metadata (currently only size in bytes) of files/paths in a dataframe and save that to a new column.
+		Get size in bytes of files/paths in a dataframe and save that to a new column.
+
+		# TODO: port over gs fixes, make a more general AWS metadata function
 		"""
 		assert s3_column in polars_df
 		assert output_size_column not in polars_df.columns
@@ -93,49 +95,49 @@ class Query:
 		"""
 		Requires gcloud is on the path and, if necessary, authenticated.
 
-		TODO:
-		* BUG: any rows where gs_column is pl.Null will be dropped 
-		* allow user to define output column names? maybe via config?
+		TODO: allow user to define output column names? maybe via config?
 		"""
 		return_fields = self._default_fallback("gs_metadata", gs_metadata)
 		assert not any(f"{output_prefix}{column}" in return_fields for column in polars_df.columns)
 		if shutil.which("gcloud") is None:
 			self.logging.error("Couldn't find gcloud on $PATH")
 			exit(1)
+		
+		# TODO: Creating all these little dataframes feels inefficient, is there another way of doing this? I
+		# don't think we should modify polars_df while its being iterated but building to a copy might be more
+		# efficient. (The true limiting reagent of this function is Google though so this might not really matter.)
 		joined_dfs = []
-
-		# Per row of the original dataframe, build a one-row dataframe containing the original df row's gs_uri,
-		# and whatever return_fields that gleans
-		for gs_uri in tqdm(polars_df[gs_column]):
+		for row in tqdm(polars_df.iter_rows(named=True), total=polars_df.height):
+			gs_uri = row[gs_column]
 			if gs_uri is not None:
 				if continue_on_gs_error:
 					try:
 						temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=return_fields, output_prefix=output_prefix)
 					except subprocess.CalledProcessError as e:
 						self.logging.warning(f"Could not get metadata for {gs_uri}")
+						oops_all_berries = dict.fromkeys([gs_column]+return_fields, pl.Utf8)
+						oops_no_berries = dict.fromkeys([gs_column]+return_fields, None)
+						temp_new_df = pl.DataFrame(oops_no_berries, schema_overrides=oops_all_berries)
 						continue
 				else:
 					temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=return_fields, output_prefix=output_prefix)
-				self.logging.debug(temp_new_df)
+				self.NeighLib.dfprint(temp_new_df, loglevel=10)
 				temp_new_df = temp_new_df.rename({"gs_uri": gs_column})
 			else:
-				# TODO: When gs_uri is pl.Null, we have nothing to query, so we should just return empty
-				# fields. We still need a dummy df of just this row so it can be included in the pl.concat,
-				# or else we effectively drop any rows where gs_uri is null
-				#temp_new_df = polars_df.filter(pl.col(gs_column) == pl.lit(gs_uri)) --> doesn't work
+				# Even if gs_uri is pl.Null, we still need a dummy df of just this row so it can be included in the pl.concat,
+				# or else we would basically drop any rows where gs_uri is null!
+				self.logging.debug(f"Null value for {gs_uri}")
+				oops_all_berries = dict.fromkeys([gs_column]+return_fields, pl.Utf8)
+				oops_no_berries = dict.fromkeys([gs_column]+return_fields, None)
+				temp_new_df = pl.DataFrame(oops_no_berries, schema_overrides=oops_all_berries)
 				continue
 
 			# join with original dataframe, whether or not we actually pinged Google this iteration
-			# TODO: this might break if gs_column is non-unique
 			joined_dfs.append(
-				polars_df.filter(pl.col(gs_column) == pl.lit(gs_uri)).join(
+				pl.DataFrame(row).join(
 					temp_new_df, on=gs_column, how="left"
 				)
 			)
-		if len(joined_dfs) == 0:
-			assert polars_df.shape[0] == polars_df.filter(pl.col(gs_column).is_null()).shape[0]
-			self.logging.warning(f"Column {gs_column} is null for all values, returning same dataframe as was input")
-			return polars_df
 		return pl.concat(joined_dfs, how='vertical', rechunk=True)
 
 	@staticmethod
@@ -143,6 +145,8 @@ class Query:
 		"""
 		Grabs all metadata for a given gs URI, then narrows down based on gs_metadata list.
 		"""
+		if output_prefix is None:
+			output_prefix = ''  # avoid f"{output_prefix}foo" becoming "Nonefoo"
 		assert uri is not None
 		assert uri != ""
 		cmd = ["gcloud", "storage", "objects", "describe", uri, "--format", "json"]

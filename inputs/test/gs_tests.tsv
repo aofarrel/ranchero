@@ -1,0 +1,5 @@
+test_case	gs_uri
+"public, NOT requester pays 1"	gs://genomics-public-data/ucsc/annotations/README.txt
+"null gs_uri"	
+"404"	gs://genomics-public-data/ucsc/annotations/according_to_all_known_laws_of_aviation.txt
+"public, NOT requester pays 2"	gs://genomics-public-data/ucsc/annotations/refGene-hg19.txt

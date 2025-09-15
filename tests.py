@@ -2,12 +2,12 @@ SKIP_SLOW_TESTS = True
 
 import os
 import re
-import polars as pl
 import datetime
-import polars as pl
-from polars.testing import assert_series_equal
-import polars.selectors as cs
 import traceback
+import subprocess
+import polars as pl
+from polars.testing import assert_series_equal, assert_frame_equal
+import polars.selectors as cs
 print("✅ Imported deps")
 
 
@@ -18,7 +18,7 @@ pl.Config.set_fmt_str_lengths(50)
 pl.Config.set_fmt_table_cell_list_len(10)
 pl.Config.set_tbl_width_chars(200)
 
-import ranchero as ranchero
+import src.ranchero as ranchero
 print("✅ Imported ranchero")
 
 ranchero.Configuration.print_config()
@@ -609,16 +609,31 @@ def merge_stuff():
 	# TODO Blocking a merge due to either of the dataframes having dupes in the merge_upon column
 	pass
 
-def query_other_tools(folder="./inputs/test"):
+def query(folder="./inputs/test"):
+	# These tests rely upon some external files in AWS and GS buckets I don't control. It doesn't download the files, just
+	# queries their metadata. If they get moved, these will start throwing errors.
 	
 	def aws_get_size():
-		hprc = ranchero.from_tsv(f"{folder}/HPRC R2 Sequencing Data Index - hifi - sections.tsv", auto_rancheroize=False, auto_standardize=False, index="filename")
+		hprc = ranchero.from_tsv(f"{folder}/HPRC R2 Sequencing Data Index - hifi - sections.tsv", auto_rancheroize=False, index="filename")
 		hprc = hprc.select(["__index__filename", "path"])
-		hprc = ranchero.Query.add_aws_metadata(hprc, s3_column="path")
-		print(hprc)
+		hprc = ranchero.Query.add_aws_size(hprc, s3_column="path")
+		truth = ranchero.from_tsv(f"{folder}/HPRC_truthfile.tsv", auto_rancheroize=False)
+		assert_frame_equal(hprc, truth)
+		print("✅ add_aws_size() added bytesize for 18 HPRC files we had lying around")
 
 	def gcp_get_other_stuff():
-		pass
+		assert ranchero.Configuration.get_config("gs_metadata") == ["creation_time", "md5_hash", "size"]
+		print("✅ default config for gs_metadata is as expected (relied upon for a datatype check)")
+		test_df = ranchero.from_tsv(f"{folder}/gs_tests.tsv", auto_rancheroize=False, index="test_case")
+		try:
+			test_df = ranchero.Query.add_gcloud_metadata(test_df, gs_column="gs_uri")
+		except subprocess.CalledProcessError:
+			print("✅ add_gcloud_metadata() throws error when 404 when !continue_on_gs_error")
+		test_df = ranchero.Query.add_gcloud_metadata(test_df, gs_column="gs_uri", continue_on_gs_error=True)
+		assert test_df.dtypes == [pl.Utf8, pl.Utf8, pl.Utf8, pl.Utf8, pl.Int64]
+		print("✅ add_gcloud_metadata() outputs a dataframe of expected types when continue_on_gs_error")
+		assert test_df.shape == (2, 5)
+		print("✅ and it's the right shape")
 
 	aws_get_size()
 	gcp_get_other_stuff()
@@ -640,4 +655,4 @@ standardization()
 merge_stuff()
 
 # even fancier stuff
-query_other_tools() # relies on file parsing and (polars built in only, so far anyway) merging
+query() # relies on file parsing and (polars built in only, so far anyway) merging
