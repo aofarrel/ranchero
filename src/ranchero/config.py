@@ -58,13 +58,12 @@ HostInfoOptions: TypeAlias = Literal[
 ]
 
 # valid options for quote_style, basically polars' CsvQuoteStyle (only one allowed)
-# this causes issues for polars, oops
-#CsvQuoteStyleOptions: TypeAlias = Literal [
-#	"necessary",
-#	"always",
-#	"non_numeric",
-#	"never"
-#]
+CsvQuoteStyleOptions: TypeAlias = Literal [
+	"necessary",
+	"always",
+	"non_numeric",
+	"never"
+]
 
 class ConfigParameters(TypedDict):
 	auto_cast_types: bool
@@ -84,8 +83,7 @@ class ConfigParameters(TypedDict):
 	mycobacterial_mode: bool
 	paired_illumina_only: bool
 	polars_normalize: bool
-	#quote_style: CsvQuoteStyleOptions
-	quote_style: str
+	quote_style: CsvQuoteStyleOptions
 	rm_phages: bool
 	taxoncore_ruleset: None | str # not sure I like this...
 	unwanted: dict
