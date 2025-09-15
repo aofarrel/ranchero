@@ -8,7 +8,7 @@ Ranchero is a Python solution to the dozens of different metadata formats used i
  * Input a TSV/JSON/CSV of new samples and their metadata into a dataframe
  * Merge columns of similar data types into a single column, filling in nulls/empty values as you go
  * Input a TSV of metadata to "inject" into an existing dataframe, optionally overriding metadata already present
- * Flatten all of those "missing" and "Not Applicable" strings into proper null values
+ * Convert all of those "missing," "not collected," and "Not Applicable" strings into proper null values
  * Convert countries into three-letter country codes per [ISO 3166](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes)
  * Convert dates to YYYY-MM-DD format into an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)-like format
  * Convert common host animal names to the standardized *Genus species* format when possible, as well a common name
@@ -20,7 +20,7 @@ Ranchero is a Python solution to the dozens of different metadata formats used i
  * [pyarrow](https://pypi.org/project/pyarrow/), even if not working with Apache Arrow datasets
  * [polars](https://github.com/pola-rs/polars) for Python == 1.27.0
  * [tqdm](https://github.com/tqdm/tqdm)
- * xmltodict for working with Enterz Direct files
+ * [xmltodict](https://github.com/martinblech/xmltodict) for working with Enterz Direct files
 
 
  ## Supported inputs
