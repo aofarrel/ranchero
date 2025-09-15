@@ -928,7 +928,7 @@ class NeighLib:
 	def cast_to_list(self, polars_df, column, allow_nulls=False):
 		if polars_df[column].dtype != pl.List:
 			if allow_nulls: # will break concat_list() as it propagates nulls for some reason
-				polars_df = polars_df.with_columns(pl.when(pl.col(column).is_not_null().then(pl.col(column).cast(pl.List(str)))).alias("as_this_list"))
+				polars_df = polars_df.with_columns(pl.when(pl.col(column).is_not_null()).then(pl.col(column).cast(pl.List(str))).alias("as_this_list"))
 				polars_df = polars_df.drop([column]).rename({"as_this_list": column})
 				return polars_df
 			else:
@@ -1750,14 +1750,14 @@ class NeighLib:
 			polars_df = self.flatten_one_nested_list_col(polars_df, col) # this is already recursive
 		return(polars_df)
 
-	def cast_to_string(self, polars_df, column):
+	def cast_to_string(self, polars_df, column, strip_dquotes=True, null_empty_strs=True):
 		"""
 		''Cast'' a list column into a string. Unlike encode_as_str(), brackets will not be added, nor will elements besides
 		the first (0th) member of a list be perserved (unless that member is a null, because we drop nulls from lists first)
 
 		* [] --> null
 		* [null] --> null
-		* [""] --> null
+		* [""] --> null, unless !null_empty_strs
 		* ["bizz"] --> "bizz"
 		* ["foo", "bar"] --> "foo"
 		* ["\"buzz\""] --> "buzz" (extra "" removed)
@@ -1773,12 +1773,14 @@ class NeighLib:
 			.cast(pl.Utf8)                # cast to string
 			.alias(column)
 		)
-		# remove empty strings
-		polars_df = polars_df.with_columns(pl.when(pl.col(column) == pl.lit("")).then(None).otherwise(pl.col(column)).alias(column))
+
+		# remove empty strings (or not)
+		if null_empty_strs:
+			polars_df = polars_df.with_columns(pl.when(pl.col(column) == pl.lit("")).then(None).otherwise(pl.col(column)).alias(column))
 		assert polars_df.shape == start_shape
 		return polars_df
 
-	def encode_as_str(self, polars_df, column, L_bracket='[', R_bracket=']'):
+	def encode_as_str(self, polars_df, column, L_bracket='[', R_bracket=']', write_brackets_to_file_even_if_short_list=_DEFAULT_TO_CONFIGURATION):
 		""" Unnests list/object data (but not the way explode() does it) so it can be writen to CSV format
 		Originally based on deanm0000's code, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
 
@@ -1788,16 +1790,37 @@ class NeighLib:
 		assert column in polars_df.columns # throws an error because it's a series now?
 		datatype = polars_df.schema[column]
 
+
+
 		if datatype == pl.List(pl.String):
-			polars_df = polars_df.with_columns(
-				pl.when(pl.col(column).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
-				.then(pl.col(column).list.eval(pl.element()).list.join(""))
-				.otherwise(
-					pl.lit(L_bracket)
-					+ pl.col(column).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
-					+ pl.lit(R_bracket)
-				).alias(column)
-			)
+
+			# No, we can't json_encode() here, at least I couldn't get that to work...
+
+			if write_brackets_to_file_even_if_short_list:
+				polars_df = polars_df.with_columns(
+					#pl.when(pl.col(column).list.drop_nulls().list.first().is_not_null())
+					pl.when(pl.col(column).is_not_null())
+					.then(
+						pl.lit(L_bracket)
+						#+ pl.col(column).list.eval(pl.lit("'") + pl.element().cast(pl.Utf8).str.replace_all("'", r"\'") + pl.lit("'")).list.join(", ")
+						+ pl.col(column).list.eval(pl.lit('"') + pl.element() + pl.lit('"')).list.join(",")
+						+ pl.lit(R_bracket)
+					)
+					.otherwise(None)
+					.alias(column)
+				)
+			else:
+				# THIS CAUSES WEIRD DOUBLE QUOTING, which is fine if using polars but terrible for other TSV readers
+				polars_df = polars_df.with_columns(
+					pl.when(pl.col(column).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
+					.then(pl.col(column).list.eval(pl.element()).list.join(""))
+					.otherwise(
+						pl.lit(L_bracket)
+						+ pl.col(column).list.eval(pl.lit("'") + pl.element() + pl.lit("'")).list.join(",")
+						+ pl.lit(R_bracket)
+					)
+					.alias(column)
+				)
 			return polars_df
 		
 		elif datatype in [pl.List(pl.Int8), pl.List(pl.Int16), pl.List(pl.Int32), pl.List(pl.Int64), pl.List(pl.Float64)]:
@@ -1862,7 +1885,7 @@ class NeighLib:
 	def multiply_and_trim(self, col: str) -> pl.Expr:
 		return (pl.col(col) * 100).round(3).cast(pl.Float64)
 
-	def polars_to_tsv(self, polars_df, path: str, null_value=''):
+	def polars_to_tsv(self, polars_df, path: str, null_value='', quote_style='never'): # TODO: why is _DEFAULT_TO_CONFIG not working here?!
 		df_to_write = self.drop_null_columns(polars_df)
 		columns_with_type_list_or_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if (dtype == pl.List or dtype == pl.Object)]
 		if len(columns_with_type_list_or_obj) > 0:
@@ -1873,7 +1896,7 @@ class NeighLib:
 				debug = pl.DataFrame({col: [dtype1, dtype2] for col, dtype1, dtype2 in zip(polars_df.columns, polars_df.dtypes, df_to_write.dtypes) if dtype1 not in [pl.String, pl.Int32, pl.UInt32]})
 				if debug.height > 0:
 					self.logging.debug(f"Non-string types, and what they converted to: {debug}")
-			df_to_write.write_csv(path, separator='\t', include_header=True, null_value=null_value)
+			df_to_write.write_csv(path, separator='\t', include_header=True, null_value=null_value, quote_style=quote_style)
 			self.logging.info(f"Wrote dataframe to {path}")
 		except pl.exceptions.ComputeError:
 			self.logging.error("Failed to write to TSV due to ComputeError. This is likely a data type issue.")

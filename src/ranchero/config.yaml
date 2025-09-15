@@ -66,6 +66,9 @@ paired_illumina_only: False
 # Try to (mostly) use polars when normalizing the dataframe
 polars_normalize: True
 
+# Polars write_csv()'s quote_style option, currently used only for ranchero to_tsv()
+quote_style: 'never'
+
 # Try to remove phages when standardizing taxonomic information
 rm_phages: True
 
@@ -79,3 +82,6 @@ taxoncore_ruleset: None
 unwanted:
   "assay_type": ['Tn-Seq', 'ChIP-Seq']
 
+# When writing a list column to a file, if the list column is not pl.Null, the list will be written with brackets,
+# even if it only has one or zero elements.
+write_brackets_to_file_even_if_short_list: False

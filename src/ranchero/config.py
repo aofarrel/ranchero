@@ -57,6 +57,15 @@ HostInfoOptions: TypeAlias = Literal[
 	"options"
 ]
 
+# valid options for quote_style, basically polars' CsvQuoteStyle (only one allowed)
+# this causes issues for polars, oops
+#CsvQuoteStyleOptions: TypeAlias = Literal [
+#	"necessary",
+#	"always",
+#	"non_numeric",
+#	"never"
+#]
+
 class ConfigParameters(TypedDict):
 	auto_cast_types: bool
 	auto_parse_dates: bool
@@ -75,9 +84,12 @@ class ConfigParameters(TypedDict):
 	mycobacterial_mode: bool
 	paired_illumina_only: bool
 	polars_normalize: bool
+	#quote_style: CsvQuoteStyleOptions
+	quote_style: str
 	rm_phages: bool
 	taxoncore_ruleset: None | str # not sure I like this...
 	unwanted: dict
+	write_brackets_to_file_even_if_short_list: bool
 
 def _validate_against_annotation(option: str, value, expected_type) -> None:
 	"""

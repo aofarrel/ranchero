@@ -81,6 +81,7 @@ class FileReader():
 		index=None,
 		glob=True,
 		list_columns=None,
+		list_columns_are_internally_dquoted=False,
 		auto_parse_dates=_DEFAULT_TO_CONFIGURATION, 
 		auto_rancheroize=_DEFAULT_TO_CONFIGURATION, 
 		auto_standardize=_DEFAULT_TO_CONFIGURATION, 
@@ -114,13 +115,25 @@ class FileReader():
 			polars_df = self.NeighLib.mark_index(polars_df, index)
 			index = self.NeighLib.get_index(polars_df, index)
 		if list_columns is not None:
-			for column in list_columns:
-				polars_df = polars_df.with_columns(
-					polars_df[column]
-					.str.strip_chars("[]").str.replace_all("'", "", literal=True)
-					.str.split(",")
-					.alias(column)
-				)
+
+			if list_columns_are_internally_dquoted:
+				for column in list_columns:
+					polars_df = polars_df.with_columns(
+						polars_df[column]
+						.str.strip_chars("[]").str.replace_all('"', '', literal=True)
+						.str.split(",")
+						.alias(column)
+					)
+
+			else:
+				# assumes list columns are internally single quoted
+				for column in list_columns:
+					polars_df = polars_df.with_columns(
+						polars_df[column]
+						.str.strip_chars("[]").str.replace_all("'", "", literal=True)
+						.str.split(",")
+						.alias(column)
+					)
 
 		if explode_upon != None:
 			# TODO: this function call had column=self.NeighLib.get_index_column(polars_df, quiet=True) but I'm not sure why we
