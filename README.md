@@ -18,7 +18,7 @@ Ranchero is a Python solution to the dozens of different metadata formats used i
  * Python >= 3.10
  * [polars](https://github.com/pola-rs/polars) for Python == 1.27.0
  * [pandas](https://pandas.pydata.org/) >= 2.0.0
- * [pyyaml](https://pyyaml.org/
+ * [pyyaml](https://pyyaml.org/)
  * [pyarrow](https://pypi.org/project/pyarrow/), even if not working with Apache Arrow datasets
  * [tqdm](https://github.com/tqdm/tqdm)
  * [xmltodict](https://github.com/martinblech/xmltodict) for working with Enterz Direct files
