@@ -273,4 +273,4 @@ class RancheroConfig:
 			elif keys == 'logger': # redundant
 				pass
 			else:
-				print(f"* {keys}: {values}")
+				print(f"* {keys}: {values} {type(values)}")
