@@ -12,7 +12,7 @@ _c_ = "\033[0;36m"
 print(f"Module import time: {time.time() - start:.4f}")
 start_from_scratch = True
 inject = True
-do_run_index_merges = True
+do_run_id_merges = True
 
 module_start = time.time()
 
@@ -45,7 +45,7 @@ def run_merges(tba6):
 	tba6 = None # avoid copy-paste mistakes
 	return merged
 
-def sample_index_merges(merged_runs):
+def sample_id_merges(merged_runs):
 	merged = merged_runs
 
 	# merged with sample-indexed data
@@ -62,20 +62,20 @@ def sample_index_merges(merged_runs):
 	start = time.time()
 	print(f"{_b_}Processing inputs, outputs, denylist, and what's on the tree{_bb_}")
 	inputs = Ranchero.from_tsv("./inputs/pipeline/probable_inputs.txt", auto_rancheroize=False)
-	merged = Ranchero.merge_dataframes(merged, inputs, merge_upon="__index__sample_index", right_name="input", indicator="collection", drop_exclusive_right=False)
+	merged = Ranchero.merge_dataframes(merged, inputs, merge_upon="__index__sample_id", right_name="input", indicator="collection", drop_exclusive_right=False)
 	
 	diffs = Ranchero.from_tsv("./inputs/pipeline/probable_diffs.txt", auto_rancheroize=False)
-	merged = Ranchero.merge_dataframes(merged, diffs, merge_upon="__index__sample_index", right_name="diff", indicator="collection", drop_exclusive_right=False)
+	merged = Ranchero.merge_dataframes(merged, diffs, merge_upon="__index__sample_id", right_name="diff", indicator="collection", drop_exclusive_right=False)
 	
 	tree = Ranchero.from_tsv("./inputs/pipeline/samples on tree 2024-12-12.txt", auto_rancheroize=False)
-	merged = Ranchero.merge_dataframes(merged, tree, merge_upon="__index__sample_index", right_name="tree", indicator="collection", drop_exclusive_right=False)
+	merged = Ranchero.merge_dataframes(merged, tree, merge_upon="__index__sample_id", right_name="tree", indicator="collection", drop_exclusive_right=False)
 
 	tbprofiler = Ranchero.from_tsv("./inputs/TBProfiler/tbprofiler_basically_everything_rancheroized.tsv")
 	tbprofiler = tbprofiler.drop(['tbprof_main_lin', 'tbprof_family', 'superbatch'])
-	merged = Ranchero.merge_dataframes(merged, tbprofiler, merge_upon="__index__sample_index", right_name="tbprofiler", indicator="collection", drop_exclusive_right=False)
+	merged = Ranchero.merge_dataframes(merged, tbprofiler, merge_upon="__index__sample_id", right_name="tbprofiler", indicator="collection", drop_exclusive_right=False)
 	
 	denylist = Ranchero.from_tsv("./inputs/pipeline/denylist_2024-07-23_lessdupes.tsv", auto_rancheroize=False)
-	merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="__index__sample_index", right_name="denylist", indicator="collection", drop_exclusive_right=False)
+	merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="__index__sample_id", right_name="denylist", indicator="collection", drop_exclusive_right=False)
 	
 	print(f"Merged with pipeline information in {time.time() - start:.4f} seconds")
 
@@ -122,24 +122,24 @@ if start_from_scratch:
 	tba6_standardized = inital_file_parse()
 	tba6_injected = inject_metadata(tba6_standardized)
 	merged_runs = run_merges(tba6_injected)
-	merged_samps = sample_index_merges(merged_runs)
+	merged_samps = sample_id_merges(merged_runs)
 else:
 	if inject:
 		print("Reading from tba6_standardized.tsv")
 		tba6_standardized = Ranchero.from_tsv("tba6_standardized.tsv", auto_standardize=False)
 		tba6_injected = inject_metadata(tba6_standardized)
 		merged_runs = run_merges(tba6_injected)
-		merged_samps = sample_index_merges(merged_runs)
+		merged_samps = sample_id_merges(merged_runs)
 	else:
-		if do_run_index_merges:
+		if do_run_id_merges:
 			print("Reading from tba6_injected.tsv")
 			tba6_injected = Ranchero.from_tsv("tba6_injected.tsv", auto_standardize=False)
 			merged_runs = run_merges(tba6_injected)
-			merged_samps = sample_index_merges(merged_runs)
+			merged_samps = sample_id_merges(merged_runs)
 		else:
 			print("Reading from merged_by_run.tsv")
 			merged_runs = Ranchero.from_tsv("merged_by_run.tsv", auto_standardize=False)
-			merged_samps = sample_index_merges(merged_runs)
+			merged_samps = sample_id_merges(merged_runs)
 
 # fix a BioProject-level injection
 
@@ -174,9 +174,9 @@ tree_metadata_v8_rc10 = Ranchero.rancheroize(tree_metadata_v8_rc10)
 tree_metadata_v8_rc10.drop(['BioProject', 'isolation_source', 'host']) # we are parsing these directly from SRA now
 print(f"Finished reading a bunch more metadata in  {time.time() - start:.4f} seconds")
 start = time.time()
-merged = Ranchero.merge_dataframes(merged, tree_metadata_v8_rc10, merge_upon="__index__sample_index", right_name="tree_metadata_v8_rc10", indicator="collection", fallback_on_left=False)
+merged = Ranchero.merge_dataframes(merged, tree_metadata_v8_rc10, merge_upon="__index__sample_id", right_name="tree_metadata_v8_rc10", indicator="collection", fallback_on_left=False)
 print(f"Merged with old tree metadata file in {time.time() - start:.4f} seconds")
-Ranchero.NeighLib.big_print_polars(tree_metadata_v8_rc10, "v8rc10 hosts and dates", ['sample_index', 'date_collected', 'host'])
+Ranchero.NeighLib.big_print_polars(tree_metadata_v8_rc10, "v8rc10 hosts and dates", ['sample_id', 'date_collected', 'host'])
 
 print(f"Finished entire module in {time.time() - module_start} seconds")
 

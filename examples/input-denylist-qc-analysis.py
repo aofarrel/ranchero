@@ -15,7 +15,7 @@ pl.Config.set_tbl_width_chars(200)
 pl.Config.set_fmt_str_lengths(50)
 pl.Config.set_fmt_table_cell_list_len(5)
 
-v16 = Ranchero.from_tsv("./ranchero_rc16_less_columns.tsv", auto_rancheroize=False, list_columns=["collection", "run_index"])
+v16 = Ranchero.from_tsv("./ranchero_rc16_less_columns.tsv", auto_rancheroize=False, list_columns=["collection", "run_id"])
 v16 = Ranchero.NeighLib.extract_primary_lineage(v16, lineage_column='tbprof_sublin', output_column='tbprof_primary_lin')
 
 # You may additionally want to check that everything in "diff" is also in "input",

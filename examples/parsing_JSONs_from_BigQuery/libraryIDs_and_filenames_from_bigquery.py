@@ -23,6 +23,6 @@ table = Ranchero.NeighLib.add_list_len_col(table, 'files', 'files_len')
 # In this example, I did a BQ search of all run accessions in the HPRC and HPRC+ BioProjects,
 # so that's what I'll call my dataset when printing it.
 # Note: We didn't bother rancheroizing the dataframe, so columns retain their BQ names rather
-# than their typical names ('acc' instead of 'run_index' for example).
+# than their typical names ('acc' instead of 'run_id' for example).
 Ranchero.NeighLib.super_print_pl(table, "HPRC/HPRC+ Samples on SRA", select=['acc', 'sample_name', 'files_len', 'files'])
 Ranchero.to_tsv(table.select(['acc', 'sample_name', 'files_len', 'files']), "HPRC_SRA_2025-05-09.tsv")

@@ -223,20 +223,20 @@ def miscellanous_index_stuff():
 	def rancheroize_renames_acc_to_run_when_index():
 		df = pl.DataFrame({
 			"__index__acc": ["SRR13684378", "SRR30310804", "SRR30310805", "SRR9291314"],
-			"sample_index": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
+			"sample_id": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
 		})
 		df = ranchero.rancheroize(df)
-		assert sorted(df.columns) == ["__index__run", "sample_index"]
-		print("✅ Rancheroize converts __index__acc to __index__run")
+		assert sorted(df.columns) == ["__index__run_id", "sample_id"]
+		print("✅ Rancheroize converts __index__acc to __index__run_id")
 
 	def rancheroize_renames_acc_to_run_when_not_index():
 		df = pl.DataFrame({
 			"acc": ["SRR13684378", "SRR30310804", "SRR30310805", "SRR9291314"],
-			"__index__sample": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
+			"__index__sample_id": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
 		})
 		df = ranchero.rancheroize(df)
-		assert sorted(df.columns) == ["__index__sample", "run_index"]
-		print("✅ Rancheroize converts acc to run_index")
+		assert sorted(df.columns) == ["__index__sample_id", "run_id"]
+		print("✅ Rancheroize converts acc to run_id when index is something else")
 
 	def removing_nulls_from_an_index_column():
 		df = pl.DataFrame({"__index__file": ["foo.fq", "bar.fq", None, "bizz.fq"]})
@@ -323,26 +323,26 @@ def dupe_index_handling():
 
 def run_to_sample_index_swap():
 	df = pl.DataFrame({
-		"__index__run": ["SRR13684378", "SRR30310804", "SRR30310805", "SRR9291314"],
+		"__index__run_id": ["SRR13684378", "SRR30310804", "SRR30310805", "SRR9291314"],
 		"organism": ["Homo sapiens", "Homo sapiens", "Homo sapiens", "Homo sapiens"],
 		"purposely_conflicting_metadata": ["foo", "bar", "bizz", "buzz"],
-		"sample_index": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
+		"sample_id": ["SAMN17861658", "SAMN41021645", "SAMN41021645", "SAMN12046450"]
 	})
 	flipped = ranchero.run_index_to_sample_index(df)
 	flipped_goal = pl.DataFrame({
-		"__index__sample": ["SAMN17861658", "SAMN41021645", "SAMN12046450"],
+		"__index__sample_id": ["SAMN17861658", "SAMN41021645", "SAMN12046450"],
 		"organism": ["Homo sapiens", "Homo sapiens", "Homo sapiens"],
 		"purposely_conflicting_metadata": [["foo"], ["bar", "bizz"], ["buzz"]],
-		"run_index": [["SRR13684378"], ["SRR30310804", "SRR30310805"], ["SRR9291314"]],
+		"run_id": [["SRR13684378"], ["SRR30310804", "SRR30310805"], ["SRR9291314"]],
 	})
 	ranchero.check_index(flipped)
 	flipped = ranchero.NeighLib.sort_list_str_col(flipped, "purposely_conflicting_metadata", safe=False)
-	flipped = ranchero.NeighLib.sort_list_str_col(flipped, "run_index", safe=False)
+	flipped = ranchero.NeighLib.sort_list_str_col(flipped, "run_id", safe=False)
 	flipped_goal = ranchero.NeighLib.sort_list_str_col(flipped_goal, "purposely_conflicting_metadata", safe=False)
-	flipped_goal = ranchero.NeighLib.sort_list_str_col(flipped_goal, "run_index", safe=False)
+	flipped_goal = ranchero.NeighLib.sort_list_str_col(flipped_goal, "run_id", safe=False)
 	pl.testing.assert_frame_equal(
-		flipped.sort("__index__sample").select(['__index__sample', "organism", "purposely_conflicting_metadata", "run_index"]),
-		flipped_goal.sort("__index__sample").select(['__index__sample', "organism", "purposely_conflicting_metadata", "run_index"])
+		flipped.sort("__index__sample_id").select(['__index__sample_id', "organism", "purposely_conflicting_metadata", "run_id"]),
+		flipped_goal.sort("__index__sample_id").select(['__index__sample_id', "organism", "purposely_conflicting_metadata", "run_id"])
 	)
 	print("✅ Flipping run-indexed dataframe to sample-indexed dataframe")
 
@@ -477,7 +477,7 @@ def file_parsing(folder="./inputs/test"):
 		'pcr_primers_exp', 'physical_specimen_location_sam', 'physical_specimen_remaining_sam', 'pi_sam', 'platform',
 		'platform_sam', 'plating_exp', 'primary_search', 'primer_date_exp', 'primer_exp', 'primer_plate_exp', 'processing_robot_exp',
 		'project_name_exp', 'ptnumber_sam', 'releasedate', 'request_number_sam', 'run_center_exp', 'run_date_exp', 'run_id_exp',
-		'run_prefix_exp', 'sample_index', 'sample_name_old_sam', 'sample_plate_exp', 'scientific_name_sam', 'self_count',
+		'run_prefix_exp', 'sample_id', 'sample_name_old_sam', 'sample_plate_exp', 'scientific_name_sam', 'self_count',
 		'sequencing_institution_sam', 'sequencing_meth_exp', 'serotype_sam', 'serovar_sam', 'similar_to_sam', 'spoligotype_sam',
 		'sra_study', 'strain_background_common_sam', 'strain_genotype_sam_s_dpl382', 'strain_sam_ss_dpl139', 'strain_vendor_sam',
 		'sub_species_sam', 'subgroup_sam', 'subtype_sam', 'target_gene_exp', 'target_subfragment_exp', 'tax_id', 'time_point_sam',

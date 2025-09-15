@@ -19,7 +19,7 @@ else:
 
 # Parse XML file to get what's already on SRA
 edirect = Ranchero.from_efetch(sys.argv[1], index_by_file=True)
-edirect = edirect.rename({'submitted_files':'filename', 'run_index':'run_accession'}).drop(['notes'])
+edirect = edirect.rename({'submitted_files':'filename', 'run_id':'run_accession'}).drop(['notes'])
 assert edirect.height > 0
 
 # We want to merge this with our own TSVs on the filename column, but there's a possibility

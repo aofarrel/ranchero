@@ -264,10 +264,10 @@ class ProfessionalsHaveStandards():
 		if self.logging.getEffectiveLevel() == 10:
 			if status_cols:
 				pass
-				#print(polars_df.select(['run_index', write_col, 'geoloc_info', 'matched', 'written']))
+				#print(polars_df.select(['run_id', write_col, 'geoloc_info', 'matched', 'written']))
 			else:
 				pass
-				#print(polars_df.select(['run_index', write_col, 'geoloc_info']))
+				#print(polars_df.select(['run_id', write_col, 'geoloc_info']))
 		return polars_df
 
 	def standardize_host_disease(self, polars_df):
@@ -398,7 +398,7 @@ class ProfessionalsHaveStandards():
 			for disease, simplified_disease in host_disease.host_disease_exact_match.items():
 				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=False, remove_match_from_list=True)
 			# DEBUGPRINT
-			#self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_index', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
+			#self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_id', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
 
 		# here's where we actually beginning handling the stuff for this actual column!
 		for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
@@ -746,10 +746,10 @@ class ProfessionalsHaveStandards():
 			.alias("date_collected"),
 		)
 
-		if 'sample_index' in polars_df.columns:
+		if 'sample_id' in polars_df.columns:
 			polars_df = polars_df.with_columns(
-				pl.when((pl.col('sample_index') == 'SAMEA5977381') # 2025/2026
-					.or_(pl.col('sample_index') == 'SAMEA5977380') # 2025/2026
+				pl.when((pl.col('sample_id') == 'SAMEA5977381') # 2025/2026
+					.or_(pl.col('sample_id') == 'SAMEA5977380') # 2025/2026
 				)
 				.then(None)
 				.otherwise(pl.col('date_collected'))
@@ -1232,7 +1232,7 @@ class ProfessionalsHaveStandards():
 			raise ValueError
 		if self.logging.getEffectiveLevel() == 10:
 			self.logging.debug("---- After absolutely everything ----")
-			self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_index',
+			self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_id',
 				list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], 
 				alsoprint=['region', 'continent'])
 

@@ -5,7 +5,7 @@ import polars as pl
 edirect = Ranchero.from_efetch(sys.argv[1], index_by_file=True)
 edirect = edirect.rename({'filename': 'most_likely_filename', 'alias': 'alternative_filename'}).drop(['notes'])
 edirect = edirect.group_by("most_likely_filename").agg(
-	[pl.col('run_index'), pl.col('submitted_files_gibytes'), pl.col('alternative_filename').unique()]
+	[pl.col('run_id'), pl.col('submitted_files_gibytes'), pl.col('alternative_filename').unique()]
 )
 
 if edirect.schema['submitted_files_gibytes'] == pl.Float64:

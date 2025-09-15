@@ -36,7 +36,7 @@ class Merger:
 		cool_rows = agg_values.filter(pl.col(c) == 1 for c in agg_values.columns if c != column_key).sort(column_key)
 		uncool_rows = agg_values.filter(reduce(lambda acc, expr: acc | expr, (pl.col(c) != 1 for c in agg_values.columns if c != column_key)))
 
-		# to get the original data for debugging purposes you can use: semi_rows = polars_df.join(uncool_rows, on="run_index", how="semi")
+		# to get the original data for debugging purposes you can use: semi_rows = polars_df.join(uncool_rows, on="run_id", how="semi")
 		return uncool_rows
 
 	def get_columns_with_any_row_above_1(self, polars_df, column_key):
@@ -71,7 +71,7 @@ class Merger:
 		for catagorical in will_be_catagorical:
 			assert catagorical in polars_df.columns
 
-		restored_data = polars_df.join(columns_we_will_merge_and_their_column_keys, on="run_index", how="semi") # get our real data back (eg, not agg integers)
+		restored_data = polars_df.join(columns_we_will_merge_and_their_column_keys, on="run_id", how="semi") # get our real data back (eg, not agg integers)
 		restored_catagorical_data = restored_data.group_by(column_key).agg([pl.col(column).alias(column) for column in restored_data.columns if column != column_key and column in will_be_catagorical])
 		self.NeighLib.super_print_pl(restored_catagorical_data, "restored catagorical data")
 
@@ -165,13 +165,13 @@ class Merger:
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:
 				raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in {name} dataframe")
-			if merge_upon == 'run_index' or merge_upon == 'run_accession':
+			if merge_upon == 'run_id' or merge_upon == 'run_accession':
 				if not self.NeighLib.is_run_indexed(df):
 					self.logging.warning(f"Merging upon {merge_upon}, which looks like a run accession, but {name} dataframe appears to not be indexed by run accession")
 			if len(df.filter(pl.col(merge_upon).is_null())[merge_upon]) != 0:
 				self.logging.error("Dataframe has null values for the merge column:")
-				if merge_upon != "sample_index" and "sample_index" in df.columns:
-					print(df.filter(pl.col(merge_upon).is_null()).select(["sample_index", merge_upon]))
+				if merge_upon != "sample_id" and "sample_id" in df.columns:
+					print(df.filter(pl.col(merge_upon).is_null()).select(["sample_id", merge_upon]))
 				else:
 					print(df.filter(pl.col(merge_upon).is_null()))
 				raise ValueError(f"Attempted to merge dataframes upon shared column {merge_upon}, but the {name} dataframe has {len(left.filter(pl.col(merge_upon).is_null())[merge_upon])} nulls in that column")
@@ -312,9 +312,9 @@ class Merger:
 							right_column = f"{left_column}_right"
 							assert right_column not in left.columns # shouldn't exist until after small_merge is created
 
-							# Let's say merge_upon = "sample_index", left_column = "foo", right_column = "foo_right"
-							# Create small_merge dataframe by merging left and right upon "sample_index". This
-							# creates a new dataframe with columns "sample_index", "foo", and "foo_right".
+							# Let's say merge_upon = "sample_id", left_column = "foo", right_column = "foo_right"
+							# Create small_merge dataframe by merging left and right upon "sample_id". This
+							# creates a new dataframe with columns "sample_id", "foo", and "foo_right".
 							small_merge = (
 								left.select([merge_upon, left_column])
 								.join(right.select([merge_upon, left_column]), on=merge_upon, how="full", coalesce=True)
@@ -363,9 +363,9 @@ class Merger:
 							right_column = f"{left_column}_right"
 							assert right_column not in left.columns
 
-							# Let's say merge_upon = "sample_index", left_column = "foo", right_column = "foo_right"
-							# Create small_merge dataframe by merging left and right upon "sample_index". This
-							# creates a new dataframe with columns "sample_index", "foo", and "foo_right".
+							# Let's say merge_upon = "sample_id", left_column = "foo", right_column = "foo_right"
+							# Create small_merge dataframe by merging left and right upon "sample_id". This
+							# creates a new dataframe with columns "sample_id", "foo", and "foo_right".
 							small_merge = (
 								left.select([merge_upon, left_column])
 								.join(right.select([merge_upon, left_column]), on=merge_upon, how="full", coalesce=True)
