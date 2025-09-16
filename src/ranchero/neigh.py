@@ -1780,7 +1780,7 @@ class NeighLib:
 		assert polars_df.shape == start_shape
 		return polars_df
 
-	def encode_as_str(self, polars_df, column, L_bracket='[', R_bracket=']', write_brackets_to_file_even_if_short_list=_DEFAULT_TO_CONFIGURATION):
+	def encode_as_str(self, polars_df, column, L_bracket='[', R_bracket=']', list_bracket_style=_DEFAULT_TO_CONFIGURATION):
 		""" Unnests list/object data (but not the way explode() does it) so it can be writen to CSV format
 		Originally based on deanm0000's code, via https://github.com/pola-rs/polars/issues/17966#issuecomment-2262903178
 
@@ -1796,7 +1796,7 @@ class NeighLib:
 
 			# No, we can't json_encode() here, at least I couldn't get that to work...
 
-			if write_brackets_to_file_even_if_short_list:
+			if list_bracket_style == 'always':
 				polars_df = polars_df.with_columns(
 					#pl.when(pl.col(column).list.drop_nulls().list.first().is_not_null())
 					pl.when(pl.col(column).is_not_null())
@@ -1809,8 +1809,8 @@ class NeighLib:
 					.otherwise(None)
 					.alias(column)
 				)
-			else:
-				# THIS CAUSES WEIRD DOUBLE QUOTING, which is fine if using polars but terrible for other TSV readers
+			elif list_bracket_style == 'len_gt_one':
+				# This may be less compatiable with other TSV readers
 				polars_df = polars_df.with_columns(
 					pl.when(pl.col(column).list.len() <= 1) # don't add brackets if longest list is 1 or 0 elements
 					.then(pl.col(column).list.eval(pl.element()).list.join(""))
@@ -1821,6 +1821,8 @@ class NeighLib:
 					)
 					.alias(column)
 				)
+			else:
+				raise TypeError(f"Unrecognized argument for list_bracket_style: {list_bracket_style}")
 			return polars_df
 		
 		elif datatype in [pl.List(pl.Int8), pl.List(pl.Int16), pl.List(pl.Int32), pl.List(pl.Int64), pl.List(pl.Float64)]:
@@ -1885,7 +1887,8 @@ class NeighLib:
 	def multiply_and_trim(self, col: str) -> pl.Expr:
 		return (pl.col(col) * 100).round(3).cast(pl.Float64)
 
-	def polars_to_tsv(self, polars_df, path: str, null_value='', quote_style='never'): # TODO: why is _DEFAULT_TO_CONFIG not working here?!
+	def polars_to_tsv(self, polars_df, path: str, null_value='', quote_style=_DEFAULT_TO_CONFIGURATION):
+		quote_style = self._default_fallback("quote_style", quote_style)
 		df_to_write = self.drop_null_columns(polars_df)
 		columns_with_type_list_or_obj = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if (dtype == pl.List or dtype == pl.Object)]
 		if len(columns_with_type_list_or_obj) > 0:

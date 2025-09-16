@@ -1,4 +1,3 @@
-
 # Automatically cast types when reading a file
 auto_cast_types: False
 # Automatically parse dates when reading a file
@@ -35,11 +34,12 @@ gs_metadata: ["creation_time", "md5_hash", "size"]
 
 # How to handle columns relating to host information found in "attrs" in BQ JSONs, which are much less useful
 # if they had been combined into a single column like we would locational data n stuff, but can add a ton of
-# columns with barely any filled-in values
-#   dictionary: Create a single 'host_info' column with a list(dict()) of key-value pairs
-#   drop: Drop them
-#   columns: Treat like anything else in attrs -- each key becomes its own column
-# What we consider to be "host information columns" is defined in kolumns.host_info
+# columns with barely any filled-in values.
+# Note: What we consider to be "host information columns" is defined in kolumns.host_info
+#
+# - columns: Treat like anything else in attrs -- each key becomes its own column
+# - dictionary: Create a single 'host_info' column with a list(dict()) of key-value pairs
+# - drop: Drop them
 host_info_handling: 'dictionary'
 
 # Indicator column when merging dataframes
@@ -66,7 +66,16 @@ paired_illumina_only: False
 # Try to (mostly) use polars when normalizing the dataframe
 polars_normalize: True
 
-# Polars write_csv()'s quote_style option, currently used only for ranchero to_tsv()
+# When writing using ranchero to_tsv(), how to handle quotation marks. Ranchero to_tsv() will pass in this config option
+# when it calls polars write_csv() -- and therefore the options here the same as polars options -- but this option
+# does NOT override your own polars' config. In other words, if you call polars write_csv() directly, this won't apply.
+# this option does NOT go into effect if you call polars to_csv() directly.
+#
+# As of polars 1.27.0 the options are 'necessary', 'always', 'non-numeric', 'never'
+#
+# Justification: As of polars 1.27.0 you normally cannot use polars write_csv() to write lists to a file, even if seperator is
+# tab. Ranchero to_tsv() tries to get around this issue by converting lists into strings containing brackets. This workaround
+# will allow write_csv() to write to the file, but polars will add extraneous dquotes when write_csv(quote_style='necessary').
 quote_style: 'never'
 
 # Try to remove phages when standardizing taxonomic information
@@ -82,6 +91,9 @@ taxoncore_ruleset: None
 unwanted:
   "assay_type": ['Tn-Seq', 'ChIP-Seq']
 
-# When writing a list column to a file, if the list column is not pl.Null, the list will be written with brackets,
-# even if it only has one or zero elements.
-write_brackets_to_file_even_if_short_list: False
+# When writing a list column to a TSV file, when should we include brackets? Note that this is done per row;
+# so with 'len_gt_one' it is possible for some rows to get brackets and others to not get brackets.
+#
+# - always: Write the brackets even if a row's list has only one or zero values (better for other TSV parsers)
+# - len_gt_one: Only if the row's list len is greater than one (better for downstream ranchero analysis)
+list_bracket_style: 'len_gt_one'

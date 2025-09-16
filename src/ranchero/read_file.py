@@ -20,7 +20,7 @@ class FileReader():
 		else:
 			self.cfg = configuration
 			self.logging = self.cfg.logger
-			if self.logging.getEffectiveLevel() == 10:
+			if self.logging.getEffectiveLevel() == 20:
 				try:
 					from tqdm import tqdm
 					tqdm.pandas()

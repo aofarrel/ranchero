@@ -38,6 +38,14 @@ GSMetadataOption: TypeAlias = Literal[
 ]
 GSMetadataOptions: TypeAlias = list[GSMetadataOption]
 
+# valid options for quote_style, basically polars' CsvQuoteStyle (only one allowed)
+CsvQuoteStyleOptions: TypeAlias = Literal [
+	"necessary",
+	"always",
+	"non_numeric",
+	"never"
+]
+
 # valid options for dupe_index_handling (only one allowed)
 DupeIndexOptions: TypeAlias = Literal[
 	"error",
@@ -57,12 +65,10 @@ HostInfoOptions: TypeAlias = Literal[
 	"options"
 ]
 
-# valid options for quote_style, basically polars' CsvQuoteStyle (only one allowed)
-CsvQuoteStyleOptions: TypeAlias = Literal [
-	"necessary",
+# valid options for list_bracket_style (only one allowed)
+ListBracketStyleOptions: TypeAlias = Literal[
 	"always",
-	"non_numeric",
-	"never"
+	"len_gt_one"
 ]
 
 class ConfigParameters(TypedDict):
@@ -79,6 +85,7 @@ class ConfigParameters(TypedDict):
 	host_info_handling: HostInfoOptions
 	indicator_column: str
 	intermediate_files: bool
+	list_bracket_style: ListBracketStyleOptions
 	loglevel: int
 	mycobacterial_mode: bool
 	paired_illumina_only: bool
@@ -87,7 +94,6 @@ class ConfigParameters(TypedDict):
 	rm_phages: bool
 	taxoncore_ruleset: None | str # not sure I like this...
 	unwanted: dict
-	write_brackets_to_file_even_if_short_list: bool
 
 def _validate_against_annotation(option: str, value, expected_type) -> None:
 	"""
