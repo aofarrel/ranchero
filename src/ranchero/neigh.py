@@ -1786,6 +1786,7 @@ class NeighLib:
 
 		LIMITATIONS: This may not work as expected on pl.List(pl.Null). You may also see oddities on some pl.Object types.
 		"""
+		list_bracket_style = self._default_fallback('list_bracket_style', list_bracket_style)
 		self.logging.debug(f"Forcing column {column} into a string")
 		assert column in polars_df.columns # throws an error because it's a series now?
 		datatype = polars_df.schema[column]
