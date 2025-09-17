@@ -106,6 +106,7 @@ class Query:
 		# TODO: Creating all these little dataframes feels inefficient, is there another way of doing this? I
 		# don't think we should modify polars_df while its being iterated but building to a copy might be more
 		# efficient. (The true limiting reagent of this function is Google though so this might not really matter.)
+		schema = polars_df.schema
 		joined_dfs = []
 		for row in tqdm(polars_df.iter_rows(named=True), total=polars_df.height):
 			gs_uri = row[gs_column]
@@ -115,8 +116,9 @@ class Query:
 						temp_new_df = self._gcloud_storage_objects_describe(gs_uri, gs_metadata=return_fields, output_prefix=output_prefix)
 					except subprocess.CalledProcessError as e:
 						self.logging.warning(f"Could not get metadata for {gs_uri}")
-						oops_all_berries = dict.fromkeys([gs_column]+return_fields, pl.Utf8)
-						oops_no_berries = dict.fromkeys([gs_column]+return_fields, None)
+						oops_all_berries = dict.fromkeys([gs_column] + return_fields, pl.Utf8)
+						oops_no_berries = dict.fromkeys([gs_column] + return_fields, None)
+						#oops_no_berries = {k: [None] for k in [gs_column] + return_fields}
 						temp_new_df = pl.DataFrame(oops_no_berries, schema_overrides=oops_all_berries)
 						continue
 				else:
@@ -127,14 +129,16 @@ class Query:
 				# Even if gs_uri is pl.Null, we still need a dummy df of just this row so it can be included in the pl.concat,
 				# or else we would basically drop any rows where gs_uri is null!
 				self.logging.debug(f"Null value for {gs_uri}")
-				oops_all_berries = dict.fromkeys([gs_column]+return_fields, pl.Utf8)
-				oops_no_berries = dict.fromkeys([gs_column]+return_fields, None)
+				oops_all_berries = dict.fromkeys([gs_column] + return_fields, pl.Utf8)
+				oops_no_berries = dict.fromkeys([gs_column] + return_fields, None)
+				#oops_no_berries = {k: [None] for k in [gs_column] + return_fields}
 				temp_new_df = pl.DataFrame(oops_no_berries, schema_overrides=oops_all_berries)
 				continue
 
 			# join with original dataframe, whether or not we actually pinged Google this iteration
 			joined_dfs.append(
-				pl.DataFrame(row).join(
+				pl.DataFrame(row).cast(schema, strict=False) # necessary b/c polars may redefine the schema for a given row, which would break the final concat
+				.join(
 					temp_new_df, on=gs_column, how="left"
 				)
 			)
@@ -168,10 +172,12 @@ class Query:
 			f"{output_prefix}storage_class_update_time": metadata.get("storage_class_update_time"),
 			f"{output_prefix}storage_url": metadata.get("storage_url"),
 			f"{output_prefix}update_time": metadata.get("update_time")
-		})
-		actual_out_columns = ["gs_uri"]
+		}).with_columns(
+			pl.col(f"{output_prefix}creation_time").str.strptime(pl.Datetime("us", "UTC"), strict=False)
+		)
+		actual_out_columns = ["gs_uri"] # we want this as the first column
 		for out_column in gs_metadata:
-			actual_out_columns.append(f"{output_prefix}{out_column}")
+			actual_out_columns.append(f"{output_prefix}{out_column}") # add everything else we want
 		return output_df.select(actual_out_columns)
 
 
