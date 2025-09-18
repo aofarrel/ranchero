@@ -751,12 +751,11 @@ class NeighLib:
 
 		return joined.select(["R1", "R2"] + other_cols)
 
-	def null_lists_of_len_zero(self, polars_df, just_this_column=None):
-		"""skips ID columns"""
-		if just_this_column is None:
-			list_cols = [col for col in polars_df.columns if polars_df.schema[col] == pl.List(pl.Utf8) and col not in kolumns.id_columns]
-		else:
+	def null_lists_of_len_zero(self, polars_df, just_this_column=None, skip_ids=True, skip_index=True, index=None):
+		if just_this_column is not None:
 			list_cols = just_this_column
+		else:
+			list_cols = self.get_columns_by_type(polars_df, pl.List, skip_ids=skip_ids, skip_index=skip_index, index=index)
 		for column in list_cols:
 			before = self.get_null_count_in_column(polars_df, column, warn=False)
 			polars_df = polars_df.with_columns(pl.col(column).list.drop_nulls()) # [pl.Null] --> []
@@ -765,40 +764,63 @@ class NeighLib:
 			self.logging.debug(f"{column}: {before} --> {after} nulls")
 		return polars_df
 
-	def nullify(self, polars_df, only_these_columns=None, no_match_NA=False, skip_ids=True):
+	def get_columns_by_type(self, polars_df, polars_type, subset=None, skip_ids=True, skip_index=True, index=None):
+		all_cols = subset if subset is not None else polars_df.columns
+		if type(all_cols) == str:
+			all_cols = [all_cols]
+		if skip_index:
+			if index is None:
+				all_cols.remove(self.get_index(polars_df))
+			else:
+				all_cols.remove(index)
+		if skip_ids:
+			return [col for col in all_cols if polars_df.schema[col] == polars_type and col not in kolumns.id_columns]
+		else:
+			return [col for col in all_cols if polars_df.schema[col] == polars_type]
+
+	def nullify(self, polars_df, only_these_columns=None, no_match_NA=False, skip_ids=True, skip_index=True, index=None):
 		"""
 		Turns stuff like "not collected" and "n/a" into pl.Null values, per null_values.py,
 		and nulls lists that have a length of zero
 		"""
-		all_cols = only_these_columns if only_these_columns is not None else polars_df.columns
-		if type(all_cols) == str: # idk man im tired
-			all_cols = [all_cols]
-		if skip_ids:
-			string_cols = [col for col in all_cols if polars_df.schema[col] == pl.Utf8 and col not in kolumns.id_columns]
-			list_cols = [col for col in all_cols if polars_df.schema[col] == pl.List(pl.Utf8) and col not in kolumns.id_columns]
-		else:
-			string_cols = [col for col in all_cols if polars_df.schema[col] == pl.Utf8]
-			list_cols = [col for col in all_cols if polars_df.schema[col] == pl.List(pl.Utf8)]
-
-		# first, null list columns of length 0
-		self.logging.debug("First pass of nulling lists of len zero")
+		self.logging.debug("First pass of nulling lists of len zero...")
 		polars_df = self.null_lists_of_len_zero(polars_df)
 
-		# use contains_any() for the majority of checks, as it is much faster than iterating through a list + contains()
-		# the downside of contains_any() is that it doesn't allow for regex
-		# in either case, we do string columns first, then list columns
-		self.logging.debug("Checking for null value replacements (this may take a while)")
+		string_cols = self.get_columns_by_type(polars_df, pl.Utf8, 
+			subset=only_these_columns, skip_ids=skip_ids, skip_index=skip_index, index=index)
+		list_cols = self.get_columns_by_type(polars_df, pl.List(pl.Utf8), 
+			subset=only_these_columns, skip_ids=skip_ids, skip_index=skip_index, index=index)
+
+		self.logging.debug("Performing string replacements for null values (this may take a while)...")
+		# Here's the fun part -- string replacements!
+		# contains_any():
+		# * pretty fast, compared to for-looping a list + contains()
+		# * anywhere-in-string matching
+		# * case insensitive
+		# * does not support regex
+		self.logging.debug("Running contains_any() on columns of type string...")
 		polars_df = polars_df.with_columns([
 			pl.when(pl.col(col).str.contains_any(null_values.nulls_pl_contains_any, ascii_case_insensitive=True))
 			.then(None)
 			.otherwise(pl.col(col))
 			.alias(col) for col in string_cols])
+		
+		self.logging.debug("Running contains_any() on columns of type string...")
 		polars_df = polars_df.with_columns([
 			pl.col(col).list.eval(
 				pl.element().filter(~pl.element().str.contains_any(null_values.nulls_pl_contains_any, ascii_case_insensitive=True))
 			)
 			for col in list_cols])
 
+		# At this point it's possible for a column's type to have changed into null or list(null),
+		# so we need to regenerate string_cols and list_cols
+		string_cols = self.get_columns_by_type(polars_df, pl.Utf8, 
+			subset=only_these_columns, skip_ids=skip_ids, skip_index=skip_index, index=index)
+		list_cols = self.get_columns_by_type(polars_df, pl.List(pl.Utf8), 
+			subset=only_these_columns, skip_ids=skip_ids, skip_index=skip_index, index=index)
+
+		# Now we use a for loop and contains() (booooooo) because that allows us to use regex
+		self.logging.debug("Looping with contains()...")
 		contains_list = null_values.nulls_pl_contains if no_match_NA else null_values.nulls_pl_contains_plus_NA
 		for null_value in contains_list:
 			polars_df = polars_df.with_columns([
@@ -813,8 +835,9 @@ class NeighLib:
 				for col in list_cols])
 		
 		# do this one more time since we may have dropped some values
-		self.logging.debug("Second pass of nulling lists of len zero")
+		self.logging.debug("Second pass of nulling lists of len zero...")
 		polars_df = self.null_lists_of_len_zero(polars_df)
+		self.logging.debug("Finished nullify()")
 		return polars_df
 
 	def assert_no_list_columns(self, polars_df: pl.DataFrame):
@@ -1300,7 +1323,7 @@ class NeighLib:
 		elif index is not None and index != '': # and self.has_one_index_column(polars_df) is true
 			current_index = self.get_index(polars_df, guess=False)		
 			if current_index != index and current_index.removeprefix(INDEX_PREFIX) != index:
-				if not defined(rename_index):
+				if rename_index is None:
 					errorL1 = f"Attempted to rancheroize {df_name} with pre-existing index {current_index}, but was told index = {index}"
 					errorL2 = "and no value was given for rename_index.\nIf you want to rename the index of an existing dataframe,"
 					errorL3 = "either do so before calling rancheroize() or define rename_index when calling rancheroize().\n"
@@ -1714,6 +1737,72 @@ class NeighLib:
 	def drop_known_unwanted_columns(self, polars_df):
 		return polars_df.select([col for col in polars_df.columns if col not in drop_zone.silly_columns])
 
+	def drop_low_cardinality_cols(self, polars_df, minimum=3, index=None):
+		"""
+		Drop columns that have less than cutoff unique elements.
+		Ex: If polars_df has 300 rows and col "librarysource" is "GENOMIC" across all 300 of them,
+		genomic would be dropped if cutoff > 0.
+		"""
+		dropped = []
+		starting_columns = polars_df.shape[1]
+		if index is None:
+			index = self.get_index(polars_df, guess=True)
+		for column in polars_df.columns:
+			if column == index:
+				continue
+			counts = polars_df.select([pl.col(column).value_counts(sort=True)])
+			if len(counts) <= minimum:
+				dropped.append(column)
+				polars_df = polars_df.drop(column)
+		self.logging.info(f"Removed {starting_columns - polars_df.shape[1]} columns with less than {cutoff} unique values")
+		self.logging.debug(f"Dropped columns: {dropped}")
+		return polars_df
+
+	def drop_mostly_null_cols(self, polars_df, minimum_count=0, minimum_pct=None, index=None):
+		"""
+		Drop columns that have less than minimum_count non-null values. If minimum_pct is not None, it will also be applied
+		as a minimum percentage (as float 0 - 1) of the column is non-null.
+
+		Examples on polars_df of 100 rows where col "organism" is null for 90 of those columns:
+		minimum_count=0, minimum_pct=None --> kept
+		minimum_count=40, minimum_pct=None --> kept
+		minimum_count=90, minimum_pct=None --> kept
+		minimum_count=95, minimum_pct=None --> dropped
+		minimum_count=0, minimum_pct=0.9 --> kept
+		minimum_count=91, minimum_pct=0.9 --> dropped
+		"""
+		dropped = []
+		total_rows, starting_columns = polars_df.shape[0], polars_df.shape[1]
+		if index is None:
+			index = self.get_index(polars_df, guess=True)
+		if minimum_count == 0 and minimum_pct is None:
+			self.logging.warning("Minimum value of non-nulls set to zero, no minimum_pct set. Returning unchanged dataframe.")
+			return polars_df
+		elif minimum_count == 0: # and minimum_pct is not None
+			if minimum_pct > 1 or minimum_pct < 0:
+				self.logging.error("minimum_pct should be a float between 0 and 1 (or None)")
+				raise ValueError
+		
+		for column in polars_df.columns:
+			if column == index:
+				continue
+			null_counts = self.get_null_count_in_column(polars_df, column, warn=False, error=False)
+			non_null_counts = total_rows - null_counts
+			
+			if non_null_counts <= minimum_count:
+				dropped.append(column)
+				polars_df = polars_df.drop(column)
+				continue
+
+			if minimum_pct is not None:
+				if non_null_counts / total_rows <= minimum_pct:
+					dropped.append(column)
+					polars_df = polars_df.drop(column)
+		
+		self.logging.info(f"Removed {starting_columns - polars_df.shape[1]} columns")
+		self.logging.debug(f"Dropped columns: {dropped}")
+		return polars_df
+
 	@staticmethod
 	def list_nesting_depth(dtype: pl.DataType):
 		depth, cur = 0, dtype
@@ -1726,6 +1815,7 @@ class NeighLib:
 		return self.list_nesting_depth(dtype) >= 2
 
 	def nested_list_columns(self, polars_df: pl.DataFrame) -> list[str]:
+		#return [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
 		return [name for name, datatype in polars_df.schema.items() if self.is_nested_list_dtype(datatype)]
 
 	def flatten_one_nested_list_col(self, polars_df, column):
@@ -1742,7 +1832,6 @@ class NeighLib:
 
 	def flatten_nested_list_cols(self, polars_df):
 		"""There are other ways to do this, but this one doesn't break the schema, so we're sticking with it"""
-		#nested_lists = [col for col, dtype in zip(polars_df.columns, polars_df.dtypes) if isinstance(dtype, pl.List) and isinstance(dtype.inner, pl.List)]
 		nested_lists = self.nested_list_columns(polars_df)
 		for col in nested_lists:
 			self.logging.debug(f"Unnesting {col}")
