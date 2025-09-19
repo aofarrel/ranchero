@@ -1439,6 +1439,7 @@ class NeighLib:
 		return polars_df.with_columns(pl.col(list_col).list.len().alias(new_col))
 
 	def coerce_to_not_list_if_possible(self, polars_df, column, prefix_arrow=False):
+		# TODO: I don't live this prefix arrow thing
 		arrow = '-->' if prefix_arrow else ''
 		if self.get_index_subname(polars_df) is not None:
 			assert column != self.get_index_subname(polars_df)
@@ -1450,7 +1451,7 @@ class NeighLib:
 				if self.logging.getEffectiveLevel() == 10:
 					debug_print = self.get_rows_where_list_col_more_than_one_value(polars_df, column)
 					print(f"{arrow}{len(debug_print)} multi-element lists in {column}")
-					print(debug_print.select(index_column, column))
+					self.dfprint(debug_print.select(self.get_index(debug_print), column), loglevel=10)
 				return polars_df
 		else:
 			self.logging.debug(f"Tried to coerce {column} into a non-list, but it's already a non-list")

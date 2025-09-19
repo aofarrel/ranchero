@@ -138,7 +138,7 @@ class FileReader():
 		if explode_upon != None:
 			# TODO: this function call had column=self.NeighLib.get_index_column(polars_df, quiet=True) but I'm not sure why we
 			# would want the quiet version, since it wouldn't return a str during error cases...
-			polars_df = self.polars_explode_delimited_rows(polars_df, column=self.NeighLib.get_index_column(polars_df, quiet=True), 
+			polars_df = self.polars_explode_delimited_rows(polars_df, column=self.NeighLib.get_index(polars_df, guess=True), 
 				delimiter=explode_upon, drop_new_non_unique=check_index)
 		if check_index: polars_df = self.NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
 		if auto_rancheroize:
@@ -465,7 +465,7 @@ class FileReader():
 
 		if index_by_file:
 			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'submitted_files': 'file'}), 'file')
-			file_index = self.NeighLib.get_index(blessed_dataframe)
+			file_index = self.NeighLib.get_index(blessed_dataframe, guess=False)
 			if group_by_file:
 				blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(file_index).agg(
 						[c for c in blessed_dataframe.columns if c != file_index]
@@ -473,7 +473,7 @@ class FileReader():
 		else:
 			# TODO: sum() submitted_file_sizes
 			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'run_id': 'run'}), 'run')
-			run_id = self.NeighLib.get_index(blessed_dataframe)
+			run_id = self.NeighLib.get_index(blessed_dataframe, guess=False)
 			if blessed_dataframe.select(pl.col(run_id).n_unique() != pl.col(run_id).len()):
 				self.logging.warning(f"Found non-unique values for {run_id} (SRR_id)")
 			blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_id).agg(
@@ -585,13 +585,15 @@ class FileReader():
 		"SRR124"		12
 		"SRR125"		555
 		"""
+		self.logging.debug(f"Exploding on {column} with delimter {delimiter} (drop_new_non_unique={drop_new_non_unique})...")
+		assert column in polars_df.columns
 		exploded = (polars_df.with_columns(pl.col(column).str.split(delimiter)).explode(column)).unique()
 		if len(polars_df) == len(polars_df.select(column).unique()) and len(exploded) != len(exploded.select(column).unique()) and drop_new_non_unique:
 			self.logging.info(f"Exploding created non-unique values for the previously unique-only column {column}, so we'll be merging...")
 			exploded = self.merge_row_duplicates(exploded, column)
 			if len(exploded) != len(exploded.select(column).unique()): # probably should never happen
-				self.logging.warning("Attempted to merge duplicates caused by exploding, but it didn't work.")
-				self.logging.warning(f"Debug information: Exploded df has len {len(exploded)}, unique in {column} len {len(exploded.select(column).unique())}")
+				self.logging.error("Attempted to merge duplicates caused by exploding, but it didn't work.")
+				self.logging.error(f"Debug information: Exploded df has len {len(exploded)}, unique in {column} len {len(exploded.select(column).unique())}")
 				raise ValueError
 		else:
 			# there aren't unique values to begin with so who cares lol (or exploding didn't make a difference)
