@@ -86,14 +86,26 @@ class ProfessionalsHaveStandards():
 		pl.when(pl.col("BioProject") == "PRJEB15463").then(pl.lit("COD")).otherwise(pl.col("country")).alias("country"), 
 		pl.when(pl.col("BioProject") == "PRJEB15463").then(pl.lit("Kinshasa")).otherwise(pl.col("region")).alias("region")
 		"""
-		indicators = []
-		drop_me = []
-		for ordered_dictionary in metadata_dictlist:
-			for key in ordered_dictionary:
-				if key not in polars_df.columns:
-					self.logging.warning(f"Attempted to inject {key} metadata, but existing column with that name doesn't exist")
-					drop_me.append(key)
+		indicators, dropped = [], []
 		assert type(metadata_dictlist[0]) == OrderedDict
+
+		# the first key in every OD is the name of the column the injector is matching upon
+		first_keys = {next(iter(od)) for od in metadata_dictlist}
+		if not first_keys.issubset(set(polars_df.columns)):
+			self.logging.error(f"Injector wants to inject metadata where column(s) {first_keys - set(polars_df.columns)} is some value, but that column(s) is missing")
+			raise ValueError
+
+		# the not-first keys in every OD is the name of the column the injector will try to inject into
+		other_keys = {k for od in metadata_dictlist for k in list(od.keys())[1:]}
+		for key in other_keys:
+			if key not in polars_df.columns:
+				for od in metadata_dictlist:
+					od.pop(key, None) # TODO: does this need to be popitem()?
+				dropped.append(key)
+		
+		if len(dropped) > 0:
+			self.logging.warning(f"Cannot inject metadata into non-existent columns (will be skipped): {dropped}")
+			self.logging.warning("Tip: If you're trying to create new columns, add them as empty columns to the polars df first, then use the injector")
 
 		for ordered_dictionary in metadata_dictlist:
 			# {"BioProject": "PRJEB15463", "country": "DRC", "region": "Kinshasa"}
