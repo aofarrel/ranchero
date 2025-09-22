@@ -805,7 +805,7 @@ class NeighLib:
 			.otherwise(pl.col(col))
 			.alias(col) for col in string_cols])
 		
-		self.logging.debug("Running contains_any() on columns of type string...")
+		self.logging.debug("Running contains_any() on columns of type list...")
 		polars_df = polars_df.with_columns([
 			pl.col(col).list.eval(
 				pl.element().filter(~pl.element().str.contains_any(null_values.nulls_pl_contains_any, ascii_case_insensitive=True))
@@ -1247,9 +1247,9 @@ class NeighLib:
 		if polars_df.schema[column] == pl.List:
 			if self.logging.getEffectiveLevel() == 10:
 				nulls = polars_df.filter(pl.col(column).list.eval(pl.element().is_null()).list.any())
-				if len(nulls) > 0:
+				if len(nulls) > 0 and self.logging.getEffectiveLevel() == 10:
 					self.logging.debug("Found lists with null values:")
-					self.dfprint(polars_df.select(self.get_valid_id_columns(polars_df) + [column]), loglevel=10)
+					self.dfprint(nulls.select(self.get_valid_id_columns(polars_df) + [column]), loglevel=10)
 			return polars_df.with_columns(pl.col(column).list.drop_nulls())
 		return polars_df
 
@@ -1674,11 +1674,13 @@ class NeighLib:
 					else:
 						self.logging.debug(f"{col}\n-->[kolumns.list_fallback_or_null] {col} is type list, but it seems all lists have a len of 1 or 0")
 						non_nulls_in_this_column = polars_df.select(pl.count(col)).item() # only counts non-nulls, see https://docs.pola.rs/api/python/dev/reference/expressions/api/polars.count.html
+						self.logging.debug(f"{non_nulls_in_this_column} non-nulls in this column")
 						# do not run pl.when(col).list.len() <= 1 expression here, that doesn't work for some reason
 						polars_df = polars_df.with_columns(
 							pl.when(pl.col(col).list.len() <= 1).then(pl.col(col).first()).otherwise(None).alias(col)
 						)
 						polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
+						self.logging.debug(f"Column ran through coerce, is now type {polars_df.schema[col]}")
 						assert polars_df.select(pl.count(col)).item() == non_nulls_in_this_column
 
 				else:

@@ -678,6 +678,7 @@ class FileReader():
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
 		assert polars_df.filter(pl.col(current_run_id).is_duplicated()).shape[0] == 0 # handled by check_index
+		assert polars_df.schema[current_sample_id] == pl.Utf8
 		assert current_run_id in polars_df.columns
 		assert current_sample_id in polars_df.columns
 		run_id_will_temporarily_be = self.NeighLib.get_hypothetical_index_basename(current_run_id)
@@ -689,13 +690,15 @@ class FileReader():
 
 		# check the run index AND the sample index, since both are currently strings
 		# the check_index of current_sample_id does NOT overwrite the current df on purpose!
+		# edit: there really isn't a benefit of checking the hypothetical sample index at this point since the main
+		# things we gotta check for (dupes) will exist at this point
+		self.logging.info("Checking index as it currently exists...")
 		polars_df = self.NeighLib.check_index(polars_df, manual_index_column=current_run_id, allow_bad_name=True)
-		self.NeighLib.check_index(polars_df, manual_index_column=current_sample_id, allow_bad_name=True)
+		#self.NeighLib.check_index(polars_df, manual_index_column=current_sample_id, allow_bad_name=True)
 
 		if not skip_rancheroize:
-			self.logging.debug("Rancheroizing run-indexed dataframe")
+			self.logging.info("Rancheroizing run-indexed dataframe first (skip this by setting skip_rancheroize)...")
 			polars_df = self.NeighLib.rancheroize_polars(polars_df) # runs check_index() too, and converts __index__acc
-		# we already ran check_index() earlier and didn't make any changes so need to run it again in the true case
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, current_run_id, current_sample_id)

@@ -911,13 +911,18 @@ class ProfessionalsHaveStandards():
 		if group_column_name not in kolumns.columns_to_keep_after_rancheroize:
 			self.logging.warning(f"Bacterial group column will have name {group_column_name}, but might get removed later. Add {group_column_name} to kolumns.equivalence!")
 		merge_these_columns = [col for col in polars_df.columns if col in sum(kolumns.special_taxonomic_handling.values(), [])]
+		debug_incoming_taxoncore_columns = pl.DataFrame({
+			"column": merge_these_columns,
+			"dtype": [polars_df.schema[col] for col in merge_these_columns], # calculate this BEFORE converting to string
+		})
+		self.logging.debug("Incoming taxoncore columns (pl.List was joined into comma+space separated strings)")
+		self.NeighLib.dfprint(debug_incoming_taxoncore_columns, loglevel=10)
 		for col in merge_these_columns:
-			self.logging.debug(f"Incoming taxoncore column {col} is type {polars_df.schema[col]}")
 			if polars_df.schema[col] == pl.List:
 				polars_df = polars_df.with_columns(pl.col(col).list.join(", ").alias(col))
-				self.logging.debug("->Joined into string")
 			#assert polars_df.schema[col] == pl.Utf8
 		if 'organism' in polars_df.columns and self.cfg.rm_phages:
+			self.logging.info("Removing phages from organism column...")
 			polars_df = self.rm_all_phages(polars_df)
 		
 		# taxoncore_list used for most matches,
@@ -1001,6 +1006,14 @@ class ProfessionalsHaveStandards():
 		polars_df = self.move_mismatches(polars_df, in_col=in_col, out_col=out_col)
 		polars_df = polars_df.drop(['matched', 'written'])
 		assert 'matched' not in polars_df.columns()
+		return polars_df
+
+	def continent_from_country(self, polars_df, country_col, continent_col, overwrite=True): # overwrite is true to match standardize_countries() but maybe shouldn't be
+		if continent_col not in polars_df:
+			polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, continent_col, None)
+		self.validate_col_country(polars_df, country_col)
+		for ISO3166, continent in countries.countries_to_continents.items():
+			polars_df = self.dictionary_match(polars_df, match_col=country_col, write_col=continent_col, key=ISO3166, value=continent, substrings=False, overwrite=overwrite)
 		return polars_df
 	
 	def standardize_countries(self, polars_df, try_rm_geoloc_info=False):
@@ -1231,19 +1244,21 @@ class ProfessionalsHaveStandards():
 		return polars_df
 		
 
-	def validate_col_country(self, polars_df):
+	def validate_col_country(self, polars_df, country_col='country'):
 		# TODO: now we have some that aren't just three bytes
-		assert 'country' in polars_df.columns
+		assert country_col in polars_df.columns
+		assert polars_df.schema[country_col] == pl.Utf8
 		assert 'geoloc_info_unhandled' not in polars_df.columns
-		invalid_rows = polars_df.filter(pl.col('country').str.len_bytes() != 3)
+		invalid_rows = polars_df.filter(pl.col(country_col).str.len_bytes() != 3)
 		if len(invalid_rows) > 0:
+			# TODO: add check against a full list of ISO codes too?
 			self.logging.error(
-				f"The following rows have countries that failed to convert to ISO3166 format:"
+				f"The following rows have countries that are not in ISO3166 format:"
 			)
-			print(invalid_rows.select(self.NeighLib.get_valid_id_columns(invalid_rows) + ['country']))
+			self.dfprint(invalid_rows.select(self.NeighLib.get_valid_id_columns(invalid_rows) + ['country']))
 			raise ValueError
+		self.logging.info(f"Column {country_col} for country metadata appears valid (all rows either null or 3 byte strings)")
 		if self.logging.getEffectiveLevel() == 10:
-			self.logging.debug("---- After absolutely everything ----")
 			self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='country', col_b='run_id',
 				list_to_match=['SRR9614686', 'ERR046972', 'ERR2884698', 'ERR732680', 'ERR841442', 'ERR5908244', 'SRR23310897', 'SRR12380906', 'SRR18054772', 'SRR10394499', 'SRR9971324', 'ERR732681', 'SRR23310897'], 
 				alsoprint=['region', 'continent'])

@@ -350,6 +350,7 @@ comprehensive_fuzzy = {
 	'culture': 'culture',
 	'Environmental': 'environmental',
 	'Biopsy': 'biopsy',
+	'Biopsie': 'biopsy',
 	'Secretion': 'secretion',
 	'swab': 'swab',
 
