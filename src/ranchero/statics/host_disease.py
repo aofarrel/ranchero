@@ -12,6 +12,9 @@ host_disease_exact_match = {
 	'TB': 'unspecified TB',
 	'Tuberculosis': 'unspecified TB',
 	'tuberculosis': 'unspecified TB',
+	'Tuberculose': 'unspecified TB',
+	'Tuberculosis TB': 'unspecified TB',
+	'Tuberculosis (TB)': 'unspecified TB',
 	'DOID:552': 'pneumonia',
 	'DOID:399': 'unspecified TB',
 	'DOID:2957': 'pulmonary TB',
@@ -31,6 +34,7 @@ host_disease_substring_match = {
 	'TB infection': 'unspecified TB',
 	'TB meningitis': 'TB meningitis',
 	'tuberculosis DOID:552': 'TB-associated pneumonia',
+	'johnes disease': "paratuberculosis (Johne's disease)"
 }
 
 host_disease_substring_match_mycobacterial = {
@@ -45,6 +49,7 @@ host_disease_substring_match_mycobacterial = {
 	'refractory': 'refractory TB',
 	'skeletal': 'skeletal TB',
 	'Spinal': 'spinal TB',
+	'Buruli ulcer': 'Buruli ulcer',
 
 	# do last to avoid matches to "extra pulmonary" and "lung infection"
 	'pulmonary': 'Pulmonary TB',
