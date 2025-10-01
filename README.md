@@ -3,7 +3,11 @@ Is your mycobacterial metadata a mess? Grab the *M. bovis* by the horns with Ran
 
 Ranchero is a Python solution to the dozens of different metadata formats used in genomic datasets. While it is specifically focused on NCBI's collection of *Mycobacterium tuberculosis complex* metadata, it still has utility for other organisms. For information on what Ranchero considers "a sample" and the like, see [./docs/data_structure.md](./docs/data_structure.md). 
 
+> [!NOTE]  
+> Ranchero should be considered pre-release software, and is currently undergoing a cleanup/refactor. More extensive documentation and examples will be provided once this cleanup is complete.
+
  ## Features
+ * Quicker than you expect, thanks to the blazing fast speed of polars
  * Pre-configured to standardize dozens of common NCBI metadata fields
  * Input a TSV/JSON/CSV of new samples and their metadata into a dataframe
  * Merge columns of similar data types into a single column, filling in nulls/empty values as you go
@@ -19,7 +23,7 @@ Ranchero is a Python solution to the dozens of different metadata formats used i
  * [polars](https://github.com/pola-rs/polars) for Python == 1.27.0
  * [pandas](https://pandas.pydata.org/) >= 2.0.0
  * [pyyaml](https://pyyaml.org/)
- * [pyarrow](https://pypi.org/project/pyarrow/), even if not working with Apache Arrow datasets
+ * [pyarrow](https://pypi.org/project/pyarrow/)
  * [tqdm](https://github.com/tqdm/tqdm)
  * [xmltodict](https://github.com/martinblech/xmltodict) for working with Enterz Direct files
 
