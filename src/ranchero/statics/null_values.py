@@ -20,6 +20,7 @@ nulls_CSV = [
 	'not available: not collected',
 	'not collected','Not collected','Not Collected','NOT COLLECTED',
 	'not known','Not Known', 'Not known',
+	'not present',
 	'Not Provided','Not provided',
 	'Not recorded',
 	'Not specified','not specified',
@@ -52,7 +53,7 @@ nulls_pl_contains_any = [
 	'null',
 	'uncalculated',
 	'unknown',
-	'unspecified',
+	#'unspecified', --> too generic and causes issues with host_disease "unspecified TB"
 ]
 
 # 3) Regex permitting, anywhere-in-string matching and case sensitive

@@ -36,6 +36,7 @@ sample_sources_nonsense = [
 	'to wear a mask', # ?????????
 	'whole organism',
 	'Yes',
+	'WGS'
 ]
 
 # Handled earlier in standardizer
@@ -110,19 +111,23 @@ if_this_and_that_then = [
 	['(?i)swab', '(?i)axilla/groin', 'swab - axilla and/or groin'],
 	['(?i)swab', '(?i)axilla and groin', 'swab - axilla and/or groin'],
 	['(?i)swab', '(?i)skin', 'swab - skin'],
-	
-	# everything else
-	['(?i)scrapate', '(?i)granuloma', 'scrapate of granuloma'],
-	['(?i)biopsy', '(?i)skin', 'biopsy (skin)'],
-	['(?i)biopsy', '(?i)intestine', 'biopsy (intestine)'],
-	['(?i)biopsy', '(?i)thoracic', 'biopsy (thoracic)'],
-	['(?i)biopsy', '(?i)pleura', 'biopsy (pleura/pleural effusion)'],
+
+	# biopsies -- by cutting off the "y" we match plural and French
+	['(?i)biops', '(?i)skin', 'biopsy (skin)'],
+	['(?i)biops', '(?i)intestine', 'biopsy (intestine)'],
+	['(?i)biops', '(?i)thoracic', 'biopsy (thoracic)'],
+	['(?i)biops', '(?i)pleura', 'biopsy (pleura/pleural effusion)'],
 	['(?i)necropsy', '(?i)lung', 'necropsy (lung tissue)'],
 	['(?i)necropsy', '(?i)spleen', 'necropsy (spleen)'],
 	['(?i)necropsy', '(?i)kidney', 'necropsy (kidney)'],
 	['(?i)cow', '(?i)feces', 'feces (bovine)'],
 	['(?i)FFPE', '(?i)skin', 'FFPE block (skin)'],
 
+	# everything else
+	['(?i)scrapate', '(?i)granuloma', 'scrapate of granuloma'],
+	['(?i)aspirate', '(?i)needle', 'fine needle aspirate'],
+	['(?i)core', '(?i)needle', 'core needle biopsy'],
+	['(?i)ileal', '(?i)intestin', 'intestinal tissue'],
 	['(?i)ascit', '(?i)fluid', 'peritoneal fluid (ascitic)'],
 ]
 
@@ -159,6 +164,7 @@ comprehensive_fuzzy = {
 	'Driveline': 'driveline',
 
 	# miscellanous highly specific stuff
+	'Aquarium': 'aquarium',
 	'Archaeological': 'archaeological',
 	'biofilm': 'biofilm',
 
@@ -182,6 +188,7 @@ comprehensive_fuzzy = {
 	'Bronch_Asp': 'bronchoalveolar aspirate',
 	'tracheal aspirate': 'tracheal aspirate', # TODO: why is "Trachael Aspirate" not matching?
 	'Trach_Asp': 'tracheal aspirate',
+	'aspirate trachy': 'tracheal aspirate',
 	'BRONCH_WSH': 'bronchial wash',
 	'bronchial wash': 'bronchial wash',
 	# CSF
@@ -345,7 +352,8 @@ comprehensive_fuzzy = {
 	'clinical isolate': 'clinical',
 	'clinical sample': 'clinical',
 	'clinical': 'clinical',
-	'hospital': 'clinical',
+	'patient': 'clinical',
+	#'hospital': 'clinical', # could be patient, could be environmental
 	'diagnostic sample': 'clincal (diagnostic sample)',
 	'culture': 'culture',
 	'Environmental': 'environmental',
