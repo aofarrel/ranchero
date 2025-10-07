@@ -113,7 +113,10 @@ class FileReader():
 
 		if index is not None:
 			polars_df = self.NeighLib.mark_index(polars_df, index)
-			index = self.NeighLib.get_index(polars_df, index)
+			new_index = self.NeighLib.get_index(polars_df, index)
+			self.logging.debug(f"Marked manually-input index {index} as {new_index}")
+			index = new_index
+		
 		if list_columns is not None:
 
 			if list_columns_are_internally_dquoted:
@@ -140,13 +143,16 @@ class FileReader():
 			# would want the quiet version, since it wouldn't return a str during error cases...
 			polars_df = self.polars_explode_delimited_rows(polars_df, column=self.NeighLib.get_index(polars_df, guess=True), 
 				delimiter=explode_upon, drop_new_non_unique=check_index)
-		if check_index: polars_df = self.NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
 		if auto_rancheroize:
 			self.logging.info(f"Rancheroizing dataframe from {df_name}...")
 			polars_df = self.NeighLib.rancheroize_polars(polars_df, index=index)
 			if auto_standardize:
 				self.logging.info(f"Standardizing dataframe from {df_name}...")
 				polars_df = self.Standardizer.standardize_everything(polars_df)
+		
+		# run check index AFTER rancheroize so index name can be changed
+		if check_index: polars_df = self.NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
+
 		return polars_df
 
 	def fix_efetch_file(self, efetch_xml):
@@ -687,6 +693,8 @@ class FileReader():
 		assert samp_index_will_temporarily_be not in polars_df.columns
 		assert output_run_id not in polars_df.columns
 		assert output_sample_id not in polars_df.columns
+		if current_sample_id != 'sample_index':
+			assert 'sample_index' not in polars_df
 
 		# check the run index AND the sample index, since both are currently strings
 		# the check_index of current_sample_id does NOT overwrite the current df on purpose!

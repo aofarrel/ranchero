@@ -798,14 +798,25 @@ class ProfessionalsHaveStandards():
 
 	def unmask_badgers(self, polars_df):
 		"""
-		TODO: this doesn't add a confidence score
+		Badger is usually Meles meles, but there's some others out there, so we'll put confidence low in line
+		with host_species currently setting "BADGER" to a confidence of 1
 		"""
 		if 'anonymised_badger_id_sam' in polars_df.columns:
 			polars_df = polars_df.with_columns([
 				pl.when((pl.col('anonymised_badger_id_sam').is_not_null()) & (pl.col('host_commonname').is_null()))
 				.then(pl.lit('badger'))
 				.otherwise(pl.col('host_commonname'))
-				.alias('host_commonname')
+				.alias('host_commonname'),
+
+				pl.when((pl.col('anonymised_badger_id_sam').is_not_null()) & (pl.col('host_confidence').is_null()))
+				.then(pl.lit(1))
+				.otherwise(pl.col('host_confidence'))
+				.alias('host_confidence'),
+
+				pl.when((pl.col('anonymised_badger_id_sam').is_not_null()) & (pl.col('host_scienname').is_null()))
+				.then(pl.lit('Meles meles'))
+				.otherwise(pl.col('host_scienname'))
+				.alias('host_scienname')
 			]).drop('anonymised_badger_id_sam')
 		return polars_df
 
@@ -818,7 +829,7 @@ class ProfessionalsHaveStandards():
 				.alias('host_commonname'),
 
 				pl.when((pl.col('mouse_strain_sam').is_not_null()) & (pl.col('host_confidence').is_null()))
-				.then(pl.lit(3))
+				.then(pl.lit(2))
 				.otherwise(pl.col('host_confidence'))
 				.alias('host_confidence'),
 
