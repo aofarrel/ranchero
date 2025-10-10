@@ -484,23 +484,23 @@ class ProfessionalsHaveStandards():
 
 		# very last bit: drop any element of the list that contains a number, as that's likely a sample number. this is done last
 		# to allow sample numbers within actually useful strings to still have their useful string bits extracted
-		polars_df = polars_df.with_columns([
-			pl.col('isolation_source').list.eval(
-				pl.element().filter(~pl.element().str.contains(r'\d'))
-			).alias('isolation_source')
-		])
+		#polars_df = polars_df.with_columns([
+		#	pl.col('isolation_source').list.eval(
+		#		pl.element().filter(~pl.element().str.contains(r'\d'))
+		#	).alias('isolation_source')
+		#])
+		# --> currently skipped since we don't use it
 		
-		# turn remaining isolation_source into string and merge into neo_isolation_source
-		polars_df = polars_df.with_columns(
-			pl.when(pl.col('neo_isolation_source').is_null().and_(pl.col('isolation_source').is_not_null().and_(pl.col('isolation_source').list.len() > 0)))
-			.then(pl.lit("As reported: ") + pl.col('isolation_source').list.join(", "))
-			.otherwise(pl.col('neo_isolation_source'))
-			.alias('neo_isolation_source')
-		)
+		#polars_df = polars_df.with_columns(
+		#	pl.when(pl.col('neo_isolation_source').is_null().and_(pl.col('isolation_source').is_not_null().and_(pl.col('isolation_source').list.len() > 0)))
+		#	.then(pl.lit("As reported: ") + pl.col('isolation_source').list.join(", "))
+		#	.otherwise(pl.col('neo_isolation_source'))
+		#	.alias('neo_isolation_source')
+		#)
+		# --> that's what isolation_source_raw is for!!
 
-		polars_df = polars_df.drop(['isolation_source']).rename({'neo_isolation_source': 'isolation_source'})
-		
-		assert polars_df.schema['isolation_source'] != pl.List
+		polars_df = polars_df.drop(['isolation_source']).rename({'neo_isolation_source': 'isolation_source_cleaned'})
+		assert polars_df.schema['isolation_source_cleaned'] != pl.List
 
 		#self.logging.info(f"The isolation_source column has type list. We will be .join()ing them into strings.") # done AFTER most standardization
 		#polars_df = polars_df.with_columns(
@@ -513,9 +513,9 @@ class ProfessionalsHaveStandards():
 		assert 'isolation_source' in polars_df.columns
 		assert polars_df.schema['isolation_source'] == pl.Utf8
 		for sample_source, simplified_sample_source in sample_sources.sample_source_exact_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=True)
+			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=True)
 		for sample_source, simplified_sample_source in sample_sources.comprehensive_fuzzy.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=True)
+			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=True)
 		return polars_df
 	
 	def standarize_hosts(self, polars_df):

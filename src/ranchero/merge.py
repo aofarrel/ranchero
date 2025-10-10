@@ -164,7 +164,7 @@ class Merger:
 
 		for df, name in zip([left,right], [left_name,right_name]):
 			if merge_upon not in df.columns:
-				self.logging.error(f"Couldn't find {merge_upon} in {name} (which seems to have index {df.NeighLib.get_index(df, guess=True)})")
+				self.logging.error(f"Couldn't find {merge_upon} in {name} (which seems to have index {self.NeighLib.get_index(df, guess=True)})")
 				raise ValueError(f"Attempted to merge dataframes upon {merge_upon}, but no column with that name in {name} dataframe")
 			if merge_upon == 'run_id' or merge_upon == 'run_accession':
 				if not self.NeighLib.is_run_indexed(df):

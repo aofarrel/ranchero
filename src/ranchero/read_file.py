@@ -145,7 +145,7 @@ class FileReader():
 				delimiter=explode_upon, drop_new_non_unique=check_index)
 		if auto_rancheroize:
 			self.logging.info(f"Rancheroizing dataframe from {df_name}...")
-			polars_df = self.NeighLib.rancheroize_polars(polars_df, index=index)
+			polars_df = self.NeighLib.rancheroize_polars(polars_df, input_index=index)
 			if auto_standardize:
 				self.logging.info(f"Standardizing dataframe from {df_name}...")
 				polars_df = self.Standardizer.standardize_everything(polars_df)
@@ -531,7 +531,7 @@ class FileReader():
 		if normalize_attributes and "attributes" in polars_df.columns:  # if column doesn't exist, return false
 			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df, rancheroize=auto_rancheroize)
 		if auto_rancheroize:
-			polars_df = self.NeighLib.rancheroize_polars(polars_df, index='acc', rename_index='__index__run')
+			polars_df = self.NeighLib.rancheroize_polars(polars_df, input_index='acc')
 		if auto_standardize:
 			polars_df = self.Standardizer.standardize_everything(polars_df)
 		return polars_df
@@ -640,7 +640,10 @@ class FileReader():
 				else:
 					listmakers.append(other_column)
 		self.logging.debug(f"Does not need to become a list: {listbusters}")
-		self.logging.debug(f"Will become a list (but might be flattened later): {listmakers}")
+		self.logging.debug(f"Will become a list (but might be flattened later):")
+		for col in listmakers:
+			# this is helpful for detecting columns that end up getting wiped out
+			self.logging.debug(f"--> {col}, which currently has mode and count of {self.NeighLib.get_most_common_non_null_and_its_counts(polars_df, col)}")
 		self.logging.debug(f"Already a list: {listexisters}")
 
 		grouped_df_ = (
@@ -654,10 +657,6 @@ class FileReader():
 				]
 			])
 		)
-
-		if self.logging.getEffectiveLevel() == 10:
-			self.NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
-			self.NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
 
 		return grouped_df_
 
@@ -711,9 +710,11 @@ class FileReader():
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, current_run_id, current_sample_id)
 		version_with_nested_lists = self.NeighLib.mark_index(version_with_nested_lists, current_sample_id, rm_existing_index=True)
+
+		# yes, we null lists of len zero TWICE
 		polars_df = self.NeighLib.null_lists_of_len_zero(
 			self.NeighLib.flatten_all_list_cols_as_much_as_possible(
-				version_with_nested_lists
+				self.NeighLib.null_lists_of_len_zero(version_with_nested_lists)
 			)
 		)
 		polars_df = self.NeighLib.check_index(polars_df)
