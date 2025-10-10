@@ -266,15 +266,15 @@ comprehensive_fuzzy = {
 	'Toenail': 'foot (toenail)', # toe handled in last section
 	
 	# lab stuff
-	'laboratory reference strain': 'laboratory strain ("reference")',
+	'laboratory reference strain': 'laboratory strain (reference)',
 	'Laboratory obtained strain': 'laboratory strain (unspecified)',
 	'Lab strain': 'laboratory strain (unspecified)',
 	'laboratory strain': 'laboratory strain (unspecified)',
 
 	# dead
-	'Morgue': 'necropsy (morgue)',
-	'Abbattoir': 'necropsy (abbattoir)',
-	'slaughterhouse': 'necropsy (abbattoir)',
+	'Morgue': 'morgue',
+	'Abbattoir': 'abbattoir',
+	'slaughterhouse': 'abbattoir',
 	'necropsy': 'necropsy',
 
 	# owies
@@ -367,9 +367,9 @@ comprehensive_fuzzy = {
 	'sweep': 'culture (lawn/sweep)',
 	'single colony': 'culture (single colony)',
 	'single cell': 'single cell',
-	'in vitro': 'culture (unspecified)',
-	'in-vitro': 'culture (unspecified)',
-	'bacterial suspension': 'culture (unspecified)',
+	'in vitro': 'culture',
+	'in-vitro': 'culture',
+	'bacterial suspension': 'culture',
 	
 }
 

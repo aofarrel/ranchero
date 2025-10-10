@@ -451,7 +451,7 @@ class ProfessionalsHaveStandards():
 		if 'isolate_sam_ss_dpl100' in polars_df.columns:
 			for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source_exact_match.items(), desc="Checking isolate_sam_ss_dpl100 (exact)", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 				polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
-			polars_df.drop('isolate_sam_ss_dpl100')
+			polars_df = polars_df.drop('isolate_sam_ss_dpl100')
 
 		for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			this_and_that = pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any().and_(pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any())
