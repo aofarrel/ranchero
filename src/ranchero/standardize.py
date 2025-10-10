@@ -250,11 +250,11 @@ class ProfessionalsHaveStandards():
 		else:
 			polars_df = polars_df.with_columns([
 				pl.when(
-					(found_a_match)
-					.and_(
+					(
 						(allowed_to_overwrite)
 						.or_(write_col_is_empty)
 					)
+					.and_(found_a_match)
 				)
 				.then(pl.lit(value))
 				.otherwise(pl.col(write_col))
