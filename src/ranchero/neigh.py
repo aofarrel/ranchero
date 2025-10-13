@@ -608,7 +608,7 @@ class NeighLib:
 		for column in polars_df.columns:
 			if skip_ids and column not in kolumns.id_columns:
 				if only_these_columns is None or column in only_these_columns:
-					with pl.Config(fmt_str_lengths=500, tbl_rows=50):
+					with pl.Config(fmt_str_lengths=500, tbl_rows=50, set_tbl_hide_column_data_types=True):
 						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
 						print(counts)
 				else:
@@ -1298,13 +1298,13 @@ class NeighLib:
 	
 	def rancheroize_polars(self,
 			polars_df:  pl.DataFrame,
-			drop_non_mycobact_columns=True,
+			drop_non_mycobact_columns=False,
 			nullify=True,
 			flatten=True,
 			disallow_right=True,
 			check_index=True,
 			norename=False,
-			drop_unwanted_columns=True,
+			drop_unwanted_columns=False,
 			input_index=None,
 			output_index=None,
 			standardize_index=True,
@@ -1782,8 +1782,14 @@ class NeighLib:
 		return polars_df
 		
 
-	def flatten_all_list_cols_as_much_as_possible(self, polars_df, hard_stop=False, force_strings=False, just_these_columns=None,
-		force_index=None, new_taxoncore_handling=True, skip_taxoncore_entirely=False):
+	def flatten_all_list_cols_as_much_as_possible(self, 
+		polars_df, 
+		hard_stop=False, 
+		force_strings=False, 
+		just_these_columns=None,
+		force_index=None, 
+		new_taxoncore_handling=True, 
+		skip_taxoncore_entirely=False):
 		"""
 		Flatten list columns as much as possible. If a column is just a bunch of one-element lists, for
 		instance, then just take the 0th value of that list and make a column that isn't a list.
@@ -1834,7 +1840,7 @@ class NeighLib:
 				dtype = polars_df.schema[col]
 				col_dtype[col] = dtype
 
-		if new_taxoncore_handling and taxoncore_flag and not skip_taxoncore_entirely:
+		if new_taxoncore_handling and taxoncore_flag and not skip_taxoncore_entirely and {'clade', 'oragnism', 'lineage', 'strain'}.issubset(set(polars_df.columns)):
 			polars_df = self.handle_inconsistent_taxoncore_TB(polars_df, index=index_column)
 		
 		for col, datatype in col_dtype.items(): # TYPES DO NOT UPDATE AUTOMATICALLY!

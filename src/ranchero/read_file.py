@@ -363,6 +363,7 @@ class FileReader():
 		"""
 		blessed_dataframes = list()
 		run_attributes_present = None # TODO: make this a bool flag for preventing constant debug prints?
+		cursed_dictionary = xmltodict_dict
 		assert len(cursed_dictionary) == 1
 		for EXPERIMENT_PACKAGE_SET, EXPERIMENT_PACKAGE in cursed_dictionary.items():
 			assert EXPERIMENT_PACKAGE_SET == "EXPERIMENT_PACKAGE_SET"
@@ -432,7 +433,7 @@ class FileReader():
 		return pl.concat(blessed_dataframes, how='diagonal')
 
 
-	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=None): # check_index has a default fallback
+	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=_DEFAULT_TO_CONFIGURATION, rancheroize=_DEFAULT_TO_CONFIGURATION):
 		"""
 		1. Convert the output of efetch into an XML format that is actually correct (harder than you'd expect)
 		2. Convert the resulting dictionary into a Polars dataframe that is actually useful (also hard)
@@ -441,7 +442,8 @@ class FileReader():
 		  a) Actually valid XML file
 		  b) Several <EXPERIMENT_PACKAGE_SET>s, one of which is unmatched
 		  c) Like b but there's also additional <?xml version="1.0" encoding="UTF-8"  ?> headers thrown in for fun
-		 """
+		"""
+		rancheroize = self._default_fallback("rancheroize", rancheroize)
 		check_index = self._default_fallback("check_index", check_index)
 
 		import xml
@@ -486,6 +488,7 @@ class FileReader():
 				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != run_id]
 			), force_index=run_id)
 		if check_index: blessed_dataframe = self.NeighLib.check_index(blessed_dataframe, df_name=xml_name)
+		if rancheroize: blessed_dataframe = self.NeighLib.rancheroize(rancheroize)
 		return blessed_dataframe
 
 	def fix_bigquery_file(self, bq_file):
