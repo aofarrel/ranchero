@@ -630,7 +630,7 @@ def query(folder="./inputs/test"):
 		except subprocess.CalledProcessError:
 			print("✅ add_gcloud_metadata() throws error when 404 when !continue_on_gs_error")
 		test_df = ranchero.Query.add_gcloud_metadata(test_df, gs_column="gs_uri", continue_on_gs_error=True)
-		assert test_df.dtypes == [pl.Utf8, pl.Utf8, pl.Utf8, pl.Utf8, pl.Int64]
+		assert test_df.dtypes == [pl.Utf8, pl.Utf8, pl.Datetime, pl.Utf8, pl.Int64]
 		print("✅ add_gcloud_metadata() outputs a dataframe of expected types when continue_on_gs_error")
 		assert test_df.shape == (2, 5)
 		print("✅ and it's the right shape")
