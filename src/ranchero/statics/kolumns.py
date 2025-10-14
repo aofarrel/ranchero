@@ -8,7 +8,7 @@ import polars as pl
 # when something breaks. :-)
 
 # these columns are considered "equivalent" and nullfill each other
-equivalence = {
+equivalence_standard = {
 		'collection': ['collection'], # default indicator column -- change this if you change cfg.indicator_column!
 
 		'assay_type': ['assay_type', 'Assay Type', 'assay_type_sam', 'assay_type_run'],
@@ -35,6 +35,8 @@ equivalence = {
 		'host_scienname': ['host_scienname'],
 		'instrument': ['instrument', 'Instrument'],
 		'isolation_source': ['isolation_source', 'sample_type_sam_ss_dpl131', 'sample_source', 'tissue_sam_ss_dpl145', 'env_medium_sam', 'host_tissue_sampled_sam_s_dpl239', 'isolation_source_sam', 'isolation_type_sam', 'isolation_source_sam_ss_dpl261', 'isolation_source_host_associated_sam_s_dpl264', 'specimen_sam', 'culture_collection_sam_ss_dpl468', 'host_body_product_sam', 'bio_material_sam', 'tissue_source_sam', 'subsource_note_sam', 'env_biome_sam', 'env_feature_sam', 'env_material_sam', 'source_name_sam', 'isolation_source_host_associated_sam_s_dpl263', 'plant_product_sam', 'isolation_source_run', 'sample_type_run_s_dpl517', 'isolate_run', 'sample_type_exp'],
+		'isolation_source_cleaned': ['isolation_source_cleaned'],
+		'isolation_source_raw': ['isolation_source_raw'],
 		'isolate_sam_ss_dpl100': ['isolate_sam_ss_dpl100'], # this has special handling due to usually being a sample name, but sometimes being actually useful isolation source information
 		'latlon': ['latlon', 'lat_lon_sam_s_dpl34', 'lat_lon', 'latitude_and_longitude_sam', 'lat_lon_run'],
 		'lat': ['lat', 'geographic_location__latitude__sam'],
@@ -48,14 +50,18 @@ equivalence = {
 		'platform': ['platform', 'Platform'], # platform_sam and platform_run seem to be something else
 		'primary_search': ['primary_search'],
 		'region': ['region'],
-		'run_id': ['run_id', 'run_index', 'acc', 'run', 'Run', 'run_accession', 'run_acc'],
-		'sample_id': ['sample_id', 'sample_index', 'biosample', 'BioSample', 'Biosample', 'sample'],
 		'sra_study': ['sra_study', 'SRA Study'], # SRP ID
 		'strain': ['strain', 'strain_sam_ss_dpl139', 'strain_name_alias_sam', 'strain_geno', 'sub_strain_sam_s_dpl389', 'strain_genotype_sam_s_dpl382', 'cell_line_sam', 'cell_line_run'],
-		'SRX_id': ['SRX_id', 'experiment', 'Experiment'], # DO NOT USE experiment_sam! that is something totally different! 
-		'SRS_id': ['SRS_id', 'sample_acc'], # SRS/ERS/DRS accession
-	}
-id_columns = equivalence['run_id'] + equivalence['sample_id'] + equivalence['SRS_id'] + equivalence['SRX_id']
+}
+equivalence_id_columns = {
+	'run_id': ['run_id', 'run_index', 'acc', 'run', 'Run', 'run_accession', 'run_acc'],
+	'sample_id': ['sample_id', 'sample_index', 'biosample', 'BioSample', 'Biosample', 'sample'],
+	'SRX_id': ['SRX_id', 'experiment', 'Experiment'], # DO NOT USE experiment_sam! that is something totally different! 
+	'SRS_id': ['SRS_id', 'sample_acc'], # SRS/ERS/DRS accession
+	'file': ['file', 'filename']
+}
+id_columns = equivalence_id_columns['run_id'] + equivalence_id_columns['sample_id'] + equivalence_id_columns['SRS_id'] + equivalence_id_columns['SRX_id']
+equivalence = equivalence_standard | equivalence_id_columns
 assert len(set(sum(equivalence.values(), []))) == len(sum(equivalence.values(), []))  # effectively asserts no shared values (both within a key's value-lists, and across all other value-lists)
 
 # Once columns are merged, the "equivalence" columns are dropped since they have redundant information.
@@ -84,7 +90,7 @@ host_info = ['host_info', 'host_disease_stat_sam', 'host_life_stage_sam', 'patho
 
 # In: pl.List() of floats or integers
 # Out: Float
-list_to_float_sum = ['bytes', 'bases', 'mbases', 'mbytes', 'mbytes_sum']
+list_to_float_sum = ['bytes', 'bases', 'mbases', 'mbytes', 'mbytes_sum', 'mbases_sum', 'bytes_sum', 'bases_sum']
 
 # In: pl.List() of pl.Utf8
 # Out: pl.Utf8
@@ -102,7 +108,6 @@ list_to_set_uniq = [
 	'country_1', # intermediate column used in metadata standardization
 	'datastore_filetype', 
 	'datastore_provider',
-	'isolation_source',
 	'instrument',
 	'host_info',
 	'pheno_source',
@@ -142,6 +147,9 @@ list_fallback_or_null = [
 	'host_scienname',
 	'country',
 	'continent',
+	'isolation_source',
+	'isolation_source_raw',
+	'isolation_source_cleaned',
 	'region',
 ]
 

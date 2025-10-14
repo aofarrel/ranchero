@@ -1,20 +1,4 @@
 import polars as pl
-import pandas as pd
-
-def drop_lowcount_columns(polars_df, cutoff=3, verbose=True):
-	dropped = []
-	starting_columns = len(polars_df.columns)
-	for column in polars_df.columns:
-		if column == 'platform' or column == 'librarylayout' or column == 'taxid':
-			continue
-		counts = polars_df.select([pl.col(column).value_counts(sort=True)])
-		if len(counts) < cutoff:
-			dropped.append(column)
-			polars_df = polars_df.drop(column)
-	ending_columns = len(polars_df.columns)
-	if verbose: print(f"Removed {starting_columns - ending_columns} columns with less than {cutoff} unique values")
-	if verbose: print(dropped)
-	return polars_df
 
 
 def rm_all_not_beginning_with_myco(polars_df, inverse=False, column='organism'):
@@ -103,4 +87,5 @@ def print_unique_rows(polars_df, column='organisms', sort=True):
 
 # pandas versions -- not comprehensive
 def get_paired_illumina_pandas(pandas_df):
+	import pandas as pd
 	return pandas_df.loc[pandas_df['platform'] == 'ILLUMINA'].loc[pandas_df['librarylayout'] == 'PAIRED']

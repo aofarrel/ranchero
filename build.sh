@@ -22,7 +22,13 @@ import_time="$(($(date +%s)-current_time))"
 echo "${import_time} seconds for first-time import of ranchero"
 python3 tests.py
 read -p "Looks good?"
-python3 standardize_any_bigquery_json.py
+python3 compilations/c_auris_compilation.py $rc
+read -p "Looks good?"
+python3 compilations/coccidioides_compilation.py $rc
+read -p "Looks good?"
+python3 compilations/TB_metadata_minimal_external_sources.py $rc
+read -p "Looks good?"
+python3 compilations/TB_metadata_compilation.py $rc
 read -p "Looks good?"
 pip show -f ranchero
 read -p "Looks good?"

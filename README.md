@@ -6,28 +6,30 @@ Ranchero is a Python solution to the dozens of different metadata formats used i
 > [!NOTE]  
 > Ranchero should be considered pre-release software, and is currently undergoing a cleanup/refactor. More extensive documentation and examples will be provided once this cleanup is complete.
 
+In addition to housing Ranchero itself, this repo also contains the scripts used to generate metadata TSVs for various pathogens UCSC is keeping an eye on, such as the metadata used to annotated [the Taxonium SRA tree for *Mycobacterium tuberculosis complex*](https://taxonium.org/tuberculosis/SRA?xType=x_dist). You can find those scripts in [./compilations](./compilations). 
+
  ## Features
- * Quicker than you expect, thanks to the blazing fast speed of polars
+  * Powered by polars
+    * Standardize entire genera in minutes thanks to polars' impressive speeds
+    * Use [polars expressions](https://docs.pola.rs/api/python/stable/reference/expressions/index.html) to do things I didn't think of
  * Pre-configured to standardize dozens of common NCBI metadata fields
- * Input a TSV/JSON/CSV of new samples and their metadata into a dataframe
- * Merge columns of similar data types into a single column, filling in nulls/empty values as you go
+    * Automatically merge columns of similar data types into a single column, filling in nulls/empty values as you go
+    * (MTBC only) Automatically handle lineage, strain, and scientific name
+    * (MTBC only) Convert old-school strain names (Beijing, LAM, etc) to the modern lineage system (L2.2.1, L4.3, etc)
  * Input a TSV of metadata to "inject" into an existing dataframe, optionally overriding metadata already present
  * Convert all of those "missing," "not collected," and "Not Applicable" strings into proper null values
  * Convert countries into three-letter country codes per [ISO 3166](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes)
  * Convert dates to YYYY-MM-DD format into an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)-like format
- * Convert common host animal names to the standardized *Genus species* format when possible, as well a common name
- * (tuberculosis only) Convert old-school strain names (Beijing, LAM, etc) to the modern lineage system (L2.2.1, L4.3, etc)
+ * Convert common host animal names to the standardized *Genus species* format when possible, as well a common name and confidence score
 
- ## Dependencies
- * Python >= 3.10
- * [polars](https://github.com/pola-rs/polars) for Python == 1.27.0
- * [pandas](https://pandas.pydata.org/) >= 2.0.0
- * [pyyaml](https://pyyaml.org/)
- * [pyarrow](https://pypi.org/project/pyarrow/)
- * [tqdm](https://github.com/tqdm/tqdm)
- * [xmltodict](https://github.com/martinblech/xmltodict) for working with Enterz Direct files
-
-
+ ## Installation
+ Because ranchero currently relies on a very specific version of polars, it is recommended to install it a [venv](https://docs.python.org/3/library/venv.html) like this:
+ ```
+ python3 -m venv ./buildvenv
+ source buildvenv/bin/activate
+ pip install ranchero
+ ```
+ 
  ## Supported inputs
 
   | Platform                | Expected format                     | Ranchero function   |
@@ -42,3 +44,12 @@ Ranchero is a Python solution to the dozens of different metadata formats used i
 
    <sup>†</sup> BQ typically outputs JSONs in a format polars does not like; from_bigquery() will fix it on the fly.  
    <sup>‡</sup> efetch typically outputs an invalid XML; from_efetch() will fix it on the fly. However, note that only `-db sra -format native -mode xml` and output from NCBI SRA web search is supported.
+
+ ## Dependencies
+ If you are pip-installing as recommended above, these will be included automatically.
+ * Python >= 3.10
+ * [pandas](https://pandas.pydata.org/) >= 2.0.0
+ * [pyarrow](https://pypi.org/project/pyarrow/)
+ * [polars](https://github.com/pola-rs/polars) for Python == 1.27.0
+ * [tqdm](https://github.com/tqdm/tqdm)
+ * xmltodict for working with Enterz Direct files

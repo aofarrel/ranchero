@@ -20,7 +20,7 @@ class FileReader():
 		else:
 			self.cfg = configuration
 			self.logging = self.cfg.logger
-			if self.logging.getEffectiveLevel() == 10:
+			if self.logging.getEffectiveLevel() == 20:
 				try:
 					from tqdm import tqdm
 					tqdm.pandas()
@@ -81,6 +81,7 @@ class FileReader():
 		index=None,
 		glob=True,
 		list_columns=None,
+		list_columns_are_internally_dquoted=False,
 		auto_parse_dates=_DEFAULT_TO_CONFIGURATION, 
 		auto_rancheroize=_DEFAULT_TO_CONFIGURATION, 
 		auto_standardize=_DEFAULT_TO_CONFIGURATION, 
@@ -112,28 +113,46 @@ class FileReader():
 
 		if index is not None:
 			polars_df = self.NeighLib.mark_index(polars_df, index)
-			index = self.NeighLib.get_index(polars_df, index)
+			new_index = self.NeighLib.get_index(polars_df, index)
+			self.logging.debug(f"Marked manually-input index {index} as {new_index}")
+			index = new_index
+		
 		if list_columns is not None:
-			for column in list_columns:
-				polars_df = polars_df.with_columns(
-					polars_df[column]
-					.str.strip_chars("[]").str.replace_all("'", "", literal=True)
-					.str.split(",")
-					.alias(column)
-				)
+
+			if list_columns_are_internally_dquoted:
+				for column in list_columns:
+					polars_df = polars_df.with_columns(
+						polars_df[column]
+						.str.strip_chars("[]").str.replace_all('"', '', literal=True)
+						.str.split(",")
+						.alias(column)
+					)
+
+			else:
+				# assumes list columns are internally single quoted
+				for column in list_columns:
+					polars_df = polars_df.with_columns(
+						polars_df[column]
+						.str.strip_chars("[]").str.replace_all("'", "", literal=True)
+						.str.split(",")
+						.alias(column)
+					)
 
 		if explode_upon != None:
 			# TODO: this function call had column=self.NeighLib.get_index_column(polars_df, quiet=True) but I'm not sure why we
 			# would want the quiet version, since it wouldn't return a str during error cases...
-			polars_df = self.polars_explode_delimited_rows(polars_df, column=self.NeighLib.get_index_column(polars_df, quiet=True), 
+			polars_df = self.polars_explode_delimited_rows(polars_df, column=self.NeighLib.get_index(polars_df, guess=True), 
 				delimiter=explode_upon, drop_new_non_unique=check_index)
-		if check_index: polars_df = self.NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
 		if auto_rancheroize:
 			self.logging.info(f"Rancheroizing dataframe from {df_name}...")
-			polars_df = self.NeighLib.rancheroize_polars(polars_df, index=index)
+			polars_df = self.NeighLib.rancheroize_polars(polars_df, input_index=index)
 			if auto_standardize:
 				self.logging.info(f"Standardizing dataframe from {df_name}...")
 				polars_df = self.Standardizer.standardize_everything(polars_df)
+		
+		# run check index AFTER rancheroize so index name can be changed
+		if check_index: polars_df = self.NeighLib.check_index(polars_df, df_name=os.path.basename(tsv))
+
 		return polars_df
 
 	def fix_efetch_file(self, efetch_xml):
@@ -344,6 +363,7 @@ class FileReader():
 		"""
 		blessed_dataframes = list()
 		run_attributes_present = None # TODO: make this a bool flag for preventing constant debug prints?
+		cursed_dictionary = xmltodict_dict
 		assert len(cursed_dictionary) == 1
 		for EXPERIMENT_PACKAGE_SET, EXPERIMENT_PACKAGE in cursed_dictionary.items():
 			assert EXPERIMENT_PACKAGE_SET == "EXPERIMENT_PACKAGE_SET"
@@ -413,7 +433,7 @@ class FileReader():
 		return pl.concat(blessed_dataframes, how='diagonal')
 
 
-	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=None): # check_index has a default fallback
+	def from_efetch(self, efetch_xml, index_by_file=False, group_by_file=True, check_index=_DEFAULT_TO_CONFIGURATION, rancheroize=_DEFAULT_TO_CONFIGURATION):
 		"""
 		1. Convert the output of efetch into an XML format that is actually correct (harder than you'd expect)
 		2. Convert the resulting dictionary into a Polars dataframe that is actually useful (also hard)
@@ -422,7 +442,8 @@ class FileReader():
 		  a) Actually valid XML file
 		  b) Several <EXPERIMENT_PACKAGE_SET>s, one of which is unmatched
 		  c) Like b but there's also additional <?xml version="1.0" encoding="UTF-8"  ?> headers thrown in for fun
-		 """
+		"""
+		rancheroize = self._default_fallback("rancheroize", rancheroize)
 		check_index = self._default_fallback("check_index", check_index)
 
 		import xml
@@ -452,7 +473,7 @@ class FileReader():
 
 		if index_by_file:
 			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'submitted_files': 'file'}), 'file')
-			file_index = self.NeighLib.get_index(blessed_dataframe)
+			file_index = self.NeighLib.get_index(blessed_dataframe, guess=False)
 			if group_by_file:
 				blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(file_index).agg(
 						[c for c in blessed_dataframe.columns if c != file_index]
@@ -460,13 +481,14 @@ class FileReader():
 		else:
 			# TODO: sum() submitted_file_sizes
 			blessed_dataframe = self.NeighLib.mark_index(blessed_dataframe.rename({'run_id': 'run'}), 'run')
-			run_id = self.NeighLib.get_index(blessed_dataframe)
+			run_id = self.NeighLib.get_index(blessed_dataframe, guess=False)
 			if blessed_dataframe.select(pl.col(run_id).n_unique() != pl.col(run_id).len()):
 				self.logging.warning(f"Found non-unique values for {run_id} (SRR_id)")
 			blessed_dataframe = self.NeighLib.flatten_all_list_cols_as_much_as_possible(blessed_dataframe.group_by(run_id).agg(
 				[pl.col(col).unique().alias(col) for col in blessed_dataframe.columns if col != run_id]
 			), force_index=run_id)
 		if check_index: blessed_dataframe = self.NeighLib.check_index(blessed_dataframe, df_name=xml_name)
+		if rancheroize: blessed_dataframe = self.NeighLib.rancheroize(rancheroize)
 		return blessed_dataframe
 
 	def fix_bigquery_file(self, bq_file):
@@ -512,7 +534,12 @@ class FileReader():
 		if normalize_attributes and "attributes" in polars_df.columns:  # if column doesn't exist, return false
 			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df, rancheroize=auto_rancheroize)
 		if auto_rancheroize:
-			polars_df = self.NeighLib.rancheroize_polars(polars_df, index='acc', rename_index='__index__run')
+			if self.NeighLib.get_index(polars_df) == self.NeighLib.get_hypothetical_index_fullname('run_id'):
+				# in case json_normalize also ran rancheroize
+				# TODO: should we really allow rancheroize to run twice like that?
+				polars_df = self.NeighLib.rancheroize_polars(polars_df)
+			else:
+				polars_df = self.NeighLib.rancheroize_polars(polars_df, input_index='acc')
 		if auto_standardize:
 			polars_df = self.Standardizer.standardize_everything(polars_df)
 		return polars_df
@@ -572,13 +599,15 @@ class FileReader():
 		"SRR124"		12
 		"SRR125"		555
 		"""
+		self.logging.debug(f"Exploding on {column} with delimter {delimiter} (drop_new_non_unique={drop_new_non_unique})...")
+		assert column in polars_df.columns
 		exploded = (polars_df.with_columns(pl.col(column).str.split(delimiter)).explode(column)).unique()
 		if len(polars_df) == len(polars_df.select(column).unique()) and len(exploded) != len(exploded.select(column).unique()) and drop_new_non_unique:
 			self.logging.info(f"Exploding created non-unique values for the previously unique-only column {column}, so we'll be merging...")
 			exploded = self.merge_row_duplicates(exploded, column)
 			if len(exploded) != len(exploded.select(column).unique()): # probably should never happen
-				self.logging.warning("Attempted to merge duplicates caused by exploding, but it didn't work.")
-				self.logging.warning(f"Debug information: Exploded df has len {len(exploded)}, unique in {column} len {len(exploded.select(column).unique())}")
+				self.logging.error("Attempted to merge duplicates caused by exploding, but it didn't work.")
+				self.logging.error(f"Debug information: Exploded df has len {len(exploded)}, unique in {column} len {len(exploded.select(column).unique())}")
 				raise ValueError
 		else:
 			# there aren't unique values to begin with so who cares lol (or exploding didn't make a difference)
@@ -619,7 +648,10 @@ class FileReader():
 				else:
 					listmakers.append(other_column)
 		self.logging.debug(f"Does not need to become a list: {listbusters}")
-		self.logging.debug(f"Will become a list (but might be flattened later): {listmakers}")
+		self.logging.debug(f"Will become a list (but might be flattened later):")
+		for col in listmakers:
+			# this is helpful for detecting columns that end up getting wiped out
+			self.logging.debug(f"--> {col}, which currently has mode and count of {self.NeighLib.get_most_common_non_null_and_its_counts(polars_df, col)}")
 		self.logging.debug(f"Already a list: {listexisters}")
 
 		grouped_df_ = (
@@ -633,10 +665,6 @@ class FileReader():
 				]
 			])
 		)
-
-		if self.logging.getEffectiveLevel() == 10:
-			self.NeighLib.print_only_where_col_not_null(grouped_df_, 'collection')
-			self.NeighLib.print_only_where_col_not_null(grouped_df_, 'primary_search')
 
 		return grouped_df_
 
@@ -663,6 +691,7 @@ class FileReader():
 		"""
 		self.logging.info("Converting from run-index to sample-index...")
 		assert polars_df.filter(pl.col(current_run_id).is_duplicated()).shape[0] == 0 # handled by check_index
+		assert polars_df.schema[current_sample_id] == pl.Utf8
 		assert current_run_id in polars_df.columns
 		assert current_sample_id in polars_df.columns
 		run_id_will_temporarily_be = self.NeighLib.get_hypothetical_index_basename(current_run_id)
@@ -671,23 +700,29 @@ class FileReader():
 		assert samp_index_will_temporarily_be not in polars_df.columns
 		assert output_run_id not in polars_df.columns
 		assert output_sample_id not in polars_df.columns
+		if current_sample_id != 'sample_index':
+			assert 'sample_index' not in polars_df
 
 		# check the run index AND the sample index, since both are currently strings
 		# the check_index of current_sample_id does NOT overwrite the current df on purpose!
+		# edit: there really isn't a benefit of checking the hypothetical sample index at this point since the main
+		# things we gotta check for (dupes) will exist at this point
+		self.logging.info("Checking index as it currently exists...")
 		polars_df = self.NeighLib.check_index(polars_df, manual_index_column=current_run_id, allow_bad_name=True)
-		self.NeighLib.check_index(polars_df, manual_index_column=current_sample_id, allow_bad_name=True)
+		#self.NeighLib.check_index(polars_df, manual_index_column=current_sample_id, allow_bad_name=True)
 
 		if not skip_rancheroize:
-			self.logging.debug("Rancheroizing run-indexed dataframe")
+			self.logging.info("Rancheroizing run-indexed dataframe first (skip this by setting skip_rancheroize)...")
 			polars_df = self.NeighLib.rancheroize_polars(polars_df) # runs check_index() too, and converts __index__acc
-		# we already ran check_index() earlier and didn't make any changes so need to run it again in the true case
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, current_run_id, current_sample_id)
 		version_with_nested_lists = self.NeighLib.mark_index(version_with_nested_lists, current_sample_id, rm_existing_index=True)
+
+		# yes, we null lists of len zero TWICE
 		polars_df = self.NeighLib.null_lists_of_len_zero(
 			self.NeighLib.flatten_all_list_cols_as_much_as_possible(
-				version_with_nested_lists
+				self.NeighLib.null_lists_of_len_zero(version_with_nested_lists)
 			)
 		)
 		polars_df = self.NeighLib.check_index(polars_df)
