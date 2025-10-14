@@ -1957,9 +1957,7 @@ class NeighLib:
 								.otherwise(None)
 							).alias(f"{col}_sum")
 						)
-
-					else:
-						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
+					polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
 					polars_df = polars_df.drop(col)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[f"{col}_sum"], 'result': 'namechange + summed'})
 					continue
