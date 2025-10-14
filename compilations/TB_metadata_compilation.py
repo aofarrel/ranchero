@@ -1,4 +1,10 @@
-rc = "rc29"
+# Handle metadata for MTBC
+# Note that this will attempt to call metadata files from various publications that are intentionally EXCLUDED
+# from this repo. You might be better served by TB_metadata_minimal_external_sources.py
+
+import sys
+rc = sys.argv[1]
+
 start_from_scratch = True
 inject = True
 do_run_id_merges = True
@@ -6,14 +12,14 @@ canettii_only = False # based on a file input, not the organism column (but you 
 
 import polars as pl
 import time
+import gc  # only called once; not sure if it actually helps
 start = time.time()
-import gc
-import src.ranchero as Ranchero
+import ranchero as Ranchero
 _b_ = "\033[1m"
 _bb_ = "\033[0m"
 _c_ = "\033[0;36m"
 print(f"Module import time: {time.time() - start:.4f}")
-Ranchero.Configuration.set_config({"loglevel": 10})
+Ranchero.Configuration.set_config({"loglevel": 20})
 
 module_start = time.time()
 
@@ -167,11 +173,11 @@ def inital_file_parse():
 			raise ValueError("Oops, no rows!")
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_BigQuery_raw_{rc}_p1.tsv") # previously "tba6 no nonsense"
+	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_BigQuery_raw_rc{rc}_p1.tsv") # previously "tba6 no nonsense"
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
 
 	# initial rancheroize
-	start, tba6 = time.time(), Ranchero.rancheroize(tba6)
+	start, tba6 = time.time(), Ranchero.rancheroize(tba6, drop_non_mycobact_columns=True, drop_unwanted_columns=True)
 	print(f"Rancheroized in {time.time() - start:.4f} seconds")
 
 	start, tba6 = time.time(), Ranchero.standardize_everything(tba6)
@@ -190,11 +196,11 @@ def inital_file_parse():
 	Ranchero.NeighLib.report(tba6)
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_BigQuery_standardized_{rc}_p2.tsv")
+	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_BigQuery_standardized_rc{rc}_p2.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f} seconds")
 	check_stuff(tba6, "tba6 in memory")
 	print("Reading disk:")
-	what_we_just_wrote = Ranchero.from_tsv(f"Mycobacterium_genus_BigQuery_standardized_{rc}_p2.tsv", 
+	what_we_just_wrote = Ranchero.from_tsv(f"Mycobacterium_genus_BigQuery_standardized_rc{rc}_p2.tsv", 
 		auto_standardize=False,
 		auto_rancheroize=False)
 	check_stuff(what_we_just_wrote, "tba6 on disk")
@@ -243,7 +249,7 @@ def inject_metadata(tba6):
 	check_stuff(tba6, "tba6 after injectors in memory")
 
 	start = time.time()
-	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_injections_{rc}_p3.tsv")
+	Ranchero.to_tsv(tba6, f"Mycobacterium_genus_injections_rc{rc}_p3.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
 	return tba6
 
@@ -407,7 +413,7 @@ def run_merges(tba6):
 	check_stuff(merged)
 
 	start = time.time()
-	Ranchero.to_tsv(merged, f"./Mycobacterium_genus_run-based_metadata_{rc}_p4.tsv")
+	Ranchero.to_tsv(merged, f"./Mycobacterium_genus_run-based_metadata_rc{rc}_p4.tsv")
 	print(f"Wrote to disk in {time.time() - start:.4f}s seconds")
 	return merged
 
@@ -425,7 +431,7 @@ def swap_index(merged_runs):
 	swapped = Ranchero.hella_flat(swapped)
 	print(f"{_b_}Converted run indeces to sample indeces in {time.time() - start:.4f} seconds{_bb_}")
 	#Ranchero.Configuration.set_config({"loglevel": 20})
-	Ranchero.to_tsv(swapped, f"./Mycobacterium_genus_swapped_index_{rc}_p5.tsv")
+	Ranchero.to_tsv(swapped, f"./Mycobacterium_genus_swapped_index_rc{rc}_p5.tsv")
 	return swapped
 
 def sample_id_merges(swapped_index):
@@ -628,16 +634,14 @@ def sample_id_merges(swapped_index):
 	check_stuff(merged)
 
 	print(f"{_b_}Processing inputs, outputs, denylist, and what's on the tree{_bb_}")
-	inputs = Ranchero.from_tsv("./inputs/pipeline/probable_inputs.txt", 
-		auto_rancheroize=True)
+	inputs = Ranchero.from_tsv("./inputs/pipeline/probable_inputs.txt")
 	merged = Ranchero.merge_dataframes(merged, inputs, merge_upon="__index__sample_id", 
 		right_name="input", 
 		indicator="collection", 
 		drop_exclusive_right=False)
 	print(f"Merged with input list")
 
-	diffs = Ranchero.from_tsv("./inputs/pipeline/probable_diffs.txt", 
-		auto_rancheroize=False)
+	diffs = Ranchero.from_tsv("./inputs/pipeline/probable_diffs.txt")
 	merged = Ranchero.merge_dataframes(merged, diffs, merge_upon="__index__sample_id", 
 		right_name="diff", 
 		indicator="collection", 
@@ -645,7 +649,6 @@ def sample_id_merges(swapped_index):
 	print(f"Merged with diffs list")
 
 	tree = Ranchero.from_tsv("./ranchero_output_archive/2025-07-08-FINAL_ranchero_rc17.subset.annotated.tsv", 
-		auto_rancheroize=False, 
 		list_columns=['run_index'])
 	for column in tree.columns:
 		if column in merged and column != "__index__sample_id":
@@ -667,8 +670,7 @@ def sample_id_merges(swapped_index):
 		drop_exclusive_right=False)
 	print(f"Merged with TBProfiler metadata")
 
-	denylist = Ranchero.from_tsv("./inputs/pipeline/denylist_2024-07-23_lessdupes.tsv", 
-		auto_rancheroize=False)
+	denylist = Ranchero.from_tsv("./inputs/pipeline/denylist_2024-07-23_lessdupes.tsv")
 	merged = Ranchero.merge_dataframes(merged, denylist, 
 		merge_upon="__index__sample_id", 
 		right_name="denylist", 
@@ -714,8 +716,8 @@ if start_from_scratch:
 		merged_samps = swap_index(tba6_injected)
 else:
 	if inject:
-		print(f"Reading from Mycobacterium_genus_BigQuery_standardized_{rc}_p2.tsv")
-		tba6_standardized = Ranchero.from_tsv(f"Mycobacterium_genus_BigQuery_standardized_{rc}_p2.tsv", auto_standardize=False)
+		print(f"Reading from Mycobacterium_genus_BigQuery_standardized_rc{rc}_p2.tsv")
+		tba6_standardized = Ranchero.from_tsv(f"Mycobacterium_genus_BigQuery_standardized_rc{rc}_p2.tsv", auto_standardize=False)
 		tba6_injected = inject_metadata(tba6_standardized)
 		if not canettii_only:
 			merged_runs = run_merges(tba6_injected)
@@ -724,16 +726,16 @@ else:
 			merged_samps = swap_index(tba6_injected)
 	else:
 		if do_run_id_merges:
-			print(f"Reading from Mycobacterium_genus_injections_{rc}_p3.tsv")
-			tba6_injected = Ranchero.from_tsv(f"Mycobacterium_genus_injections_{rc}_p3.tsv", auto_standardize=False)
+			print(f"Reading from Mycobacterium_genus_injections_rc{rc}_p3.tsv")
+			tba6_injected = Ranchero.from_tsv(f"Mycobacterium_genus_injections_rc{rc}_p3.tsv", auto_standardize=False)
 			if not canettii_only:
 				merged_runs = run_merges(tba6_injected)
 				merged_samps = sample_id_merges(swap_index(merged_runs))
 			else:
 				merged_samps = swap_index(tba6_injected)
 		else:
-			print(f"Reading from Mycobacterium_genus_run-based_metadata_{rc}_p4.tsv")
-			merged_runs = Ranchero.from_tsv(f"Mycobacterium_genus_run-based_metadata_{rc}_p4.tsv", auto_standardize=False)
+			print(f"Reading from Mycobacterium_genus_run-based_metadata_rc{rc}_p4.tsv")
+			merged_runs = Ranchero.from_tsv(f"Mycobacterium_genus_run-based_metadata_rc{rc}_p4.tsv", auto_standardize=False)
 			if not canettii_only:
 				merged_samps = sample_id_merges(swap_index(merged_runs))
 			else:
@@ -743,6 +745,10 @@ else:
 print(f"Found {merged_samps.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts at start of main")
 merged_samps = Ranchero.inject_metadata(merged_samps, Ranchero.injector_from_tsv("./inputs/overrides/caprae_injector.tsv"), overwrite=True)
 print(f"Found {merged_samps.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts after bioproject injection")
+
+# big flat
+merged = Ranchero.hella_flat(merged_samps)
+check_stuff(merged)
 
 # final nonsense
 if 'lineage' in merged_samps:
@@ -758,8 +764,6 @@ merged_samps = merged_samps.drop(
 	], strict=False)
 
 print("---------------------- Whole-genus value counts ----------------------")
-merged = Ranchero.hella_flat(merged_samps)
-check_stuff(merged)
 print(f"Found {merged.filter(pl.col('host_commonname') == pl.lit('human')).shape[0]} human hosts in genus")
 
 Ranchero.NeighLib.print_value_counts(merged, Ranchero.valid_cols(merged, ['sample_source']))
@@ -768,9 +772,9 @@ Ranchero.NeighLib.print_value_counts(merged, Ranchero.valid_cols(merged, ['date_
 Ranchero.NeighLib.print_value_counts(merged, Ranchero.valid_cols(merged, ['clade', 'organism', 'literature_lineage', 'strain']))
 Ranchero.NeighLib.print_value_counts(merged, Ranchero.valid_cols(merged, ['country', 'continent', 'region']))
 
-Ranchero.to_tsv(merged, f"./Mycobacterium_genus_metadata_ranchero_{rc}-verbose.tsv")
+Ranchero.to_tsv(merged, f"./Mycobacterium_genus_metadata_ranchero_rc{rc}-verbose.tsv")
 concise = merged.drop(['primary_search', 'libraryselection', 'librarysource', 'instrument', 'host_info', 'collection'], strict=False)
-Ranchero.to_tsv(concise, f"./Mycobacterium_genus_metadata_ranchero_{rc}-concise.tsv")
+Ranchero.to_tsv(concise, f"./Mycobacterium_genus_metadata_ranchero_rc{rc}-concise.tsv")
 
 print("---------------------- Tree-only value counts ----------------------")
 tree_only_merged = Ranchero.hella_flat(merged_samps.filter(pl.col('collection').list.contains('tree')))
@@ -783,9 +787,9 @@ Ranchero.NeighLib.print_value_counts(tree_only_merged, Ranchero.valid_cols(tree_
 Ranchero.NeighLib.print_value_counts(tree_only_merged, Ranchero.valid_cols(tree_only_merged, ['clade', 'organism', 'literature_lineage', 'strain']))
 Ranchero.NeighLib.print_value_counts(tree_only_merged, Ranchero.valid_cols(tree_only_merged, ['country', 'continent', 'region']))
 
-Ranchero.to_tsv(tree_only_merged, f"./2025-07-08_tree_metadata_ranchero_{rc}-verbose.tsv")
+Ranchero.to_tsv(tree_only_merged, f"./2025-07-08_tree_metadata_ranchero_rc{rc}-verbose.tsv")
 concise = tree_only_merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info', 'collection'], strict=False)
-Ranchero.to_tsv(concise, f"./2025-07-08_tree_metadata_ranchero_{rc}-concise.tsv")
+Ranchero.to_tsv(concise, f"./2025-07-08_tree_metadata_ranchero_rc{rc}-concise.tsv")
 
 print(f"{_b_}Host information{_bb_}")
 has_host = tree_only_merged.select(pl.col('host_commonname').filter(pl.col('host_commonname').is_not_null()))
@@ -825,10 +829,14 @@ print(tree_only_merged.filter(pl.col('tbprof_median_coverage').is_not_null()).se
 
 print("What's on the tree WITHOUT TBProfiler lineage information? (sometimes tbprofiler can't assign a lineage or may assign two)")
 with pl.Config(tbl_cols=-1, tbl_rows=100):
-	lacks_tbprof_main =  tree_only_merged.filter(~pl.col('tbprof_main_lin').is_not_null()).select(['sample_id', 'tbprof_main_lin', 'usher_lineage_from_tbprofiler', 'literature_lineage'])
+	lacks_tbprof_main =  tree_only_merged.filter(~pl.col('tbprof_main_lin').is_not_null()).select(
+		[Ranchero.get_index(tree_only_merged), 'tbprof_main_lin', 'usher_lineage_from_tbprofiler', 'literature_lineage']
+	)
 	print(lacks_tbprof_main.sort('literature_lineage'))
 print("What's on the tree WITH TBProfiler lineage information? (sometimes tbprofiler can't assign a lineage or may assign two)")
-has_tbprof_main_lin = tree_only_merged.filter(pl.col('tbprof_main_lin').is_not_null()).select(['tbprof_main_lin', 'usher_lineage_from_tbprofiler', 'literature_lineage'])
+has_tbprof_main_lin = tree_only_merged.filter(pl.col('tbprof_main_lin').is_not_null()).select(
+	['tbprof_main_lin', 'usher_lineage_from_tbprofiler', 'literature_lineage']
+)
 has_one_tbprof_main_lin = has_tbprof_main_lin.filter(~pl.col('tbprof_main_lin').str.contains(';'))
 print(f"A total of {has_tbprof_main_lin.shape[0]} ({has_tbprof_main_lin.shape[0] / tree_only_merged.shape[0] * 100 :.2f}%) samples have TBProf lineage info")
 print(f"->Of which {has_one_tbprof_main_lin.shape[0]} ({has_one_tbprof_main_lin.shape[0] / has_tbprof_main_lin.shape[0] * 100 :.2f}% of have main lineage is True) samples have just one TBProf lineage main lineage")

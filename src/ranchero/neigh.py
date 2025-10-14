@@ -1955,9 +1955,12 @@ class NeighLib:
 								pl.when(pl.element().is_not_null())
 								.then(pl.element().cast(pl.Int64))
 								.otherwise(None)
-							).alias(f"{col}_sum")
+							).alias(f"{col}_int64")
 						)
-					polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
+						polars_df = polars_df.with_columns(pl.col(f"{col}_int64").list.sum().alias(f"{col}_sum"))
+						polars_df = polars_df.drop(f"{col}_int64")
+					else:
+						polars_df = polars_df.with_columns(pl.col(col).list.sum().alias(f"{col}_sum"))
 					polars_df = polars_df.drop(col)
 					what_was_done.append({'column': col, 'intype': datatype, 'outtype': polars_df.schema[f"{col}_sum"], 'result': 'namechange + summed'})
 					continue

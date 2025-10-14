@@ -33,8 +33,8 @@ sample_sources_nonsense = [
 	'?',
 	'DNA',
 	'Genomic DNA',
+	'isolate',
 	'to wear a mask', # ?????????
-	'whole organism',
 	'Yes',
 	'WGS'
 ]
@@ -76,20 +76,56 @@ sample_sources_nonspecific = sample_sources_I_should_hope_so + sample_sources_no
 sample_source_exact_match = {
 	'BAL': 'bronchoalveolar lavage',
 	'Bed': 'environmental (bed)',
-	'blood': 'blood',
 	'Blood C&S': 'blood (C&S)',
-	'bronchial': 'bronchial (unspecified)',
-	'Clinical': 'clinical (unspecified)',
+	'blood': 'blood',
+	'bronchial': 'bronchial',
+	'Clinical': 'clinical',
 	'CSF': 'cerebrospinal fluid',
-	'CVC': 'central venous catheter',
 	'Culture': 'culture',
+	'CVC': 'central venous catheter',
+	'fluid': 'fluid (unspecified)',
 	'Hospitol': 'hospital', # common typo
+	'human': 'clinical',
 	'laboratory': 'laboratory-obtained strain',
-	'tissue': 'tissue (unspecified)',
+	'Ostomy': 'ostomy',
 	'Pleural Fluid': 'pleural fluid',
 	'pus': 'pus',
+	'tissue': 'tissue (unspecified)',
 	'Urine': 'urine',
+	'whole organism': 'whole organism',
 }
+
+sample_source_exact_match_body_parts = {
+	'brain': 'brain',
+	'testes': 'testes', # "testicle" gets a more generic match elsewhere
+	'bone': 'bone',
+	'Coccyx': 'coccyx',
+	'knee': 'knee',
+	'spine': 'spine',
+	'lung': 'lung', # also in more generic match since specifics of lobes hella common
+	'skin': 'skin',
+	'epidermis': 'skin',
+	'abdomen': 'abdomen',
+	'flank': 'flank',
+	'throat': 'throat',
+	'Thigh': 'thigh',
+	'Conjunctiva': 'eye (conjunctiva)',
+	'breast': 'breast',
+	'rectal': 'rectum',
+	'rectum': 'rectum',
+	'Toenail': 'foot',
+	'heart': 'heart',
+	'ear': 'ear', # don't want to match heart!
+	'eye': 'eye',
+	'foot': 'foot',
+	'wrist': 'hand',
+	'heel': 'foot',
+	'leg': 'leg',
+	'Lip': 'lip',
+	'toe': 'foot',
+	'back': 'back'
+}
+
 
 if_this_and_that_then = [
 	# specific culture type + tissue
@@ -116,6 +152,7 @@ if_this_and_that_then = [
 	['(?i)biops', '(?i)skin', 'biopsy (skin)'],
 	['(?i)biops', '(?i)intestine', 'biopsy (intestine)'],
 	['(?i)biops', '(?i)thoracic', 'biopsy (thoracic)'],
+	['(?i)biops', '(?i)lung', 'biopsy (lung)'],
 	['(?i)biops', '(?i)pleura', 'biopsy (pleura/pleural effusion)'],
 	['(?i)necropsy', '(?i)lung', 'necropsy (lung tissue)'],
 	['(?i)necropsy', '(?i)spleen', 'necropsy (spleen)'],
@@ -129,6 +166,8 @@ if_this_and_that_then = [
 	['(?i)core', '(?i)needle', 'core needle biopsy'],
 	['(?i)ileal', '(?i)intestin', 'intestinal tissue'],
 	['(?i)ascit', '(?i)fluid', 'peritoneal fluid (ascitic)'],
+	['(?i)pluera', '(?i)fluid', 'pleural fluid'],
+
 ]
 
 
@@ -178,6 +217,7 @@ comprehensive_fuzzy = {
 	'BALF': 'bronchoalveolar lavage',
 	'BAL RUL': 'bronchoalveolar lavage',
 	'BAL_RUL': 'bronchoalveolar lavage',
+	'BAL fluid': 'bronchoalveolar lavage',
 	'\bbronch.*lavage': 'bronchoalveolar lavage',
 	'bronchialLavage': 'bronchoalveolar lavage',
 	'broncho-alveolar lavage': 'bronchoalveolar lavage',
@@ -228,6 +268,7 @@ comprehensive_fuzzy = {
 	'Urine, Clean Catch': 'urine',
 	'Uriine': 'urine',
 	# other fun fluids
+	'bile': 'bile',
 	'ear discharge': 'ear discharge',
 	'phlegm': 'phlegm',
 	'Peritoneal dialysate': 'dialysate (peritoneal)',
@@ -245,26 +286,6 @@ comprehensive_fuzzy = {
 	'Scrotal': 'groin (scrotum)',
 	'nares': 'nares',
 
-	# organs / body parts
-	'brain': 'brain',
-	'Intra-abdominal tissue': 'intra-abdominal tissue',
-	'bone': 'bone',
-	'Coccyx': 'coccyx',
-	'knee': 'knee',
-	'spine': 'spine',
-	'homogenized mouse spleen': 'homogenized mouse spleens', # standardize singular/plural
-	'lung': 'lung',
-	'skin': 'skin',
-	'epidermis': 'skin',
-	'abdomen': 'abdomen',
-	'flank': 'flank',
-	'Thigh': 'thigh',
-	'Vaginal': 'vaginal',
-	'Conjunctiva': 'eye (conjunctiva)',
-	'breast': 'breast',
-	'rectal': 'rectal',
-	'Toenail': 'foot (toenail)', # toe handled in last section
-	
 	# lab stuff
 	'laboratory reference strain': 'laboratory strain (reference)',
 	'Laboratory obtained strain': 'laboratory strain (unspecified)',
@@ -287,8 +308,7 @@ comprehensive_fuzzy = {
 	'scar': 'scar tissue',
 
 	# lymph nodes (specific)
-	'Cervical lymphnode biopsy': 'lymph node (cervical)',
-	'Cervical lymph node': 'lymph node (cervical)',
+	'Cervical lymph': 'lymph node (cervical)',
 	'Lung lymph node': 'lymph node (lung)',
 	'Head lymph node': 'lymph node (head)',
 	'Pectoral lymph nodes': 'lymph node (pectoral)',
@@ -316,7 +336,7 @@ comprehensive_fuzzy = {
 	'Drainage': 'drainage',
 	'excreted bodily substance': 'excreted bodily substance (unspecified)',
 	'body fluid': 'bodily fluid (unspecified)',
-	'fluid': 'fluid (unspecified)',
+	'Biofluids': 'bodily fluid (unspecified)',
 
 	# lungscore?
 	'PULMONARY': 'pulmonary',
@@ -328,24 +348,24 @@ comprehensive_fuzzy = {
 	'farm': 'environmental (farm)',
 	'wastewater': 'environmental (wastewater)', # distinct from normal water, should be done before it
 	'HCU': 'environmental (HCU)',               # distinct from normal water, should be done before it
+	'Coastline': 'environmental (coastline)',   # distinct from normal water, should be done before it
 	'water': 'environmental (water)',           # normal water
 	
 	'Negative Control': 'negative control',
 	'PCR product': 'PCR product',
 
 	### Everything here is last for good reason ###
+	# organs / body parts
+	'Testicle': 'testes',
+	'Intra-abdominal tissue': 'intra-abdominal tissue',
+	'homogenized mouse spleen': 'homogenized mouse spleens', # standardize singular/plural
+	'Vaginal': 'vaginal',
+	'spleen': 'spleen',
+	'lung': 'lung',
 
-	# short words that could match something else by mistake
-	'bile': 'bile',
-	'ear': 'ear',
-	'eye': 'eye',
-	'foot': 'foot',
-	'heel': 'foot (heel)',
-	'leg': 'leg',
-	'Lip': 'lip',
-	'Ostomy': 'ostomy',
-	'toe': 'foot (toe)',
-	'back': 'back',
+	# fungus/culture
+	'mycleia': 'mycelium',
+	'spherule': 'spherule',
 
 	# super generic
 	'clinical strain': 'clinical strain',

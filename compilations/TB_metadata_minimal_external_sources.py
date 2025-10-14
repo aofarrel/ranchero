@@ -1,10 +1,13 @@
-rc = "rc0"
+# Handle metadata for MTBC
+# This EXCLUDES some additional metadata in the interests of speed, but that does mean you're gonna get
+# a different TSV file than what's live on taxonium.
+
+import sys
+rc = sys.argv[1]
 
 import polars as pl
-
 import time
 start = time.time()
-import gc
 import ranchero as Ranchero
 _b_ = "\033[1m"
 _bb_ = "\033[0m"
@@ -13,6 +16,7 @@ print(f"Module import time: {time.time() - start:.4f}")
 start_from_scratch = True
 inject = True
 do_run_id_merges = True
+Ranchero.Configuration.set_config({"loglevel": 30})
 
 module_start = time.time()
 
@@ -31,10 +35,9 @@ def inital_file_parse():
 	start, tba6 = time.time(), Ranchero.standardize_everything(tba6)
 	print(f"Standardized in {time.time() - start:.4f} seconds")
 
-	start, tba6 = time.time(), Ranchero.drop_lowcount_columns(tba6)
+	start, tba6 = time.time(), Ranchero.NeighLib.drop_mostly_null_cols(tba6)
 	print(f"Removed columns with few values in {time.time() - start:.4f}s seconds") # should be done last
 	Ranchero.NeighLib.report(tba6)
-	gc.collect()
 	return tba6
 
 def inject_metadata(tba6):
@@ -61,20 +64,20 @@ def sample_id_merges(merged_runs):
 	# input lists
 	start = time.time()
 	print(f"{_b_}Processing inputs, outputs, denylist, and what's on the tree{_bb_}")
-	inputs = Ranchero.from_tsv("./inputs/pipeline/probable_inputs.txt", auto_rancheroize=False)
+	inputs = Ranchero.from_tsv("./inputs/pipeline/probable_inputs.txt")
 	merged = Ranchero.merge_dataframes(merged, inputs, merge_upon="__index__sample_id", right_name="input", indicator="collection", drop_exclusive_right=False)
 	
-	diffs = Ranchero.from_tsv("./inputs/pipeline/probable_diffs.txt", auto_rancheroize=False)
+	diffs = Ranchero.from_tsv("./inputs/pipeline/probable_diffs.txt")
 	merged = Ranchero.merge_dataframes(merged, diffs, merge_upon="__index__sample_id", right_name="diff", indicator="collection", drop_exclusive_right=False)
 	
-	tree = Ranchero.from_tsv("./inputs/pipeline/samples on tree 2024-12-12.txt", auto_rancheroize=False)
+	tree = Ranchero.from_tsv("./inputs/pipeline/samples on tree 2024-12-12.txt")
 	merged = Ranchero.merge_dataframes(merged, tree, merge_upon="__index__sample_id", right_name="tree", indicator="collection", drop_exclusive_right=False)
 
 	tbprofiler = Ranchero.from_tsv("./inputs/TBProfiler/tbprofiler_basically_everything_rancheroized.tsv")
 	tbprofiler = tbprofiler.drop(['tbprof_main_lin', 'tbprof_family', 'superbatch'])
 	merged = Ranchero.merge_dataframes(merged, tbprofiler, merge_upon="__index__sample_id", right_name="tbprofiler", indicator="collection", drop_exclusive_right=False)
 	
-	denylist = Ranchero.from_tsv("./inputs/pipeline/denylist_2024-07-23_lessdupes.tsv", auto_rancheroize=False)
+	denylist = Ranchero.from_tsv("./inputs/pipeline/denylist_2024-07-23_lessdupes.tsv")
 	merged = Ranchero.merge_dataframes(merged, denylist, merge_upon="__index__sample_id", right_name="denylist", indicator="collection", drop_exclusive_right=False)
 	
 	print(f"Merged with pipeline information in {time.time() - start:.4f} seconds")
@@ -141,14 +144,15 @@ else:
 			merged_runs = Ranchero.from_tsv("merged_by_run.tsv", auto_standardize=False)
 			merged_samps = sample_id_merges(merged_runs)
 
-# fix a BioProject-level injection
 
 
 merged = merged_samps
 
-merged = merged.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'mbytes_sum_sum', 'geoloc_name'], strict=False)
-merged = merged.drop(['tbprof_rd', 'tbprof_spoligotype', 'tbprof_frac'], strict=False) # seem to be from the main lineage only, not the sublineage
-
+merged_samps = merged_samps.drop(
+	['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'geoloc_name',
+	'mbytes_sum_sum', 'mbases_sum', 'bases_sum', 'bytes_sum', # often inaccurate
+	'tbprof_rd', 'tbprof_spoligotype', 'tbprof_frac' # seem to be from the main lineage only, not the sublineage
+	], strict=False)
 Ranchero.to_tsv(merged, f"./ranchero_{rc}_full_columns.tsv")
 merged = merged.drop(['primary_search', 'mbases_sum', 'bases_sum', 'bytes_sum', 'libraryselection', 'librarysource', 'instrument', 'host_info'], strict=False) # for less_columns version
 
@@ -169,7 +173,7 @@ Ranchero.to_tsv(merged, f"./ranchero_{rc}_less_columns.tsv")
 
 exit(1)
 
-tree_metadata_v8_rc10 = Ranchero.from_tsv("./inputs/tree_metadata_v8_rc10.tsv")
+tree_metadata_v8_rc10 = Ranchero.from_tsv("../inputs/tree_metadata_v8_rc10.tsv")
 tree_metadata_v8_rc10 = Ranchero.rancheroize(tree_metadata_v8_rc10)
 tree_metadata_v8_rc10.drop(['BioProject', 'isolation_source', 'host']) # we are parsing these directly from SRA now
 print(f"Finished reading a bunch more metadata in  {time.time() - start:.4f} seconds")

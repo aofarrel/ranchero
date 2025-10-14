@@ -1,7 +1,9 @@
+import sys
+rc = sys.argv[1]
 VERBOSE = False
-JSON_PATH = "/Users/aofarrel/Downloads/bq-results-20250801-215940-1754085716223.json"
-OUT_PATH = "./my_very_cool_c_auris_metadata.tsv"
-INDEX_BY_BIOSAMPLE = True
+JSON_PATH = "./inputs/BQ/FUNGUS/c_auris_bq-results-20250801-215940-1754085716223.json_modified.json"
+OUT_PATH = f"../my_very_cool_c_auris_metadata_rc{rc}.tsv"
+INDEX_BY_BIOSAMPLE = False
 
 import time
 start = time.time()
@@ -12,7 +14,7 @@ import ranchero
 print(f"Imported ranchero in {time.time() - start:.4f} seconds")
 
 if VERBOSE:
-	ranchero.Configuration.set_config({"loglevel": 20})
+	ranchero.Configuration.set_config({"loglevel": 10})
 else:
 	ranchero.Configuration.set_config({"loglevel": 30})
 
@@ -48,11 +50,26 @@ print(f"Standardized sample source in {time.time() - start:.4f} seconds")
 start, polars_df = time.time(), ranchero.standardize_hosts(polars_df)
 print(f"Standardized hosts in {time.time() - start:.4f} seconds")
 if VERBOSE:
-	ranchero.dfprint(polars_df.select(ranchero.valid_cols(polars_df, ['__index__run', 'BioProject', 'date_collected', 'host_scienname', 'isolation_source', 'isolation_source_raw', 'continent', 'country', 'region'])))
+	ranchero.dfprint(
+		polars_df.select(
+			ranchero.valid_cols(
+				polars_df, [ranchero.get_index(polars_df), 'BioProject', 'date_collected',
+				'host_scienname', 'isolation_source', 'isolation_source_raw', 'continent',
+				'country', 'region']
+			)
+		)
+	)
 
 if INDEX_BY_BIOSAMPLE:
 	polars_df = ranchero.run_index_to_sample_index(polars_df)
-	polars_df = polars_df.select(ranchero.valid_cols(polars_df, ["__index__sample", "run_id", "mbytes", "platform", "instrument", "BioProject", "organism", "assay_type", "librarylayout",	"bases", "date_sequenced",	"date_collected", "genotype_sam_ss_dpl92", "clade_sam",	"host_disease", "strain_sam_ss_dpl139", "host_info", "country", "continent", "region", "isolation_source", "host_scienname", "host_confidence", "host_commonname"]))
+	polars_df = polars_df.select(
+		ranchero.valid_cols(
+		polars_df, ["__index__sample", "run_id", "mbytes", "platform", "instrument", "BioProject",
+		"organism", "assay_type", "librarylayout", "bases", "date_sequenced", "date_collected",
+		"genotype_sam_ss_dpl92", "clade_sam", "host_disease", "strain_sam_ss_dpl139", "host_info",
+		"country", "continent", "region", "host_scienname", "host_confidence", "host_commonname"]
+		)
+	)
 	ranchero.dfprint(polars_df)
 
 ranchero.to_tsv(polars_df, OUT_PATH)

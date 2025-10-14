@@ -534,7 +534,12 @@ class FileReader():
 		if normalize_attributes and "attributes" in polars_df.columns:  # if column doesn't exist, return false
 			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df, rancheroize=auto_rancheroize)
 		if auto_rancheroize:
-			polars_df = self.NeighLib.rancheroize_polars(polars_df, input_index='acc')
+			if self.NeighLib.get_index(polars_df) == self.NeighLib.get_hypothetical_index_fullname('run_id'):
+				# in case json_normalize also ran rancheroize
+				# TODO: should we really allow rancheroize to run twice like that?
+				polars_df = self.NeighLib.rancheroize_polars(polars_df)
+			else:
+				polars_df = self.NeighLib.rancheroize_polars(polars_df, input_index='acc')
 		if auto_standardize:
 			polars_df = self.Standardizer.standardize_everything(polars_df)
 		return polars_df
