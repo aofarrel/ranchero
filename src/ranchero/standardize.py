@@ -168,30 +168,31 @@ class ProfessionalsHaveStandards():
 		"""ONLY RUN THIS AFTER ALL METADATA PROCESSING"""
 		return polars_df.drop(kolumn for kolumn in kolumns.columns_to_drop_after_rancheroize if kolumn in polars_df.columns)
 
-	def kv_match(self, polars_df, match_col: str, write_col: str, key: str, value, 
-		substrings=False,
-		overwrite=False,
-		status_cols=False,
-		status_cols_reset=True,
-		remove_match_from_list=False):
-		"""
-		Replace a pl.Utf8 or pl.List(pl.Utf8) column's values with the values in a dictionary per its key-value pairs.
-		Case-insensitive. If substrings, will match substrings (ex: "US Virgin Islands" matches "US")
-		If match_col is pl.List, if any element in the list matches, that is considered a match.
+	@staticmethod
+	def _setup_consistent_expressions(polars_df, write_col, status_cols_reset):
+		if status_cols_reset:
+			matched_false = False
+			written_false = False
+		else:
+			matched_false = pl.col('matched')
+			written_false = pl.col('written')
 
-		Matched and Written columns are not started over if already existed in case this is being called in a for loop
-		"""
-		#self.logging.debug(f"Where {key} is in {match_col}, write {value} in {write_col} (substrings {substrings}, overwrite {overwrite}, status_cols {status_cols}, remove_match_from_list {remove_match_from_list})")
-		if status_cols:
-			polars_df = polars_df.with_columns(pl.lit(False).alias('matched')) if 'matched' not in polars_df.columns else polars_df.with_columns(pl.col('matched').fill_null(False))
-			polars_df = polars_df.with_columns(pl.lit(False).alias('written')) if 'written' not in polars_df.columns else polars_df.with_columns(pl.col('written').fill_null(False))
-		if write_col not in polars_df.columns:
-			self.logging.debug(f"Write column {write_col} not in polars_df yet so we'll add it")
-			polars_df = polars_df.with_columns(pl.lit(None).alias(write_col)) if write_col not in polars_df.columns else polars_df
+		if polars_df.schema[write_col] == pl.List:
+			write_col_is_empty = ((pl.col(write_col).is_null()).or_(pl.col(write_col).list.len() < 1))
+			if type(value) is not list:
+				value = [value] # needed to avoid type errors
+		elif polars_df.schema[write_col] == pl.Utf8:
+			write_col_is_empty = ((pl.col(write_col).is_null()).or_(pl.col(write_col).str.len_bytes() == 0))
+		else:
+			write_col_is_empty = pl.col(write_col).is_null()
 
-		# to start off, we define several polars expressions
+		return matched_false, written_false, write_col_is_empty
+
+	@staticmethod
+	def _setup_kv_expressions(polars_df, match_col, write_col, key, value, substrings, overwrite, remove_match_from_list):
+		allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 		
-		# define found_a_match
+		# Not nesting these because this is easier to read (imho)
 		if substrings and polars_df.schema[match_col] == pl.Utf8:
 			found_a_match = pl.col(match_col).str.contains(f"(?i){key}")
 		elif substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
@@ -202,33 +203,84 @@ class ProfessionalsHaveStandards():
 		elif not substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
 			found_a_match = pl.col(match_col).list.eval(pl.element().str.to_lowercase() == key.lower()).list.any()
 		else:
-			self.logging.warning(f"Invalid type {polars[match_col].schema} for match_col named {match_col}, cannot do matching")
-			return polars_df
-		self.logging.debug(f"defined polars expression found_a_match as {found_a_match}")
+			# should never happen due to dictionary_match()'s assert
+			self.logging.error(f"Invalid type {polars[match_col].schema} for match_col named {match_col}, cannot do matching")
+			raise TypeError
 
-		# define allowed_to_overwrite
-		allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
-	
-		# define write_col_is_empty (empty list, empty string, pl.Null)
-		if polars_df.schema[write_col] == pl.List:
-			write_col_is_empty = ((pl.col(write_col).is_null()).or_(pl.col(write_col).list.len() < 1))
-			# also make sure we can write to the value to the list column
-			if type(value) is not list:
-				value = [value]
-				self.logging.debug("turned value into a list, since write_col is a list, to avoid type errors")
-		elif polars_df.schema[write_col] == pl.Utf8:
-			write_col_is_empty = ((pl.col(write_col).is_null()).or_(pl.col(write_col).str.len_bytes() == 0))
+		if remove_match_from_list and polars_df.schema[match_col] == pl.List(pl.Utf8):
+			if substrings:
+				filter_containing = ~pl.element().str.contains(key)
+			else:
+				filter_containing = pl.element().str.to_lowercase() != key.lower()
 		else:
-			write_col_is_empty = pl.col(write_col).is_null()
-		self.logging.debug(f"defined polars expression write_col_is_empty as {write_col_is_empty}")
+			filter_containing = None
 
-		# define matched_false and written_false (for status columns)
-		if status_cols_reset:
-			matched_false = False
-			written_false = False
+		return allowed_to_overwrite, filter_containing, found_a_match
+
+	def dictionary_match(self, polars_df, match_col: str, write_col: str, dictionary: dict, 
+		substrings=False, 
+		overwrite=False, 
+		retain_input=False,
+		status_cols=False,
+		status_cols_reset=True,
+		remove_match_from_list=False,
+		progress_bar=True,
+		progress_bar_desc="Standardizing..."):
+		"""
+		Replace a pl.Utf8 or pl.List(pl.Utf8) column's values with the values in a dictionary per its key-value pairs.
+		* Case-insensitive
+		* If substrings, "US Virgin Islands" would match "US", else "US Virgin Islands" doesn't match "US"
+		* If match_col is pl.List, if any element in the list matches, that is considered a match
+		"""
+		assert match_col in polars_df.columns
+		assert ( (polars_df.schema[match_col] == pl.Utf8) or (polars_df.schema[match_col] == pl.List(pl.Utf8)) )
+		if retain_input:
+			polars_df = polars_df.with_columns(pl.col(match_col).alias(f"{match_col}_raw")) if f"{match_col}_raw" not in polars_df.columns else polars_df
+		if status_cols:
+			polars_df = polars_df.with_columns(pl.lit(False).alias('matched')) if 'matched' not in polars_df.columns else polars_df.with_columns(pl.col('matched').fill_null(False))
+			polars_df = polars_df.with_columns(pl.lit(False).alias('written')) if 'written' not in polars_df.columns else polars_df.with_columns(pl.col('written').fill_null(False))
+		if write_col not in polars_df.columns:
+			self.logging.debug(f"Write column {write_col} not in polars_df yet so we'll add it")
+			polars_df = polars_df.with_columns(pl.lit(None).alias(write_col)) if write_col not in polars_df.columns else polars_df
+		
+		# SPECIAL CASE
+		if substrings and polars_df.schema[match_col] == pl.Utf8 and match_col == write_col and overwrite:
+			if status_cols: self.logging.warning("Status columns not available for this type of replacement")
+			str_replace_many = pl.col(match_col).str.replace_many(list(dictionary.keys()), list(dictionary.values()), ascii_case_insensitive=True).alias(write_col)
+			return polars_df.with_columns(str_replace_many)
+
+		# these polars expressions don't depend on dictionary values so let's only calculate them once
+		expr_matched_false, expr_written_false, expr_write_col_is_empty = self._setup_consistent_expressions(polars_df, write_col=write_col, status_cols_reset=status_cols_reset)
+
+		# actually do the matching
+		if progress_bar:
+			for key, value in tqdm(dictionary.items(), desc=progress_bar_desc, ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+				expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
+					substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				polars_df = self._kv_match(polars_df, match_col, write_col, key, value, status_cols,
+					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, expr_matched_false, expr_write_col_is_empty, expr_written_false)
 		else:
-			matched_false = pl.col('matched')
-			written_false = pl.col('written')
+			for key, value in dictionary.items():
+				expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
+					substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				polars_df = self._kv_match(polars_df, match_col, write_col, key, value, status_cols,
+					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, expr_matched_false, expr_write_col_is_empty, expr_written_false)
+
+		return polars_df
+
+
+	def _kv_match(self, polars_df, match_col: str, write_col: str, key: str, value: str, status_cols: bool,
+		allowed_to_overwrite: pl.expr,
+		filter_exp: pl.expr,
+		found_a_match: pl.expr,
+		matched_false, # either bool false or polars expression
+		write_col_is_empty: pl.expr,
+		written_false, # either bool false or polars expression
+		):
+		"""
+		This function should be called by dictionary_match() because it uses predefined polars expressions and relies on some asserts	
+		"""
+		
 
 		# use those expressions to actually do something
 		if status_cols:
@@ -274,25 +326,18 @@ class ProfessionalsHaveStandards():
 				.alias(write_col)
 			])
 
-		if remove_match_from_list and polars_df.schema[match_col] == pl.List(pl.Utf8):
-			if substrings:
-				filter_exp = ~pl.element().str.contains(key)
-			else:
-				filter_exp = pl.element().str.to_lowercase() != key.lower()
-			
+		if filter_exp is not None: # if remove_match_from_list and polars_df.schema[match_col] == pl.List(pl.Utf8)
 			polars_df = polars_df.with_columns([
 				pl.when(found_a_match)
 				.then(pl.col(match_col).list.eval(pl.element().filter(filter_exp)))
 				.otherwise(pl.col(match_col))
 				.alias(match_col)
 			])
-		if self.logging.getEffectiveLevel() == 10:
-			if status_cols:
-				pass
-				#print(polars_df.select(['run_id', write_col, 'geoloc_info', 'matched', 'written']))
-			else:
-				pass
-				#print(polars_df.select(['run_id', write_col, 'geoloc_info']))
+		#if self.logging.getEffectiveLevel() == 10:
+		#	if status_cols:
+		#		print(polars_df.select(['run_id', write_col, 'geoloc_info', 'matched', 'written']))
+		#	else:
+		#		print(polars_df.select(['run_id', write_col, 'geoloc_info']))
 		return polars_df
 
 	def standardize_host_disease(self, polars_df):
@@ -1059,12 +1104,14 @@ class ProfessionalsHaveStandards():
 			self.logging.debug("geoloc_info ✔️ country ✔️")
 			# This DOES NOT force everything to be ISO standard in country column, since if you have stuff in that column already I assume you want it there
 
-			for nation, ISO3166 in countries.substring_match.items():
-				polars_df = self.kv_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=True, status_cols=False)
-			for nation, ISO3166 in countries.exact_match.items():
-				polars_df = self.kv_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True, status_cols=False)
-			for ISO3166, continent in countries.countries_to_continents.items():
-				polars_df = self.kv_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
+			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.substring_match, 
+				substrings=True, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Standardizing countries (substrings)")
+			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.exact_match, 
+				substrings=False, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Standardizing countries (exact)")
+			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
+				substrings=False, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Countries to continents")
+
+			# TODO: why not call validate_col_country(polars_df)?
 
 			# If geoloc_info can become a str 'region' column, and 'region' column doesn't already exist, let's do that
 			# ...but that's computationally expensive and we want to parse geoloc_info for continents so actually let's not do this here
@@ -1076,12 +1123,12 @@ class ProfessionalsHaveStandards():
 		elif 'country' in polars_df.columns and 'geoloc_info' not in polars_df.columns:
 			self.logging.debug("geoloc_info ✖️ country ✔️")
 			# This DOES force everything to be ISO standard in country column
-			for nation, ISO3166 in countries.substring_match.items():
-				polars_df = self.kv_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=True, status_cols=False, remove_match_from_list=True)
-			for nation, ISO3166 in countries.exact_match.items():
-				polars_df = self.kv_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True, status_cols=False, remove_match_from_list=True)		
-			for ISO3166, continent in countries.countries_to_continents.items():
-				polars_df = self.kv_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
+			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.substring_match, 
+				substrings=True, overwrite=True, status_cols=False, remove_match_from_list=True, progress_bar=False, progress_bar_desc="Standardizing countries (substrings)")
+			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.exact_match, 
+				substrings=False, overwrite=True, status_cols=False, remove_match_from_list=True, progress_bar=False, progress_bar_desc="Standardizing countries (exact)")		
+			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
+				substrings=False, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Countries to continents")
 			self.validate_col_country(polars_df)
 			self.logging.debug("Returning early due to lack of geoloc_info column")
 			return polars_df
@@ -1090,10 +1137,10 @@ class ProfessionalsHaveStandards():
 			self.logging.debug("geoloc_info ✔️ country ✖️")
 			# To handle "country: region" metadata without overwriting the region metadata, first we attempt to extract countries by looking for non-substring matches,
 			# including the countries.substring_match stuff we usually just substring match upon.
-			for nation, ISO3166 in tqdm(united_nations.items(), desc="Standardizing countries", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-				polars_df = self.kv_match(polars_df, match_col='geoloc_info', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
-			for ISO3166, continent in countries.countries_to_continents.items():
-				polars_df = self.kv_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
+			polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='country', dictionary=united_nations, 
+				substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True, progress_bar=False, progress_bar_desc="Standardizing countries")
+			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
+				substrings=False, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Countries to continents")
 		
 		else:
 			self.logging.warning("Neither 'country' nor 'geoloc_info' found in dataframe. Cannot standardize.")
@@ -1105,8 +1152,8 @@ class ProfessionalsHaveStandards():
 		assert 'continent' in polars_df.columns
 		
 		# Now let's try to pull continent information from geoloc_info 
-		for continent, that_same_continent in regions.continents.items():
-			polars_df = self.kv_match(polars_df, match_col='geoloc_info', write_col='continent', key=continent, value=that_same_continent, substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
+		polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='continent', dictionary=regions.continents, 
+			substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
 
 		# Make sure we don't have junk from hypothetical previous runs, or weird columns
 		assert 'likely_country' not in polars_df.columns
@@ -1250,21 +1297,16 @@ class ProfessionalsHaveStandards():
 		polars_df = polars_df.with_columns(pl.col("region").str.strip_chars_start(" "))
 
 		# manually deal with entries that have values for region but not country
-		for region, ISO3166 in regions.regions_to_countries.items():
-			polars_df = self.kv_match(polars_df, match_col="region", write_col="country", key=region, value=ISO3166, substrings=False, overwrite=True)
-		for nation, ISO3166 in countries.substring_match.items():
-			polars_df = self.kv_match(polars_df, match_col='region', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=False)
-		for nation, ISO3166 in countries.exact_match.items():
-			polars_df = self.kv_match(polars_df, match_col='region', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
+		polars_df = self.dictionary_match(polars_df, match_col="region", write_col="country", dictionary=regions.regions_to_countries, substrings=False, overwrite=True)
+		polars_df = self.dictionary_match(polars_df, match_col='region', write_col='country', dictionary=countries.substring_match, substrings=True, overwrite=False)
+		polars_df = self.dictionary_match(polars_df, match_col='region', write_col='country', dictionary=countries.exact_match, substrings=False, overwrite=True)
 
 		# partial cleanup of the region column
-		for region, shorter_region in regions.regions_to_smaller_regions.items():
-			polars_df = self.kv_match(polars_df, match_col="region", write_col="region", key=region, value=shorter_region, substrings=True, overwrite=True)
+		polars_df = self.dictionary_match(polars_df, match_col="region", write_col="region", dictionary=regions.regions_to_smaller_regions, substrings=True, overwrite=True)
 
 		# Any matches for country names in geoloc_name, country, likely_country, and def_country have already been ISO3166'd
 		# Let's use that to convert some ISO3166'd countries into continents (this happens after region matching intentionally)
-		for ISO3166, continent in countries.countries_to_continents.items():
-			polars_df = self.kv_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
+		polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, substrings=False, overwrite=True)
 
 		self.validate_col_country(polars_df)
 		return polars_df
