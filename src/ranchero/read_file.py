@@ -52,6 +52,18 @@ class FileReader():
 				dict_list.append(clean_row)
 		return dict_list
 
+	def tsv_to_dictionary(self, injection_file, delimiter='\t', has_header=True):
+		"""
+		Similar to read_metadata_injection() except it generates a flat dictionary, and therefore only expects two columns. 
+		"""
+		with open(injection_file, mode='r') as file:
+			if has_header: next(file)
+			reader = csv.reader(file, delimiter=delimiter)
+			n_columns = len(list(reader)[0])
+			assert n_columns == 2, f"tsv_to_dictionary() requires two columns but {n_columns} were detected"
+			result = dict(reader)
+		return result
+
 	def polars_from_ncbi_run_selector(self,
 		csv,
 		drop_columns=list(),

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ranchero"
-version = "0.1.0rc31"
+version = "0.1.0rc32"
 description = "Ranchero: metadata wrangling for bioinformatics"
 readme = "readme_pypi.md"
 requires-python = ">=3.10"

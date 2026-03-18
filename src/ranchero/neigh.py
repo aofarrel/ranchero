@@ -1023,6 +1023,14 @@ class NeighLib:
 		assert polars_df.select(pl.col(left_col)).dtypes == [pl.List]
 		return polars_df
 
+	def assert_no_values_start_with(polars_df: pl.DataFrame, column: str, starts_with: str) -> None:
+		assert column in polars_df.columns, f"Column {column} not found in DataFrame."
+		assert polars_df.schema[column] == pl.Utf8, f"Column {column} must be pl.Utf8, but got {dtype}."
+		mask = polars_df[column].str.starts_with(starts_with)
+		if mask.any():
+			offending = polars_df.filter(mask)[column].to_list()
+			raise AssertionError(f"The following values in {column} start with {starts_with}: {offending}")
+
 	def report(self, polars_df):
 		print(f"Dataframe stats:")
 		print(f"  𓃾 {polars_df.shape[1]} metadata columns")
@@ -1056,13 +1064,21 @@ class NeighLib:
 		return self.translate_column(polars_df, col_to_translate, new_col, HPRC_sample_ids.HPRC_R2_isolate_to_BioSample)
 
 	def translate_column(self, polars_df, col_to_translate, new_col, dictionary):
+		if col_to_translate == new_col:
+			output_col = self.tempcol(polars_df, "temp_translation_column")
+		else:
+			output_col = new_col
+
 		if new_col not in polars_df.columns:
-			polars_df = polars_df.with_columns(pl.lit(None).alias(new_col))
+			polars_df = polars_df.with_columns(pl.lit(None).alias(output_col))
 		for key, value in dictionary.items():
 			polars_df = polars_df.with_columns(
 				pl.when(pl.col(col_to_translate) == pl.lit(key))
-				.then(pl.lit(value)).otherwise(pl.col(new_col)).alias(new_col)
+				.then(pl.lit(value)).otherwise(pl.col(output_col)).alias(output_col)
 			)
+
+		if col_to_translate == new_col: # since we gave it a temp name earlier
+			polars_df = polars_df.rename({output_col: new_col})
 		return polars_df
 
 	def postmerge_fallback_or_null(self, polars_df, left_col, right_col, fallback=None, dont_crash_please=0):
@@ -1563,7 +1579,7 @@ class NeighLib:
 					self.dfprint(polars_df.select(column), rows=20, loglevel=40)
 					exit(1)
 				self.logging.debug(f"{arrow}Can delist {column} (and it's not currently full of nulls)")
-				self.dfprint(polars_df.select(column), rows=200, loglevel=10)
+				self.dfprint(polars_df.select(column), rows=5, loglevel=10)
 				polars_df = polars_df.with_columns(pl.col(column).list.first().alias(column))
 				if self.get_null_count_in_column(polars_df, column) == polars_df.shape[0]:
 					self.logging.error(f"Oops, we converted everything in {column} to null")
