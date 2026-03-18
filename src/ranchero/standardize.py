@@ -77,7 +77,7 @@ class ProfessionalsHaveStandards():
 		# and then ignore everything else in it.
 		if 'isolate_sam_ss_dpl100' in polars_df.columns:
 			for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source_exact_match.items(), desc="Checking isolate_sam_ss_dpl100 (exact)", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-				polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
+				polars_df = self.kv_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
 			polars_df = polars_df.drop('isolate_sam_ss_dpl100')
 
 		if polars_df.schema['isolation_source'] == pl.List:
@@ -168,7 +168,7 @@ class ProfessionalsHaveStandards():
 		"""ONLY RUN THIS AFTER ALL METADATA PROCESSING"""
 		return polars_df.drop(kolumn for kolumn in kolumns.columns_to_drop_after_rancheroize if kolumn in polars_df.columns)
 
-	def dictionary_match(self, polars_df, match_col: str, write_col: str, key: str, value, 
+	def kv_match(self, polars_df, match_col: str, write_col: str, key: str, value, 
 		substrings=False,
 		overwrite=False,
 		status_cols=False,
@@ -301,19 +301,19 @@ class ProfessionalsHaveStandards():
 		# exact matches
 		if self.cfg.mycobacterial_mode:
 			for disease, simplified_disease in host_disease.host_disease_exact_match_mycobacterial.items():
-				polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
+				polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
 		for disease, simplified_disease in host_disease.host_disease_exact_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
+			polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
 		
 		# fuzzy matches
 		if self.cfg.mycobacterial_mode:
 			for disease, simplified_host_disease in host_disease.host_disease_substring_match_mycobacterial.items():
-				polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
+				polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
 		for disease, simplified_host_disease in host_disease.host_disease_substring_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
+			polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
 		return polars_df
 
-	def standardize_sample_source_as_list(self, polars_df, write_hosts=True, write_lineages=True, write_host_disease=True):
+	def standardize_sample_source_as_list(self, polars_df, write_hosts=True, write_lineages=True, write_host_disease=True, collapse_culture=False):
 		"""
 		Sample source (rancheroized as isolation_source) is kind of a mess, because submitters can interpret it as very different things:
 		* host organism species
@@ -357,7 +357,7 @@ class ProfessionalsHaveStandards():
 					.alias(strain_column)
 				])
 
-		# TODO: maybe rewrite this section to use dictionary_match()
+		# TODO: maybe rewrite this section to use kv_match()
 		if write_hosts and 'host' in polars_df.columns:
 			self.logging.info("Extracting host information from isolation_source...")
 			human = pl.lit(['Homo sapiens']) if polars_df.schema['host'] == pl.List else pl.lit('Homo sapiens') # high-confidence
@@ -421,7 +421,7 @@ class ProfessionalsHaveStandards():
 		if write_host_disease:
 			self.logging.info("Extracting host_disease...")
 			for disease, simplified_disease in host_disease.host_disease_exact_match.items():
-				polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=False, remove_match_from_list=True)
+				polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=False, remove_match_from_list=True)
 			# DEBUGPRINT
 			#self.NeighLib.print_a_where_b_equals_these(polars_df, col_a='isolation_source', col_b='run_id', list_to_match=['SRR16156818', 'SRR12380906', 'SRR23310897', 'ERR6198390', 'SRR6397336'])
 
@@ -472,22 +472,22 @@ class ProfessionalsHaveStandards():
 				#.alias('isolation_source')
 			])
 		for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source_exact_match.items(), desc="Checking for exact matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
+			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
 		for sample_source, simplified_sample_source in tqdm(sample_sources.sample_source_exact_match_body_parts.items(), desc="Checking for exact matches (body parts)", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
+			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, remove_match_from_list=True)
 		for sample_source, simplified_sample_source in tqdm(sample_sources.comprehensive_fuzzy.items(), desc="Checking for fuzzy matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=False, remove_match_from_list=True)
+			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=False, remove_match_from_list=True)
 		
 
 		self.logging.info("Cleaning up...")
 
-		# if it's a culture, then it's a culture. end of story.
-		polars_df = polars_df.with_columns([
-			pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)culture')).list.any())
-			.then(pl.lit('culture'))
-			.otherwise(pl.col('neo_isolation_source'))
-			.alias('neo_isolation_source')
-		])
+		if collapse_culture:
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)culture')).list.any())
+				.then(pl.lit('culture'))
+				.otherwise(pl.col('neo_isolation_source'))
+				.alias('neo_isolation_source')
+			])
 
 		# very last bit: drop any element of the list that contains a number, as that's likely a sample number. this is done last
 		# to allow sample numbers within actually useful strings to still have their useful string bits extracted
@@ -526,11 +526,11 @@ class ProfessionalsHaveStandards():
 				.otherwise(pl.col('isolation_source'))
 				.alias('isolation_source'))
 		for sample_source, simplified_sample_source in sample_sources.sample_source_exact_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False)
+			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False)
 		for sample_source, simplified_sample_source in sample_sources.sample_source_exact_match_body_parts.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False)
+			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False)
 		for sample_source, simplified_sample_source in sample_sources.comprehensive_fuzzy.items():
-			polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=False)
+			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=False)
 		return polars_df
 	
 	def standarize_hosts(self, polars_df):
@@ -1039,7 +1039,7 @@ class ProfessionalsHaveStandards():
 			polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, continent_col, None)
 		self.validate_col_country(polars_df, country_col)
 		for ISO3166, continent in countries.countries_to_continents.items():
-			polars_df = self.dictionary_match(polars_df, match_col=country_col, write_col=continent_col, key=ISO3166, value=continent, substrings=False, overwrite=overwrite)
+			polars_df = self.kv_match(polars_df, match_col=country_col, write_col=continent_col, key=ISO3166, value=continent, substrings=False, overwrite=overwrite)
 		return polars_df
 	
 	def standardize_countries(self, polars_df, try_rm_geoloc_info=False):
@@ -1060,11 +1060,11 @@ class ProfessionalsHaveStandards():
 			# This DOES NOT force everything to be ISO standard in country column, since if you have stuff in that column already I assume you want it there
 
 			for nation, ISO3166 in countries.substring_match.items():
-				polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=True, status_cols=False)
+				polars_df = self.kv_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=True, status_cols=False)
 			for nation, ISO3166 in countries.exact_match.items():
-				polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True, status_cols=False)
+				polars_df = self.kv_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True, status_cols=False)
 			for ISO3166, continent in countries.countries_to_continents.items():
-				polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
+				polars_df = self.kv_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
 
 			# If geoloc_info can become a str 'region' column, and 'region' column doesn't already exist, let's do that
 			# ...but that's computationally expensive and we want to parse geoloc_info for continents so actually let's not do this here
@@ -1077,11 +1077,11 @@ class ProfessionalsHaveStandards():
 			self.logging.debug("geoloc_info ✖️ country ✔️")
 			# This DOES force everything to be ISO standard in country column
 			for nation, ISO3166 in countries.substring_match.items():
-				polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=True, status_cols=False, remove_match_from_list=True)
+				polars_df = self.kv_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=True, status_cols=False, remove_match_from_list=True)
 			for nation, ISO3166 in countries.exact_match.items():
-				polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True, status_cols=False, remove_match_from_list=True)		
+				polars_df = self.kv_match(polars_df, match_col='country', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True, status_cols=False, remove_match_from_list=True)		
 			for ISO3166, continent in countries.countries_to_continents.items():
-				polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
+				polars_df = self.kv_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
 			self.validate_col_country(polars_df)
 			self.logging.debug("Returning early due to lack of geoloc_info column")
 			return polars_df
@@ -1091,9 +1091,9 @@ class ProfessionalsHaveStandards():
 			# To handle "country: region" metadata without overwriting the region metadata, first we attempt to extract countries by looking for non-substring matches,
 			# including the countries.substring_match stuff we usually just substring match upon.
 			for nation, ISO3166 in tqdm(united_nations.items(), desc="Standardizing countries", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-				polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
+				polars_df = self.kv_match(polars_df, match_col='geoloc_info', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
 			for ISO3166, continent in countries.countries_to_continents.items():
-				polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
+				polars_df = self.kv_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
 		
 		else:
 			self.logging.warning("Neither 'country' nor 'geoloc_info' found in dataframe. Cannot standardize.")
@@ -1106,7 +1106,7 @@ class ProfessionalsHaveStandards():
 		
 		# Now let's try to pull continent information from geoloc_info 
 		for continent, that_same_continent in regions.continents.items():
-			polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='continent', key=continent, value=that_same_continent, substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
+			polars_df = self.kv_match(polars_df, match_col='geoloc_info', write_col='continent', key=continent, value=that_same_continent, substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
 
 		# Make sure we don't have junk from hypothetical previous runs, or weird columns
 		assert 'likely_country' not in polars_df.columns
@@ -1251,20 +1251,20 @@ class ProfessionalsHaveStandards():
 
 		# manually deal with entries that have values for region but not country
 		for region, ISO3166 in regions.regions_to_countries.items():
-			polars_df = self.dictionary_match(polars_df, match_col="region", write_col="country", key=region, value=ISO3166, substrings=False, overwrite=True)
+			polars_df = self.kv_match(polars_df, match_col="region", write_col="country", key=region, value=ISO3166, substrings=False, overwrite=True)
 		for nation, ISO3166 in countries.substring_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='region', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=False)
+			polars_df = self.kv_match(polars_df, match_col='region', write_col='country', key=nation, value=ISO3166, substrings=True, overwrite=False)
 		for nation, ISO3166 in countries.exact_match.items():
-			polars_df = self.dictionary_match(polars_df, match_col='region', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
+			polars_df = self.kv_match(polars_df, match_col='region', write_col='country', key=nation, value=ISO3166, substrings=False, overwrite=True)
 
 		# partial cleanup of the region column
 		for region, shorter_region in regions.regions_to_smaller_regions.items():
-			polars_df = self.dictionary_match(polars_df, match_col="region", write_col="region", key=region, value=shorter_region, substrings=True, overwrite=True)
+			polars_df = self.kv_match(polars_df, match_col="region", write_col="region", key=region, value=shorter_region, substrings=True, overwrite=True)
 
 		# Any matches for country names in geoloc_name, country, likely_country, and def_country have already been ISO3166'd
 		# Let's use that to convert some ISO3166'd countries into continents (this happens after region matching intentionally)
 		for ISO3166, continent in countries.countries_to_continents.items():
-			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
+			polars_df = self.kv_match(polars_df, match_col='country', write_col='continent', key=ISO3166, value=continent, substrings=False, overwrite=True)
 
 		self.validate_col_country(polars_df)
 		return polars_df

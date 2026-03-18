@@ -1,4 +1,4 @@
-# Called by standardize.py's dictionary_match() function -- not case sensitive
+# Called by standardize.py's kv_match() function -- not case sensitive
 
 # Only called if mycobacterial_mode == True
 host_disease_exact_match_mycobacterial = {

@@ -525,17 +525,17 @@ def standardization(folder="./inputs/test"):
 
 		df_no_substrings = df
 		for input_country, match_type in match_tests.items():
-			df_no_substrings = ranchero.Standardizer.dictionary_match(df_no_substrings, "country", "match_type", input_country, match_type, substrings=False, overwrite=True, status_cols=True)
+			df_no_substrings = ranchero.Standardizer.kv_match(df_no_substrings, "country", "match_type", input_country, match_type, substrings=False, overwrite=True, status_cols=True)
 		no_substring_match = pl.Series("match_type", ["exact", "case", "case", "case", None, None, "case", None, "case"], strict=False)
 		assert_series_equal(no_substring_match, pl.Series(df_no_substrings.select("match_type")))
-		print("✅ dictionary_match(substrings=False) handles exact matches and is case-insensitive but doesn't match substrings nor overwrites when output is None")
+		print("✅ kv_match(substrings=False) handles exact matches and is case-insensitive but doesn't match substrings nor overwrites when output is None")
 
 		df_substrings = df
 		for input_country, match_type in match_tests.items():
-			df_substrings = ranchero.Standardizer.dictionary_match(df_substrings, "country", "match_type", input_country, match_type, substrings=True, overwrite=True, status_cols=True)
+			df_substrings = ranchero.Standardizer.kv_match(df_substrings, "country", "match_type", input_country, match_type, substrings=True, overwrite=True, status_cols=True)
 		substring_match = pl.Series("match_type", ["exact", "case", "case", "case", "substring_within_word", "substring_within_word", "case", "substring_outside_word", "case"])
 		assert_series_equal(substring_match, pl.Series(df_substrings.select("match_type")))
-		print("✅ dictionary_match(substrings=True) handles exact matches and is case-insensitive and matches substrings, and can overwrite previous matches if new value is not None")
+		print("✅ kv_match(substrings=True) handles exact matches and is case-insensitive and matches substrings, and can overwrite previous matches if new value is not None")
 
 	dictionary_match_on_str(folder)
 
