@@ -176,7 +176,7 @@ class ProfessionalsHaveStandards():
 		retain_input,
 		remove_match_from_list,
 		expr_write_col_is_empty):
-		for batch in self.chunk_dict(dictionary, 2):
+		for batch in self.chunk_dict(dictionary, 5):
 			if len(batch) == 5:
 				items = list(batch.items())
 				k1, v1 = items[0]
