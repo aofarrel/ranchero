@@ -4,7 +4,9 @@ from .statics import host_disease, host_species, sample_sources, kolumns, countr
 from .config import RancheroConfig
 import polars as pl
 from tqdm import tqdm
+import time
 from collections import OrderedDict # dictionaries are ordered in Python 3.7+, but OrderedDict has a better popitem() function we need
+from itertools import islice
 
 # https://peps.python.org/pep-0661/
 _DEFAULT_TO_CONFIGURATION = object()
@@ -168,6 +170,123 @@ class ProfessionalsHaveStandards():
 		"""ONLY RUN THIS AFTER ALL METADATA PROCESSING"""
 		return polars_df.drop(kolumn for kolumn in kolumns.columns_to_drop_after_rancheroize if kolumn in polars_df.columns)
 
+	def silly_parallelization(self, polars_df, match_col: str, write_col: str, dictionary: dict, 
+		substrings, 
+		overwrite, 
+		retain_input,
+		remove_match_from_list,
+		expr_write_col_is_empty):
+		for batch in self.chunk_dict(dictionary, 2):
+			if len(batch) == 5:
+				items = list(batch.items())
+				k1, v1 = items[0]
+				k2, v2 = items[1]
+				k3, v3 = items[2]
+				k4, v4 = items[3]
+				k5, v5 = items[4]
+
+				expr_allowed_to_overwrite_1, expr_filter_exp_1, expr_found_a_match_1 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k1, value=v1, 
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				expr_allowed_to_overwrite_2, expr_filter_exp_2, expr_found_a_match_2 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k2, value=v2, 
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				expr_allowed_to_overwrite_3, expr_filter_exp_3, expr_found_a_match_3 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k3, value=v3, 
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				expr_allowed_to_overwrite_4, expr_filter_exp_4, expr_found_a_match_4 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k4, value=v4, 
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				expr_allowed_to_overwrite_5, expr_filter_exp_5, expr_found_a_match_5 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k5, value=v5, 
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+
+				polars_df = polars_df.with_columns([
+					pl.when(
+						(
+							(expr_allowed_to_overwrite_1)
+							.or_(expr_write_col_is_empty)
+						)
+						.and_(expr_found_a_match_1)
+					)
+					.then(pl.lit(v1))
+					.otherwise(None)
+					.alias(f"{write_col}_1"),
+
+					pl.when(
+						(
+							(expr_allowed_to_overwrite_2)
+							.or_(expr_write_col_is_empty)
+						)
+						.and_(expr_found_a_match_2)
+					)
+					.then(pl.lit(v2))
+					.otherwise(None)
+					.alias(f"{write_col}_2"),
+
+					pl.when(
+						(
+							(expr_allowed_to_overwrite_3)
+							.or_(expr_write_col_is_empty)
+						)
+						.and_(expr_found_a_match_3)
+					)
+					.then(pl.lit(v3))
+					.otherwise(None)
+					.alias(f"{write_col}_3"),
+
+					pl.when(
+						(
+							(expr_allowed_to_overwrite_4)
+							.or_(expr_write_col_is_empty)
+						)
+						.and_(expr_found_a_match_4)
+					)
+					.then(pl.lit(v4))
+					.otherwise(None)
+					.alias(f"{write_col}_4"),
+
+					pl.when(
+						(
+							(expr_allowed_to_overwrite_5)
+							.or_(expr_write_col_is_empty)
+						)
+						.and_(expr_found_a_match_5)
+					)
+					.then(pl.lit(v5))
+					.otherwise(None)
+					.alias(f"{write_col}_5")
+				])
+
+				polars_df = polars_df.with_columns(pl.coalesce(f"{write_col}_1", f"{write_col}_2", f"{write_col}_3", f"{write_col}_4", f"{write_col}_5", write_col).alias(write_col))
+			
+				if expr_filter_exp_1 is not None: # if remove_match_from_list and polars_df.schema[match_col] == pl.List(pl.Utf8)
+					polars_df = polars_df.with_columns([
+						pl.when(expr_found_a_match_1)
+						.then(pl.col(match_col).list.eval(pl.element().filter(expr_filter_exp_1)))
+						.otherwise(None)
+						.alias(f"{match_col}_1"),
+						pl.when(expr_found_a_match_2)
+						.then(pl.col(match_col).list.eval(pl.element().filter(expr_filter_exp_2)))
+						.otherwise(None)
+						.alias(f"{match_col}_2"),
+						pl.when(expr_found_a_match_3)
+						.then(pl.col(match_col).list.eval(pl.element().filter(expr_filter_exp_3)))
+						.otherwise(None)
+						.alias(f"{match_col}_3"),
+						pl.when(expr_found_a_match_4)
+						.then(pl.col(match_col).list.eval(pl.element().filter(expr_filter_exp_4)))
+						.otherwise(None)
+						.alias(f"{match_col}_4"),
+						pl.when(expr_found_a_match_5)
+						.then(pl.col(match_col).list.eval(pl.element().filter(expr_filter_exp_5)))
+						.otherwise(None)
+						.alias(f"{match_col}_5")
+					])
+					polars_df = polars_df.with_columns(pl.coalesce(f"{match_col}_1", f"{match_col}_2", f"{match_col}_3", f"{match_col}_4", f"{match_col}_5", match_col).alias(match_col))
+			else: # fall back on the other method
+				for key, value in batch.items():
+					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
+						substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+					polars_df = self._kv_match(polars_df, match_col, write_col, key, value, False,
+						expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, None, expr_write_col_is_empty, None)
+		return polars_df
+
 	@staticmethod
 	def _setup_consistent_expressions(polars_df, write_col, status_cols_reset):
 		if status_cols_reset:
@@ -225,7 +344,8 @@ class ProfessionalsHaveStandards():
 		status_cols_reset=True,
 		remove_match_from_list=False,
 		progress_bar=True,
-		progress_bar_desc="Standardizing..."):
+		progress_bar_desc="Standardizing...",
+		silly_parallelization=False):
 		"""
 		Replace a pl.Utf8 or pl.List(pl.Utf8) column's values with the values in a dictionary per its key-value pairs.
 		* Case-insensitive
@@ -260,11 +380,15 @@ class ProfessionalsHaveStandards():
 				polars_df = self._kv_match(polars_df, match_col, write_col, key, value, status_cols,
 					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, expr_matched_false, expr_write_col_is_empty, expr_written_false)
 		else:
-			for key, value in dictionary.items():
-				expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
-					substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
-				polars_df = self._kv_match(polars_df, match_col, write_col, key, value, status_cols,
-					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, expr_matched_false, expr_write_col_is_empty, expr_written_false)
+			if silly_parallelization and not status_cols:
+				polars_df = self.silly_parallelization(polars_df, match_col, write_col, dictionary, 
+						substrings, overwrite, retain_input, remove_match_from_list, expr_write_col_is_empty)
+			else:
+				for key, value in dictionary.items():
+					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
+						substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+					polars_df = self._kv_match(polars_df, match_col, write_col, key, value, status_cols,
+						expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, expr_matched_false, expr_write_col_is_empty, expr_written_false)
 
 		return polars_df
 
@@ -280,9 +404,7 @@ class ProfessionalsHaveStandards():
 		"""
 		This function should be called by dictionary_match() because it uses predefined polars expressions and relies on some asserts	
 		"""
-		
 
-		# use those expressions to actually do something
 		if status_cols:
 			polars_df = polars_df.with_columns([
 				# match status
@@ -960,6 +1082,12 @@ class ProfessionalsHaveStandards():
 				polars_df = self.taxoncore_GOLS(polars_df, when,  i_group=bacterial_group, i_organism=organism, i_lineage=lineage, i_strain=strain)
 		return polars_df
 
+	@staticmethod
+	def chunk_dict(data, chunk_size):
+		it = iter(data.items())
+		for i in range(0, len(data), chunk_size):
+			yield dict(islice(it, chunk_size))
+
 	def sort_out_taxoncore_columns(self, polars_df, force_strings=True):
 		"""
 		Some columns in polars_df will be in list all_taxoncore_columns. We want to use these taxoncore columns to create three new columns:
@@ -1097,6 +1225,7 @@ class ProfessionalsHaveStandards():
 		# Region and continent keep type str the entire time.
 		# If only geoloc_info exists, go through the list pulling out countries by ISO matching, then continents. Anything remaining move to region.
 		# If both exist, ISO convert country column, then do continent/region matching on geoloc_info column.
+		timer = time.time()
 
 		# TODO: assert intermediate columns like 'likely_country' not in df
 		united_nations = {**countries.substring_match, **countries.exact_match}
@@ -1309,6 +1438,7 @@ class ProfessionalsHaveStandards():
 		polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, substrings=False, overwrite=True)
 
 		self.validate_col_country(polars_df)
+		self.logging.info(f"Standardized countries in {time.time() - timer:.4f} seconds")
 		return polars_df
 		
 
