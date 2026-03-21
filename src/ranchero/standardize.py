@@ -99,7 +99,7 @@ class ProfessionalsHaveStandards():
 		else:
 			raise TypeError(f"Couldn't build polars expression for column of type {polars_df.schema[col]}")
 
-	def standardize_sample_source(self, polars_df):
+	def standardize_sample_source(self, polars_df, move_lost_metadata=True):
 		"""
 		Sample source (rancheroized as isolation_source) is kind of a mess, because submitters can interpret it as very different things:
 		* host organism species
@@ -111,35 +111,37 @@ class ProfessionalsHaveStandards():
 		So we have this function!
 		* starts with isolate_sam_ss_dpl100 if present, which is usually just sample names and therefore only worth a quick check
 		  for good stuff in that column before dropping it
+
+		TODO: move_lost_metadata should be a cfg option
 		"""
 		start = time.time()
 		assert 'isolation_source' in polars_df.columns
 		
 		if 'isolate_sam_ss_dpl100' in polars_df.columns:
-			polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, progress_bar_desc="Checking isolate_sam_ss_dpl100 (exact)", remove_match_from_list=True)
+			polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='isolation_source', dictionary=sample_sources.exact_replacements, substrings=False, overwrite=False, progress_bar_desc="Checking isolate_sam_ss_dpl100 (exact)", remove_match_from_list=True)
 			polars_df = polars_df.drop('isolate_sam_ss_dpl100')
 
 		if self.cfg.mycobacterial_mode and move_lost_metadata:
-			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes_mycobacterial:
+			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes_mycobacterial.items():
 				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
+					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, dictionary=replacements, 
 						substrings=False, overwrite=False, remove_match_from_list=True, 
 						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values")
 
 		if move_lost_metadata:
-			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes:
-				polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
+			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes.items():
+				polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, dictionary=replacements,
 						substrings=False, overwrite=False, remove_match_from_list=True, 
 						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (exact)")
 
-			for destination_column, replacements in sample_sources_wrong_column.exact_two_column_writes:
+			for destination_column, replacements in sample_sources_wrong_column.exact_two_column_writes.items():
 				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
+					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, dictionary=replacements, 
 						substrings=False, overwrite=False, remove_match_from_list=True, 
 						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (exact)")
-			for destination_column, replacements in substring_two_column_writes.exact_two_column_writes:
+			for destination_column, replacements in substring_two_column_writes.exact_two_column_writes.items():
 				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
+					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, dictionary=replacements, 
 						substrings=True, overwrite=False, remove_match_from_list=True, 
 						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (substring)")
 
