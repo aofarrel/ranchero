@@ -5,11 +5,10 @@ host_disease_exact_match_mycobacterial = {
 	'TBM': 'TB meningitis',
 	'Pulmonary': 'pulmonary TB', # distinguish from "extra pulmonary"
 	'PTB': 'pulomonary TB',
-	'Lepromatous leprosy': 'leprosy (Lepromatous)', # distinguish from diffuse lepromatous leprosy
+	'TB': 'unspecified TB',
 }
 
 host_disease_exact_match = {
-	'TB': 'unspecified TB',
 	'Tuberculosis': 'unspecified TB',
 	'tuberculosis': 'unspecified TB',
 	'Tuberculose': 'unspecified TB',
@@ -23,6 +22,7 @@ host_disease_exact_match = {
 	'DOID:106': 'pleural TB',
 	'DOID:1639': 'skeletal TB',
 	'leprosy': 'leprosy',
+	'Lepromatous leprosy': 'leprosy (Lepromatous)', # distinguish from diffuse lepromatous leprosy
 	'extra/intra - pulmonary patient': 'extra/intra-pulmonary TB',
 }
 

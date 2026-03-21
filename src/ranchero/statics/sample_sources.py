@@ -1,129 +1,63 @@
 # This is for standardizing information about what a sample comes from
 
-
-# TODO: is case insensitivity not working? see fungal isolate etc
-
-
-# Nonspecific sample sources that are useless if you already know
-# what organism you are looking at -- consider skipping this batch
-# if you are comparing multiple genra at once, I suppose?
-sample_sources_I_should_hope_so = [
-
-	# Candida
-	'auris',
-	'Fungal isolate',
-	'fungal strain',
-	'fungal cell',
-
-	# tuberculosis/MTBC/Mycobacterium genus
-	'DNA from M. tuberculosis',
-	'M. tuberculosis',
-	'MTB isolates',
-	'Mtb',
-	'MTBC',
-	'Mycobacterium tuberculosis complex',
-	'Mycobacterium tuberculosis',
-	'Mycobacteryum tuberculosis', # common typo
-	'H37Rv', # standardize_sample_source_as_list() will put this in taxoncore first, standardize_sample_source_as_string() will not
-]
-
-# Sample sources that almost nobody would want
-sample_sources_nonsense = [
-	'1',
-	'?',
-	'DNA',
-	'Genomic DNA',
-	'isolate',
-	'to wear a mask', # ?????????
-	'Yes',
-	'WGS'
-]
-
-# Handled earlier in standardizer
-# TODO: Standardization should be adjustable by user here
-sample_sources_otherwise_unhelpful  = [
-	'Affedcted Herd',
-	'bacteria',
-	'bacterial cell',
-	'Bacterial isolate',
-	'Biological Sample',
-	'Biological sample',
-	'Bureau of Tuberculosis',
-	'Homo sapiens',
-	'human',
-	'isolate frome children',
-	'Lima', # location
-	'na',
-	'nan',
-	'New Zealand', # location
-	'no date',
-	'no source',
-	'other',
-	'Pakistan', # location
-	'PTB',
-	'Pulmonary tuberculosis',
-	'strain',
-	'Specimen',
-	'Systemic',
-	'TBM',
-	'tuberculosis',
-	'veracruz', # location
-	'Viet Nam', # location
-]
-
-sample_sources_nonspecific = sample_sources_I_should_hope_so + sample_sources_nonsense + sample_sources_otherwise_unhelpful
-
-sample_source_exact_match = {
+exact_replacements = {
+	'abdomen': 'abdomen',
+	'back': 'back',
 	'BAL': 'bronchoalveolar lavage',
 	'Bed': 'environmental (bed)',
 	'Blood C&S': 'blood (C&S)',
 	'blood': 'blood',
+	'bone': 'bone',
+	'brain': 'brain',
+	'breast': 'breast',
 	'bronchial': 'bronchial',
+	'clinic': 'hospital',
 	'Clinical': 'clinical',
+	'Coastline': 'coastline',
+	'Coccyx': 'coccyx',
+	'Conjunctiva': 'eye (conjunctiva)',
 	'CSF': 'cerebrospinal fluid',
-	'Culture': 'culture',
+	'Culture': 'culture (unspecified)',
 	'CVC': 'central venous catheter',
+	'ear': 'ear', # don't want to match heart!
+	'epidermis': 'skin',
+	'eye': 'eye',
+	'farm': 'farm',
+	'flank': 'flank',
 	'fluid': 'fluid (unspecified)',
+	'foot': 'foot',
+	'HCU': 'heater-cooler unit', # in MTBC samples it's definitely not homocystinuria
+	'heart': 'heart',
+	'heel': 'foot',
 	'Hospitol': 'hospital', # common typo
 	'human': 'clinical',
+	'knee': 'knee',
 	'laboratory': 'laboratory-obtained strain',
+	'leg': 'leg',
+	'Lip': 'lip',
+	'lung': 'lung', # also in more generic match since specifics of lobes hella common
+	'ocean': 'ocean',
 	'Ostomy': 'ostomy',
 	'Pleural Fluid': 'pleural fluid',
 	'pus': 'pus',
-	'tissue': 'tissue (unspecified)',
-	'Urine': 'urine',
-	'whole organism': 'whole organism',
-}
-
-sample_source_exact_match_body_parts = {
-	'brain': 'brain',
-	'testes': 'testes', # "testicle" gets a more generic match elsewhere
-	'bone': 'bone',
-	'Coccyx': 'coccyx',
-	'knee': 'knee',
-	'spine': 'spine',
-	'lung': 'lung', # also in more generic match since specifics of lobes hella common
-	'skin': 'skin',
-	'epidermis': 'skin',
-	'abdomen': 'abdomen',
-	'flank': 'flank',
-	'throat': 'throat',
-	'Thigh': 'thigh',
-	'Conjunctiva': 'eye (conjunctiva)',
-	'breast': 'breast',
 	'rectal': 'rectum',
 	'rectum': 'rectum',
-	'Toenail': 'foot',
-	'heart': 'heart',
-	'ear': 'ear', # don't want to match heart!
-	'eye': 'eye',
-	'foot': 'foot',
-	'wrist': 'hand',
-	'heel': 'foot',
-	'leg': 'leg',
-	'Lip': 'lip',
+	'river sediment': 'river sediment',
+	'scar': 'scar tissue',
+	'skin': 'skin',
+	'soil': 'soil',
+	'spine': 'spine',
+	'testes': 'testes', # "testicle" gets a more generic match elsewhere
+	'Thigh': 'thigh',
+	'throat': 'throat',
+	'tissue': 'tissue (unspecified)',
 	'toe': 'foot',
-	'back': 'back'
+	'Toenail': 'foot',
+	'Urine': 'urine',
+	'wastewater': 'wastewater',
+	'water': 'water',
+	'whole organism': 'whole organism',
+	'wrist': 'hand'
 }
 
 
@@ -277,8 +211,8 @@ comprehensive_fuzzy = {
 	# candida-specific body parts, in a specific body part
 	'Nares/Axilla': 'nares and/or axilla',
 	'Nares/Axilla/Groin': 'nares/axilla/groin',
-	'axilla and groin': 'axilla and groin', # very common for Candida
-	'axilla/groin': 'axilla and/or groin', # very common for Candida
+	'axilla and groin': 'axilla and/or groin', # very common for Candida
+	'axilla/groin': 'axilla and/or groin',     # very common for Candida
 	'Axilliae': 'axilla',
 	'axilla': 'axilla',
 	'underarm': 'axilla',
@@ -305,7 +239,6 @@ comprehensive_fuzzy = {
 	'lesion': 'lesion',
 	'wound': 'wound',
 	'Ulcer': 'ulcer',
-	'scar': 'scar tissue',
 
 	# lymph nodes (specific)
 	'Cervical lymph': 'lymph node (cervical)',
@@ -341,16 +274,12 @@ comprehensive_fuzzy = {
 	# lungscore?
 	'PULMONARY': 'pulmonary',
 
-	# environmental -- for MTBC, basically all "farm" stuff is tissue samples, but that may not be the case for other stuff
-	'soil': 'environmental (soil)',
-	'river sediment': 'environmental (river sediment)',
-	'air from': 'environmental (air)',
-	'farm': 'environmental (farm)',
-	'wastewater': 'environmental (wastewater)', # distinct from normal water, should be done before it
-	'HCU': 'environmental (HCU)',               # distinct from normal water, should be done before it
-	'Coastline': 'environmental (coastline)',   # distinct from normal water, should be done before it
-	'water': 'environmental (water)',           # normal water
-	
+	# locations
+	'farmland': 'farm',
+	'ocean': 'ocean',
+	'hospital': 'hospital', # also matches "hospitalized"
+	'air from': 'air',
+
 	'Negative Control': 'negative control',
 	'PCR product': 'PCR product',
 
@@ -393,4 +322,57 @@ comprehensive_fuzzy = {
 	
 }
 
+# Anything isolation_source that wholestring exact matches a value in these lists
+# will have that match nulled.
 
+exact_null_this_silliness = [
+	'1',
+	'?',
+	'DNA',
+	'Genomic DNA',
+	'isolate',
+	'to wear a mask', # yeah that one is actually there
+	'Yes',
+	'WGS',
+	'Bureau of Tuberculosis',
+	'na',
+	'nan',
+	'no date',
+	'no source',
+	'other',
+	'strain',
+	'Specimen',
+	'Systemic',
+]
+
+# If you are comparing multiple genra at once, and don't know what genus a particular
+# sample comes from, but somehow have isolation_source, this might be worth not nulling.
+# But by default, these are nulled.
+exact_null_this_generic_stuff = [
+
+	# generic bacteria
+	'bacteria',
+	'bacterial cell',
+	'Bacterial isolate',
+	'Biological Sample',
+	'Biological sample',
+
+	# generic fungus
+	'Fungal isolate',
+	'fungal strain',
+	'fungal cell',
+
+	# Candida / Candidozyma 
+	'auris',
+	
+	# tuberculosis/MTBC/Mycobacterium genus
+	'DNA from M. tuberculosis',
+	'M. tuberculosis',
+	'MTB isolates',
+	'Mtb',
+	'MTBC',
+	'Mycobacterium tuberculosis complex',
+	'Mycobacterium tuberculosis',
+	'Mycobacteryum tuberculosis', # common typo
+	'tuberculosis',
+]
