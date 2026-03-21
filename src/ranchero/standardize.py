@@ -70,23 +70,146 @@ class ProfessionalsHaveStandards():
 		polars_df = self.NeighLib.null_lists_of_len_zero(self.NeighLib.rancheroize_polars(polars_df, nullify=False))
 		return polars_df
 
-	def standardize_sample_source(self, polars_df):
+	def pl_when_col_contains_str_or_str_write_to_same_col(polars_df, col, match_str1, match_str2, out_str):
 		"""
-		Standardize sample_source, starting with isolate_sam_ss_dpl100 if present.
-		* Calls different functions whether sample_source is a list or a string
-		* isolate_sam_ss_dpl100 is usually just sample names, so when it was merged into isolation_source via kolumns, it added so many
-		  sample names it really slowed everything down for little benefit. So we're just going to do a quick check of a subset of
-		  values in isolate_sam_ss_dpl100, then get rid of that accursed column.
+		Decently common polars expression for both str and list cases
 		"""
-		if 'isolate_sam_ss_dpl100' in polars_df.columns:
-			polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='neo_isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, progress_bar_desc="Checking isolate_sam_ss_dpl100 (exact)", remove_match_from_list=True)
-			polars_df = polars_df.drop('isolate_sam_ss_dpl100')
-
-		if polars_df.schema['isolation_source'] == pl.List:
-			polars_df = self.standardize_sample_source_as_list(polars_df)
+		if polars_df.schema[col] == pl.Utf8:
+			polars_df = polars_df.with_columns([
+				pl.when(
+					pl.col(col).str.contains(match_str1)
+					.or_(pl.col(col).str.contains(match_str2))
+				)
+				.then(pl.lit(out_str))
+				.otherwise(pl.col(col))
+				.alias(col)
+			])
+			return polars_df
+		elif polars_df.schema[col] == pl.List(pl.Utf8):
+			polars_df = polars_df.with_columns([
+				pl.when(
+					pl.col(col).list.eval(pl.element().str.contains(match_str1)).list.any()
+					.or_(pl.col(col).list.eval(pl.element().str.contains(match_str2)).list.any())
+				)
+				.then(pl.lit([out_str]))
+				.otherwise(pl.col(col))
+				.alias(col)
+			])
 			return polars_df
 		else:
-			return self.standardize_sample_source_as_string(polars_df)
+			raise TypeError(f"Couldn't build polars expression for column of type {polars_df.schema[col]}")
+
+	def standardize_sample_source(self, polars_df):
+		"""
+		Sample source (rancheroized as isolation_source) is kind of a mess, because submitters can interpret it as very different things:
+		* host organism species
+		* host organism information
+		* fluid/organ/body part the sample was isolated from
+		* environmental information (soil type, etc)
+		* geographic location
+
+		So we have this function!
+		* starts with isolate_sam_ss_dpl100 if present, which is usually just sample names and therefore only worth a quick check
+		  for good stuff in that column before dropping it
+		"""
+		start = time.time()
+		assert 'isolation_source' in polars_df.columns
+		
+		if 'isolate_sam_ss_dpl100' in polars_df.columns:
+			polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='isolation_source', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False, progress_bar_desc="Checking isolate_sam_ss_dpl100 (exact)", remove_match_from_list=True)
+			polars_df = polars_df.drop('isolate_sam_ss_dpl100')
+
+		if self.cfg.mycobacterial_mode and move_lost_metadata:
+			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes_mycobacterial:
+				if destination_column in polars_df:
+					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
+						substrings=False, overwrite=False, remove_match_from_list=True, 
+						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values")
+
+		if move_lost_metadata:
+			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes:
+				polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
+						substrings=False, overwrite=False, remove_match_from_list=True, 
+						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (exact)")
+
+			for destination_column, replacements in sample_sources_wrong_column.exact_two_column_writes:
+				if destination_column in polars_df:
+					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
+						substrings=False, overwrite=False, remove_match_from_list=True, 
+						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (exact)")
+			for destination_column, replacements in substring_two_column_writes.exact_two_column_writes:
+				if destination_column in polars_df:
+					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
+						substrings=True, overwrite=False, remove_match_from_list=True, 
+						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (substring)")
+
+		# Get rid of isolation source values that aren't actually helpful
+		if polars_df.schema['isolation_source'] == pl.List:
+			for unhelpful_value in tqdm(sample_sources.exact_null_this_silliness, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+				polars_df = polars_df.with_columns(
+					pl.col('isolation_source').list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias('isolation_source'))
+			for unhelpful_value in tqdm(sample_sources.exact_null_this_generic_stuff, desc="Nulling generalized isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+				polars_df = polars_df.with_columns(
+					pl.col('isolation_source').list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias('isolation_source'))
+		else:
+			for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+				polars_df = polars_df.with_columns(
+					pl.when(pl.col('isolation_source').str.to_lowercase() == unhelpful_value.lower())
+					.then(None)
+					.otherwise(pl.col('isolation_source'))
+					.alias('isolation_source'))
+			for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling generalized isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+				polars_df = polars_df.with_columns(
+					pl.when(pl.col('isolation_source').str.to_lowercase() == unhelpful_value.lower())
+					.then(None)
+					.otherwise(pl.col('isolation_source'))
+					.alias('isolation_source'))
+
+		# If there's even a whiff of simulation, declare the whole list simulated
+		self.logging.info("Looking for simulated data...")
+		polars_df = pl_when_col_contains_str_or_str_write_to_same_col(polars_df, 'isolation_source', '(?i)simulated', '(?i)in silico', 'simulated/in silico')
+		self.logging.info("Looking for lab strains...")
+		polars_df = pl_when_col_contains_str_or_str_write_to_same_col(polars_df, 'isolation_source', '(?i)laboratory strain', '(?i)lab strain', 'simulated/in silico')
+
+		# AFTER we have cleaned up very obvious things, from now on, write to a NEW COLUMN to help avoid accidentally overwriting past iterations (eg "culture from sputum" --> "sputum" or "culture")
+		polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'neo_isolation_source', None)
+
+		if polars_df.schema['isolation_source'] == pl.List:
+			for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+				this_and_that = pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any().and_(pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any())
+				polars_df = polars_df.with_columns([
+					pl.when(this_and_that)
+					.then(pl.lit(then))
+					.otherwise(pl.col('neo_isolation_source')) # avoid overwriting previous iterations
+					.alias('neo_isolation_source')
+
+					# this goes from 30 iterations per second to 30 seconds per iteration! yikes!
+					#pl.when(this_and_that)
+					#.then(None)
+					#.otherwise(pl.col('isolation_source'))
+					#.alias('isolation_source')
+				])
+		else:
+			# TODO: ACTUALLY PUT THIS BACK IN!!
+			self.logging.warning("Skipping this-that-then matches as they're not supported when isolation_source is string")
+		polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', dictionary=sample_sources.exact_replacements, substrings=False, overwrite=False, remove_match_from_list=True, progress_bar_desc="Checking for exact matches")
+		polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', dictionary=sample_sources.comprehensive_fuzzy, substrings=True, overwrite=False, remove_match_from_list=True, progress_bar_desc="Checking for fuzzy matches")
+		
+		self.logging.info("Cleaning up...")
+
+		if collapse_culture:
+			polars_df = polars_df.with_columns([
+				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)culture')).list.any())
+				.then(pl.lit('culture'))
+				.otherwise(pl.col('neo_isolation_source'))
+				.alias('neo_isolation_source')
+			])
+
+		polars_df = polars_df.drop(['isolation_source']).rename({'neo_isolation_source': 'isolation_source_cleaned'})
+		assert polars_df.schema['isolation_source_cleaned'] != pl.List
+
+		self.logging.info(f"Standardized isolation_source in {time.time()-start:.4f} secons")
+
 
 	def inject_metadata(self, polars_df: pl.DataFrame, metadata_dictlist, dataset=None, overwrite=False):
 		"""
@@ -176,7 +299,11 @@ class ProfessionalsHaveStandards():
 		retain_input,
 		remove_match_from_list,
 		expr_write_col_is_empty):
-		assert [f"{write_col}_1", f"{write_col}_2", f"{write_col}_3", f"{write_col}_4", f"{write_col}_5"].any() not in polars_df.columns
+
+		# TODO: use tempcol function as fallback?
+		temp_write_cols = [f"{write_col}_{i}" for i in range(1, 6)]
+		assert set(temp_write_cols).isdisjoint(polars_df.columns)
+
 		for batch in self.chunk_dict(dictionary, 5):
 			if len(batch) == 5:
 				items = list(batch.items())
@@ -262,9 +389,12 @@ class ProfessionalsHaveStandards():
 					.alias(f"{write_col}_5")
 				])
 
-				polars_df = polars_df.with_columns(pl.coalesce(f"{write_col}_1", f"{write_col}_2", f"{write_col}_3", f"{write_col}_4", f"{write_col}_5", write_col).alias(write_col))
+				polars_df = polars_df.with_columns(pl.coalesce(temp_write_cols+[write_col]).alias(write_col)).drop(temp_write_cols)
 			
 				if expr_filter_exp_1 is not None: # if remove_match_from_list and polars_df.schema[match_col] == pl.List(pl.Utf8)
+					temp_match_cols = [f"{match_col}_{i}" for i in range(1, 6)]
+					assert set(temp_match_cols).isdisjoint(polars_df.columns)
+
 					polars_df = polars_df.with_columns([
 						pl.when(expr_found_a_match_1)
 						.then(pl.col(match_col).list.eval(pl.element().filter(expr_filter_exp_1)))
@@ -287,7 +417,7 @@ class ProfessionalsHaveStandards():
 						.otherwise(None)
 						.alias(f"{match_col}_5")
 					])
-					polars_df = polars_df.with_columns(pl.coalesce(f"{match_col}_1", f"{match_col}_2", f"{match_col}_3", f"{match_col}_4", f"{match_col}_5", match_col).alias(match_col))
+					polars_df = polars_df.with_columns(pl.coalesce(temp_match_cols+[match_col]).alias(match_col)).drop(temp_match_cols)
 			else: # fall back on the other method
 				for key, value in batch.items():
 					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
@@ -525,150 +655,6 @@ class ProfessionalsHaveStandards():
 				polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
 		for disease, simplified_host_disease in host_disease.host_disease_substring_match.items():
 			polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
-		return polars_df
-
-	def standardize_sample_source_as_list(self, polars_df, move_lost_metadata=True, collapse_culture=False):
-		"""
-		Sample source (rancheroized as isolation_source) is kind of a mess, because submitters can interpret it as very different things:
-		* host organism species
-		* host organism information
-		* fluid/organ/body part the sample was isolated from
-		* environmental information (soil type, etc)
-		* geographic location
-		"""
-		start = time.time()
-		assert 'isolation_source' in polars_df.columns
-		assert polars_df.schema['isolation_source'] == pl.List
-
-		if self.cfg.mycobacterial_mode and move_lost_metadata:
-			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes_mycobacterial:
-				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
-						substrings=False, overwrite=False, remove_match_from_list=True, 
-						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values")
-
-		if move_lost_metadata:
-			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes:
-				polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
-						substrings=False, overwrite=False, remove_match_from_list=True, 
-						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (exact)")
-
-			for destination_column, replacements in sample_sources_wrong_column.exact_two_column_writes:
-				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
-						substrings=False, overwrite=False, remove_match_from_list=True, 
-						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (exact)")
-			for destination_column, replacements in substring_two_column_writes.exact_two_column_writes:
-				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, 
-						substrings=True, overwrite=False, remove_match_from_list=True, 
-						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (substring)")
-
-		# here's where we actually beginning handling the stuff for this actual column!
-		for unhelpful_value in tqdm(sample_sources.exact_null_this_silliness, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-			polars_df = polars_df.with_columns(
-				pl.col('isolation_source').list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias('isolation_source')
-			)
-		for unhelpful_value in tqdm(sample_sources.exact_null_this_generic_stuff, desc="Nulling generalized isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-			polars_df = polars_df.with_columns(
-				pl.col('isolation_source').list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias('isolation_source')
-			)
-
-		# if there's even a whiff of simulation, declare the whole list simulated
-		self.logging.info("Looking for simulated data...")
-		polars_df = polars_df.with_columns([
-			pl.when(
-				pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)simulated')).list.any()
-				.or_(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)in silico')).list.any())
-			)
-			.then(pl.lit(['simulated/in silico']))
-			.otherwise(pl.col('isolation_source'))
-			.alias('isolation_source')
-		])
-
-		# This is an OR, not an AND!
-		polars_df = polars_df.with_columns([
-			pl.when(
-				pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)laboratory strain')).list.any()
-				.or_(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)lab strain')).list.any())
-			)
-			.then(pl.lit(['laboratory strain']))
-			.otherwise(pl.col('isolation_source'))
-			.alias('isolation_source')
-		])
-
-		# AFTER we have cleaned up very obvious things, from now on, write to a NEW COLUMN to help avoid accidentally overwriting past iterations (eg "culture from sputum" --> "sputum" or "culture")
-		polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'neo_isolation_source', None)
-
-		for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-			this_and_that = pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any().and_(pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any())
-			polars_df = polars_df.with_columns([
-				pl.when(this_and_that)
-				.then(pl.lit(then))
-				.otherwise(pl.col('neo_isolation_source')) # avoid overwriting previous iterations
-				.alias('neo_isolation_source')
-
-				# this goes from 30 iterations per second to 30 seconds per iteration! yikes!
-				#pl.when(this_and_that)
-				#.then(None)
-				#.otherwise(pl.col('isolation_source'))
-				#.alias('isolation_source')
-			])
-		polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', dictionary=sample_sources.exact_replacements, substrings=False, overwrite=False, remove_match_from_list=True, progress_bar_desc="Checking for exact matches")
-		polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', dictionary=sample_sources.comprehensive_fuzzy, substrings=True, overwrite=False, remove_match_from_list=True, progress_bar_desc="Checking for fuzzy matches")
-		
-		self.logging.info("Cleaning up...")
-
-		if collapse_culture:
-			polars_df = polars_df.with_columns([
-				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)culture')).list.any())
-				.then(pl.lit('culture'))
-				.otherwise(pl.col('neo_isolation_source'))
-				.alias('neo_isolation_source')
-			])
-
-		# very last bit: drop any element of the list that contains a number, as that's likely a sample number. this is done last
-		# to allow sample numbers within actually useful strings to still have their useful string bits extracted
-		#polars_df = polars_df.with_columns([
-		#	pl.col('isolation_source').list.eval(
-		#		pl.element().filter(~pl.element().str.contains(r'\d'))
-		#	).alias('isolation_source')
-		#])
-		# --> currently skipped since we don't use it
-		
-		#polars_df = polars_df.with_columns(
-		#	pl.when(pl.col('neo_isolation_source').is_null().and_(pl.col('isolation_source').is_not_null().and_(pl.col('isolation_source').list.len() > 0)))
-		#	.then(pl.lit("As reported: ") + pl.col('isolation_source').list.join(", "))
-		#	.otherwise(pl.col('neo_isolation_source'))
-		#	.alias('neo_isolation_source')
-		#)
-		# --> that's what isolation_source_raw is for!!
-
-		polars_df = polars_df.drop(['isolation_source']).rename({'neo_isolation_source': 'isolation_source_cleaned'})
-		assert polars_df.schema['isolation_source_cleaned'] != pl.List
-
-		#self.logging.info(f"The isolation_source column has type list. We will be .join()ing them into strings.") # done AFTER most standardization
-		#polars_df = polars_df.with_columns(
-		#	pl.col("isolation_source").list.join(", ").alias("isolation_source")
-		#)
-		self.logging.info(f"Standardized isolation_source in {time.time()-start:.4f} secons")
-		return polars_df
-
-	def standardize_sample_source_as_string(self, polars_df):
-		assert 'isolation_source' in polars_df.columns
-		assert polars_df.schema['isolation_source'] == pl.Utf8
-		for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-			polars_df = polars_df.with_columns(
-				pl.when(pl.col('isolation_source').str.to_lowercase() == unhelpful_value.lower())
-				.then(None)
-				.otherwise(pl.col('isolation_source'))
-				.alias('isolation_source'))
-		for sample_source, simplified_sample_source in sample_sources.exact_replacements.items():
-			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False)
-		for sample_source, simplified_sample_source in sample_sources.exact_replacements_body_parts.items():
-			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=False, overwrite=False)
-		for sample_source, simplified_sample_source in sample_sources.comprehensive_fuzzy.items():
-			polars_df = self.kv_match(polars_df, match_col='isolation_source', write_col='isolation_source_cleaned', key=sample_source, value=simplified_sample_source, substrings=True, overwrite=False)
 		return polars_df
 	
 	def standarize_hosts(self, polars_df):
