@@ -13,6 +13,11 @@ from itertools import islice
 # https://peps.python.org/pep-0661/
 _DEFAULT_TO_CONFIGURATION = object()
 
+# overwritten in _setup_progress_bar()
+TQDM_ENABLE = True
+TQDM_FRMT = '{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'
+TQDM_MOO = '➖🌱🐄'
+
 class ProfessionalsHaveStandards():
 	def __init__(self, configuration, naylib):
 		if configuration is None:
@@ -28,8 +33,16 @@ class ProfessionalsHaveStandards():
 			return self.cfg.get_config(cfg_var)
 		return value
 
+	def _setup_progress_bar(self):
+		global TQDM_MOO
+		TQDM_MOO = self.cfg.get_config(tqdm_ascii)	
+		global TQDM_FRMT
+		TQDM_FRMT = self.cfg.get_config(tqdm_bar_format)
+		global TQDM_ENABLE
+		TQDM_ENABLE = not self.cfg.get_config(tqdm_disable) # flipped, hence why we don't use _DEFAULT_TO_CONFIGURATION
+
 	def standardize_everything(self, polars_df, add_expected_nulls=True, assume_organism="Mycobacterium tuberculosis", assume_clade="tuberculosis", skip_sample_source=False, force_strings=True,
-		organism_fallback=None, clade_fallback=None):
+		organism_fallback=None, clade_fallback=None, retain_input=True):
 		if any(column in polars_df.columns for column in ['geoloc_info', 'country', 'region']):
 			self.logging.info("Standardizing countries...")
 			polars_df = self.standardize_countries(polars_df)
@@ -39,10 +52,10 @@ class ProfessionalsHaveStandards():
 			polars_df = self.cleanup_dates(polars_df)
 		
 		# Because this one is VERY open to interpretation and I'm not a medical doctor, we will also have a "raw value" column.
+		# Must be before taxoncore and host, no need to force_strings as its already forced
 		if 'isolation_source' in polars_df.columns and not skip_sample_source:
 			self.logging.info("Standardizing isolation sources...")
-			polars_df = polars_df.with_columns(pl.col('isolation_source').alias('isolation_source_raw'))
-			polars_df = self.standardize_sample_source(polars_df) # must be before taxoncore and host, no need to force_strings as its already forced
+			polars_df = self.standardize_isolation_source(polars_df, isolation_source_col='isolation_source', retain_input=retain_input)
 		
 		if 'host' in polars_df.columns:
 			self.logging.info("Standardizing host organisms...")
@@ -56,10 +69,8 @@ class ProfessionalsHaveStandards():
 			self.logging.info("Standardizing lineage, strain, and mycobacterial scientific names... (this may take a while)")
 			polars_df = self.sort_out_taxoncore_columns(polars_df, force_strings=force_strings)
 		elif add_expected_nulls:
-			if 'organism' not in polars_df.columns:
-				polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'organism', assume_organism)
-			if 'clade' not in polars_df.columns:
-				polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'clade', assume_clade)
+			polars_df = self.NeighLib.add_column_of_value(polars_df, 'organism', assume_organism, if_already_exists='error')
+			polars_df = self.NeighLib.add_column_of_value(polars_df, 'clade', assume_clade, if_already_exists='error')
 
 		if organism_fallback is not None:
 			polars_df = polars_df.with_columns(pl.col('organism').fill_null(organism_fallback))
@@ -70,7 +81,7 @@ class ProfessionalsHaveStandards():
 		polars_df = self.NeighLib.null_lists_of_len_zero(self.NeighLib.rancheroize_polars(polars_df, nullify=False))
 		return polars_df
 
-	def pl_when_col_contains_str_or_str_write_to_same_col(polars_df, col, match_str1, match_str2, out_str):
+	def pl_when_col_contains_str_or_str_write_to_same_col(self, polars_df, col, match_str1, match_str2, out_str):
 		"""
 		Decently common polars expression for both str and list cases
 		"""
@@ -99,7 +110,7 @@ class ProfessionalsHaveStandards():
 		else:
 			raise TypeError(f"Couldn't build polars expression for column of type {polars_df.schema[col]}")
 
-	def standardize_sample_source(self, polars_df, move_lost_metadata=True):
+	def standardize_isolation_source(self, polars_df, isolation_source_col='isolation_source', move_lost_metadata=True, collapse_culture=False, retain_input=True, progress_bar=TQDM_ENABLE):
 		"""
 		Sample source (rancheroized as isolation_source) is kind of a mess, because submitters can interpret it as very different things:
 		* host organism species
@@ -115,103 +126,110 @@ class ProfessionalsHaveStandards():
 		TODO: move_lost_metadata should be a cfg option
 		"""
 		start = time.time()
+		if isolation_source_col is not 'isolation_source':
+			self.logging.warning(f"Isolation source column {isolation_source_col} is not isolation_source; this may not be a rancheroized dataframe")
 		assert 'isolation_source' in polars_df.columns
+		if retain_input:
+			polars_df = self.NeighLib.duplicate_col(polars_df, isolation_source_col, f"{isolation_source_col}_raw")
 		
 		if 'isolate_sam_ss_dpl100' in polars_df.columns:
-			polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col='isolation_source', dictionary=sample_sources.exact_replacements, substrings=False, overwrite=False, progress_bar_desc="Checking isolate_sam_ss_dpl100 (exact)", remove_match_from_list=True)
+			polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col=isolation_source_col, dictionary=sample_sources.exact_replacements,
+				substrings=False, overwrite=False, progress_bar=progress_bar, progress_bar_desc="isolate_sam_ss_dpl100", remove_match_from_list=True)
 			polars_df = polars_df.drop('isolate_sam_ss_dpl100')
 
 		if self.cfg.mycobacterial_mode and move_lost_metadata:
 			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes_mycobacterial.items():
 				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, dictionary=replacements, 
+					polars_df = self.dictionary_match(polars_df, isolation_source_col, destination_column, dictionary=replacements, 
 						substrings=False, overwrite=False, remove_match_from_list=True, 
-						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values")
+						progress_bar=progress_bar, progress_bar_desc=f"Wayward {destination_column}")
 
 		if move_lost_metadata:
 			for destination_column, replacements in sample_sources_wrong_column.exact_one_column_writes.items():
-				polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, dictionary=replacements,
+				polars_df = self.dictionary_match(polars_df, isolation_source_col, destination_column, dictionary=replacements,
 						substrings=False, overwrite=False, remove_match_from_list=True, 
-						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (exact)")
+						progress_bar=progress_bar, progress_bar_desc=f"Wayward {destination_column} (exact)")
 
-			for destination_column, replacements in sample_sources_wrong_column.exact_two_column_writes.items():
+			for write_column_2, replacements in sample_sources_wrong_column.exact_two_column_writes.items():
 				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, dictionary=replacements, 
-						substrings=False, overwrite=False, remove_match_from_list=True, 
-						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (exact)")
-			for destination_column, replacements in substring_two_column_writes.exact_two_column_writes.items():
+					polars_df = self.dictionary_match_two_col(polars_df, isolation_source_col, isolation_source_col, write_column_2, dictionary=replacements, 
+						substrings=False, overwrite_1=True, overwrite_2=False, remove_match_from_list=True, 
+						progress_bar=progress_bar, progress_bar_desc=f"Wayward {destination_column} (exact)")
+			for destination_column, replacements in sample_sources_wrong_column.substring_two_column_writes.items():
 				if destination_column in polars_df:
-					polars_df = self.dictionary_match(polars_df, 'isolation_source', destination_column, dictionary=replacements, 
-						substrings=True, overwrite=False, remove_match_from_list=True, 
-						progress_bar=True, progress_bar_desc=f"Searching for wayward {destination_column} values (substring)")
+					polars_df = self.dictionary_match_two_col(polars_df, isolation_source_col, isolation_source_col, write_column_2, dictionary=replacements, 
+						substrings=True, overwrite_1=True, overwrite_2=False, remove_match_from_list=True, 
+						progress_bar=progress_bar, progress_bar_desc=f"Wayward {destination_column} (substring)")
 
 		# Get rid of isolation source values that aren't actually helpful
-		if polars_df.schema['isolation_source'] == pl.List:
-			for unhelpful_value in tqdm(sample_sources.exact_null_this_silliness, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+		if polars_df.schema[isolation_source_col] == pl.List:
+			for unhelpful_value in tqdm(sample_sources.exact_null_nonsensical, desc="Nonsense isolation_source", ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 				polars_df = polars_df.with_columns(
-					pl.col('isolation_source').list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias('isolation_source'))
-			for unhelpful_value in tqdm(sample_sources.exact_null_this_generic_stuff, desc="Nulling generalized isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+					pl.col(isolation_source_col).list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias(isolation_source_col))
+			for unhelpful_value in tqdm(sample_sources.exact_null_generic, desc="Generic isolation_source", ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 				polars_df = polars_df.with_columns(
-					pl.col('isolation_source').list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias('isolation_source'))
+					pl.col(isolation_source_col).list.eval(pl.element().filter(pl.element() != unhelpful_value)).alias(isolation_source_col))
 		else:
-			for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling bad isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+			for unhelpful_value in tqdm(sample_sources.exact_null_nonsensical, desc="Nonsense isolation_source", ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 				polars_df = polars_df.with_columns(
-					pl.when(pl.col('isolation_source').str.to_lowercase() == unhelpful_value.lower())
+					pl.when(pl.col(isolation_source_col).str.to_lowercase() == unhelpful_value.lower())
 					.then(None)
-					.otherwise(pl.col('isolation_source'))
-					.alias('isolation_source'))
-			for unhelpful_value in tqdm(sample_sources.sample_sources_nonspecific, desc="Nulling generalized isolation sources", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+					.otherwise(pl.col(isolation_source_col))
+					.alias(isolation_source_col))
+			for unhelpful_value in tqdm(sample_sources.exact_null_generic, desc="Generic isolation_source", ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 				polars_df = polars_df.with_columns(
-					pl.when(pl.col('isolation_source').str.to_lowercase() == unhelpful_value.lower())
+					pl.when(pl.col(isolation_source_col).str.to_lowercase() == unhelpful_value.lower())
 					.then(None)
-					.otherwise(pl.col('isolation_source'))
-					.alias('isolation_source'))
+					.otherwise(pl.col(isolation_source_col))
+					.alias(isolation_source_col))
 
 		# If there's even a whiff of simulation, declare the whole list simulated
 		self.logging.info("Looking for simulated data...")
-		polars_df = pl_when_col_contains_str_or_str_write_to_same_col(polars_df, 'isolation_source', '(?i)simulated', '(?i)in silico', 'simulated/in silico')
+		polars_df = self.pl_when_col_contains_str_or_str_write_to_same_col(polars_df, isolation_source_col, '(?i)simulated', '(?i)in silico', 'simulated/in silico')
 		self.logging.info("Looking for lab strains...")
-		polars_df = pl_when_col_contains_str_or_str_write_to_same_col(polars_df, 'isolation_source', '(?i)laboratory strain', '(?i)lab strain', 'simulated/in silico')
+		polars_df = self.pl_when_col_contains_str_or_str_write_to_same_col(polars_df, isolation_source_col, '(?i)laboratory strain', '(?i)lab strain', 'simulated/in silico')
 
 		# AFTER we have cleaned up very obvious things, from now on, write to a NEW COLUMN to help avoid accidentally overwriting past iterations (eg "culture from sputum" --> "sputum" or "culture")
-		polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, 'neo_isolation_source', None)
+		temp_isolation_source = self.NeighLib.tempcol(polars_df, 'neo_isolation_source')
+		polars_df = self.NeighLib.add_column_of_value(polars_df, tempcol, None, if_already_exists='error')
 
-		if polars_df.schema['isolation_source'] == pl.List:
-			for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
-				this_and_that = pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any().and_(pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any())
+		if polars_df.schema[isolation_source_col] == pl.List:
+			for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
+				this_and_that = pl.col(isolation_source_col).list.eval(pl.element().str.contains(this)).list.any().and_(pl.col(isolation_source_col).list.eval(pl.element().str.contains(that)).list.any())
 				polars_df = polars_df.with_columns([
 					pl.when(this_and_that)
 					.then(pl.lit(then))
-					.otherwise(pl.col('neo_isolation_source')) # avoid overwriting previous iterations
-					.alias('neo_isolation_source')
+					.otherwise(pl.col(temp_isolation_source)) # avoid overwriting previous iterations
+					.alias(temp_isolation_source)
 
 					# this goes from 30 iterations per second to 30 seconds per iteration! yikes!
 					#pl.when(this_and_that)
 					#.then(None)
-					#.otherwise(pl.col('isolation_source'))
-					#.alias('isolation_source')
+					#.otherwise(pl.col(isolation_source_col))
+					#.alias(isolation_source_col)
 				])
 		else:
 			# TODO: ACTUALLY PUT THIS BACK IN!!
 			self.logging.warning("Skipping this-that-then matches as they're not supported when isolation_source is string")
-		polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', dictionary=sample_sources.exact_replacements, substrings=False, overwrite=False, remove_match_from_list=True, progress_bar_desc="Checking for exact matches")
-		polars_df = self.dictionary_match(polars_df, match_col='isolation_source', write_col='neo_isolation_source', dictionary=sample_sources.comprehensive_fuzzy, substrings=True, overwrite=False, remove_match_from_list=True, progress_bar_desc="Checking for fuzzy matches")
 		
+		polars_df = self.dictionary_match(polars_df, match_col=isolation_source_col, write_col=temp_isolation_source, dictionary=sample_sources.exact_replacements, 
+			substrings=False, overwrite=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Checking for exact matches")
+		polars_df = self.dictionary_match(polars_df, match_col=isolation_source_col, write_col=temp_isolation_source, dictionary=sample_sources.comprehensive_fuzzy, 
+			substrings=True, overwrite=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Checking for fuzzy matches")
+
 		self.logging.info("Cleaning up...")
 
 		if collapse_culture:
 			polars_df = polars_df.with_columns([
-				pl.when(pl.col('isolation_source').list.eval(pl.element().str.contains('(?i)culture')).list.any())
+				pl.when(pl.col(isolation_source_col).list.eval(pl.element().str.contains('(?i)culture')).list.any())
 				.then(pl.lit('culture'))
-				.otherwise(pl.col('neo_isolation_source'))
-				.alias('neo_isolation_source')
+				.otherwise(pl.col(temp_isolation_source))
+				.alias(temp_isolation_source)
 			])
-
-		polars_df = polars_df.drop(['isolation_source']).rename({'neo_isolation_source': 'isolation_source_cleaned'})
-		assert polars_df.schema['isolation_source_cleaned'] != pl.List
-
-		self.logging.info(f"Standardized isolation_source in {time.time()-start:.4f} secons")
-
+		polars_df = polars_df.drop(isolation_source_col).rename({temp_isolation_source: isolation_source_col})
+		assert polars_df.schema[isolation_source_col] != pl.List
+		self.logging.info(f"Standardized {isolation_source_col} in {time.time()-start:.4f} seconds")
+		return polars_df
 
 	def inject_metadata(self, polars_df: pl.DataFrame, metadata_dictlist, dataset=None, overwrite=False):
 		"""
@@ -300,13 +318,18 @@ class ProfessionalsHaveStandards():
 		overwrite, 
 		retain_input,
 		remove_match_from_list,
-		expr_write_col_is_empty):
+		expr_write_col_is_empty,
+		progress_bar=TQDM_ENABLE,
+		progress_bar_desc="Parallel matching..."):
 
 		# TODO: use tempcol function as fallback?
 		temp_write_cols = [f"{write_col}_{i}" for i in range(1, 6)]
 		assert set(temp_write_cols).isdisjoint(polars_df.columns)
 
-		for batch in self.chunk_dict(dictionary, 5):
+		progress_bar_max = len(dictionary) // 5 + (1 if len(dictionary) % 5 != 0 else 0)
+
+		#for batch in self.chunk_dict(dictionary, 5):
+		for batch in tqdm(self.chunk_dict(dictionary, 5), total=progress_bar_max, desc=progress_bar_desc, ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 			if len(batch) == 5:
 				items = list(batch.items())
 				k1, v1 = items[0]
@@ -429,7 +452,7 @@ class ProfessionalsHaveStandards():
 		return polars_df
 
 	@staticmethod
-	def _setup_consistent_expressions(polars_df, write_col, status_cols_reset):
+	def _setup_consistent_expressions(polars_df, write_col, status_cols_reset=True):
 		if status_cols_reset:
 			matched_false = False
 			written_false = False
@@ -498,15 +521,75 @@ class ProfessionalsHaveStandards():
 
 		return allowed_to_overwrite, filter_containing, found_a_match
 
+	def dictionary_match_two_col(self, polars_df, match_col, write_col_1, write_col_2, dictionary, overwrite_1, overwrite_2,
+		substrings=False,retain_input=False, remove_match_from_list=True, progress_bar=TQDM_ENABLE, progress_bar_desc="Multi-col matching..."):
+		assert match_col in polars_df.columns
+		assert ( (polars_df.schema[match_col] == pl.Utf8) or (polars_df.schema[match_col] == pl.List(pl.Utf8)) )
+		if retain_input:
+			polars_df = polars_df.with_columns(pl.col(match_col).alias(f"{match_col}_raw")) if f"{match_col}_raw" not in polars_df.columns else polars_df
+		polars_df = self.NeighLib.add_column_of_value(polars_df, write_col_1, None, if_already_exists='ignore')
+		polars_df = self.NeighLib.add_column_of_value(polars_df, write_col_2, None, if_already_exists='ignore')
+		_, _, expr_write_col_1_is_empty = self._setup_consistent_expressions(polars_df, write_col=write_col_1, status_cols_reset=True)
+		for match_key, writes in tqdm(dictionary.items(), desc=progress_bar_desc, ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
+			assert type(match_key) is str
+			assert type(writes) is list
+			assert len(writes) == 2
+			_, _, expr_write_col_1_is_empty = self._setup_consistent_expressions(polars_df, write_col=write_col_1)
+			_, _, expr_write_col_2_is_empty = self._setup_consistent_expressions(polars_df, write_col=write_col_2)
+			expr_allowed_to_overwrite_1, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col_2, key=match_key, value=writes[0], 
+				substrings=substrings, overwrite=overwrite_1, remove_match_from_list=remove_match_from_list)
+			expr_allowed_to_overwrite_2, _, _ = self._setup_kv_expressions(polars_df, match_col, write_col_2, key=match_key, value=writes[1], 
+				substrings=substrings, overwrite=overwrite_2, remove_match_from_list=remove_match_from_list)
+			polars_df = self._kv_write_two_col(polars_df, match_col, write_col_1, write_col_2, writes,
+				expr_allowed_to_overwrite_1, expr_allowed_to_overwrite_2, expr_filter_exp, expr_found_a_match,
+				expr_write_col_1_is_empty, expr_write_col_2_is_empty)
+		return polars_df
+
+	def _kv_write_two_col(self, polars_df, match_col: str, write_col_1: str, write_col_2: str,
+		writes: list,
+		allowed_to_overwrite_1: pl.expr,
+		allowed_to_overwrite_2: pl.expr,
+		filter_exp: pl.expr,
+		found_a_match: pl.expr,
+		write_col_1_is_empty: pl.expr,
+		write_col_2_is_empty: pl.expr
+		):
+		"""
+		Relies on asserts from dictionary_match_two_col()
+		"""
+		polars_df = polars_df.with_columns([
+				pl.when(
+					((allowed_to_overwrite_1)
+						.or_(write_col_1_is_empty)
+					)
+					.and_(found_a_match)
+				)
+				.then(pl.lit(writes[0]))
+				.otherwise(pl.col(write_col_1))
+				.alias(write_col_1),
+
+				pl.when(
+					((allowed_to_overwrite_2)
+						.or_(write_col_2_is_empty)
+					)
+					.and_(found_a_match)
+				)
+				.then(pl.lit(writes[1]))
+				.otherwise(pl.col(write_col_2))
+				.alias(write_col_2)
+			])
+		return polars_df
+
+
 	def dictionary_match(self, polars_df, match_col: str, write_col: str, dictionary: dict, 
 		substrings=False,             # True: "US Virgin Islands" matches "US", False: "US Virgin Islands" doesn't match "US"
 		overwrite=False,              # True: If write_col is not null, don't write dictionary value 
 		retain_input=False,           # True: Create f"{match_col}_raw" before doing anything
 		status_cols=False,            # True: Use 'matched'/'written' status columns (deprecated)
 		status_cols_reset=True,       # True: If status columns already exist, clear them first (no-op if !status_cols)
-		remove_match_from_list=False, # True: If match_col is pl.List, remove string matches from list (ex: ["foo", "bar"] -> matches "foo" -> ["bar"])
+		remove_match_from_list=True,  # True: If match_col is pl.List, remove string matches from list (ex: ["foo", "bar"] -> matches "foo" -> ["bar"])
 		strict_write_col_type=False,  # True: If dictionary values (replacements) are str, write_col must be pl.Utf8; if values are list, write_col must be pl.List
-		progress_bar=False,           # True: Show a cute little progress bar
+		progress_bar=TQDM_ENABLE,     # True: Show a cute little progress bar (can turn off universally in configuration)
 		progress_bar_desc="Standardizing...", # Progress bar description (no-op if !progress_bar)
 		parallelize=True,              # True: Batch searches in groups of five (experimental but way quicker)
 		only_replace_substring=False): # True: Use polars contains_any() and replace_many() behavior, NOT RECOMMENDED FOR MOST USE CASES
@@ -522,9 +605,7 @@ class ProfessionalsHaveStandards():
 		if status_cols:
 			polars_df = polars_df.with_columns(pl.lit(False).alias('matched')) if 'matched' not in polars_df.columns else polars_df.with_columns(pl.col('matched').fill_null(False))
 			polars_df = polars_df.with_columns(pl.lit(False).alias('written')) if 'written' not in polars_df.columns else polars_df.with_columns(pl.col('written').fill_null(False))
-		if write_col not in polars_df.columns:
-			self.logging.debug(f"Write column {write_col} not in polars_df yet so we'll add it")
-			polars_df = polars_df.with_columns(pl.lit(None).alias(write_col)) if write_col not in polars_df.columns else polars_df
+		polars_df = self.NeighLib.add_column_of_value(polars_df, write_col, None, if_already_exists='ignore')
 		if strict_write_col_type:
 			# Force that all dictionary values are the same type (if !parallelize this isn't strictly necessary but honestly just don't have mixed-type keys that's uncool)
 			if all(isinstance(v, list) for v in dictionary.values()):
@@ -552,23 +633,15 @@ class ProfessionalsHaveStandards():
 		expr_matched_false, expr_written_false, expr_write_col_is_empty = self._setup_consistent_expressions(polars_df, write_col=write_col, status_cols_reset=status_cols_reset)
 
 		# actually do the matching
-		if progress_bar:
-			for key, value in tqdm(dictionary.items(), desc=progress_bar_desc, ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+		if parallelize and not status_cols:
+			polars_df = self._parallelize(polars_df, match_col, write_col, dictionary, 
+				substrings, overwrite, retain_input, remove_match_from_list, expr_write_col_is_empty, progress_bar=progress_bar, progress_bar_desc=progress_bar_desc)
+		else:
+			for key, value in tqdm(dictionary.items(), desc=progress_bar_desc, ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 				expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
 					substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
 				polars_df = self._kv_match(polars_df, match_col, write_col, key, value, status_cols,
 					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, expr_matched_false, expr_write_col_is_empty, expr_written_false)
-		else:
-			if parallelize and not status_cols:
-				polars_df = self._parallelize(polars_df, match_col, write_col, dictionary, 
-						substrings, overwrite, retain_input, remove_match_from_list, expr_write_col_is_empty)
-			else:
-				for key, value in dictionary.items():
-					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
-						substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
-					polars_df = self._kv_match(polars_df, match_col, write_col, key, value, status_cols,
-						expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, expr_matched_false, expr_write_col_is_empty, expr_written_false)
-
 		return polars_df
 
 
@@ -616,8 +689,7 @@ class ProfessionalsHaveStandards():
 		else:
 			polars_df = polars_df.with_columns([
 				pl.when(
-					(
-						(allowed_to_overwrite)
+					((allowed_to_overwrite)
 						.or_(write_col_is_empty)
 					)
 					.and_(found_a_match)
@@ -749,6 +821,7 @@ class ProfessionalsHaveStandards():
 		* len_bytes() is way faster than len_chars()
 		* yeah you can have mutliple expressions in one with_columns() but that'd require tons of alias columns plus nullify so I'm not doing that
 		"""
+		self.logging.info("Cleaning up dates...")
 
 		if polars_df.schema['date_collected'] == pl.List:
 			polars_df = self.NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, just_these_columns=['date_collected'])
@@ -1168,13 +1241,13 @@ class ProfessionalsHaveStandards():
 
 	def continent_from_country(self, polars_df, country_col, continent_col, overwrite=True): # overwrite is true to match standardize_countries() but maybe shouldn't be
 		if continent_col not in polars_df:
-			polars_df = self.NeighLib.add_column_of_just_this_value(polars_df, continent_col, None)
+			polars_df = self.NeighLib.add_column_of_value(polars_df, continent_col, None, if_already_exists='error')
 		self.validate_col_country(polars_df, country_col)
 		for ISO3166, continent in countries.countries_to_continents.items():
 			polars_df = self.kv_match(polars_df, match_col=country_col, write_col=continent_col, key=ISO3166, value=continent, substrings=False, overwrite=overwrite)
 		return polars_df
 	
-	def standardize_countries(self, polars_df, try_rm_geoloc_info=False):
+	def standardize_countries(self, polars_df, try_rm_geoloc_info=False, progress_bar=TQDM_ENABLE):
 		# We expect to be starting out with at least one of the following:
 		# * country (type str)
 		# * geoloc_info (type list)
@@ -1193,11 +1266,11 @@ class ProfessionalsHaveStandards():
 			# This DOES NOT force everything to be ISO standard in country column, since if you have stuff in that column already I assume you want it there
 
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.substring_match, 
-				substrings=True, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Standardizing countries (substrings)")
+				substrings=True, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (substrings)")
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.exact_match, 
-				substrings=False, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Standardizing countries (exact)")
+				substrings=False, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (exact)")
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
-				substrings=False, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Countries to continents")
+				substrings=False, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
 
 			# TODO: why not call validate_col_country(polars_df)?
 
@@ -1212,11 +1285,11 @@ class ProfessionalsHaveStandards():
 			self.logging.debug("geoloc_info ✖️ country ✔️")
 			# This DOES force everything to be ISO standard in country column
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.substring_match, 
-				substrings=True, overwrite=True, status_cols=False, remove_match_from_list=True, progress_bar=False, progress_bar_desc="Standardizing countries (substrings)")
+				substrings=True, overwrite=True, status_cols=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (substrings)")
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.exact_match, 
-				substrings=False, overwrite=True, status_cols=False, remove_match_from_list=True, progress_bar=False, progress_bar_desc="Standardizing countries (exact)")		
+				substrings=False, overwrite=True, status_cols=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (exact)")		
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
-				substrings=False, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Countries to continents")
+				substrings=False, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
 			self.validate_col_country(polars_df)
 			self.logging.debug("Returning early due to lack of geoloc_info column")
 			return polars_df
@@ -1226,9 +1299,9 @@ class ProfessionalsHaveStandards():
 			# To handle "country: region" metadata without overwriting the region metadata, first we attempt to extract countries by looking for non-substring matches,
 			# including the countries.substring_match stuff we usually just substring match upon.
 			polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='country', dictionary=united_nations, 
-				substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True, progress_bar=False, progress_bar_desc="Standardizing countries")
+				substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries")
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
-				substrings=False, overwrite=True, status_cols=False, progress_bar=False, progress_bar_desc="Countries to continents")
+				substrings=False, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
 		
 		else:
 			self.logging.warning("Neither 'country' nor 'geoloc_info' found in dataframe. Cannot standardize.")
@@ -1241,19 +1314,16 @@ class ProfessionalsHaveStandards():
 		
 		# Now let's try to pull continent information from geoloc_info 
 		polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='continent', dictionary=regions.continents, 
-			substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True)
+			substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Continent from geoloc_info")
 
 		# Make sure we don't have junk from hypothetical previous runs, or weird columns
-		assert 'likely_country' not in polars_df.columns
-		polars_df = polars_df.with_columns(pl.lit(None).alias('likely_country')) # needs to be initialized since it's in an otherwise()
-		assert 'def_country' not in polars_df.columns
-		polars_df = polars_df.with_columns(pl.lit(None).alias('def_country')) # needs to be initialized since it's in an otherwise()
+		polars_df = self.NeighLib.add_column_of_value(polars_df, 'likely_country', None, if_already_exists='error')
+		polars_df = self.NeighLib.add_column_of_value(polars_df, 'def_country', None, if_already_exists='error')
 		assert 'geoloc_info_unhandled' not in polars_df.columns
 		assert 'neo_region' not in polars_df.columns
 		
 		# We can allow a pre-existing region column though
-		if 'region' not in polars_df.columns:
-			polars_df = polars_df.with_columns(pl.lit(None).alias('region'))
+		polars_df = self.NeighLib.add_column_of_value(polars_df, 'region', None, if_already_exists='ignore')
 
 		# Exact matches for continent and country have been moved, now look for "country: region" or "continent: country" matches
 		# These use str.starts_with()
@@ -1296,7 +1366,7 @@ class ProfessionalsHaveStandards():
 		
 		# Strip leading whitespace from likely_country column, as we will be using starts_with() on it soon.
 		polars_df = polars_df.with_columns(pl.col("likely_country").str.strip_chars_start(" "))
-		for nation, ISO3166 in tqdm(united_nations.items(), desc="Standardizing regions", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+		for nation, ISO3166 in tqdm(united_nations.items(), desc="Standardizing regions", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}', disable=(not progress_bar)):
 			polars_df = polars_df.with_columns([
 				pl.when((pl.col('geoloc_info').list.eval(pl.element().str.starts_with(f"{nation}:")).list.sum() == 1)
 				.and_(pl.col('country').is_null()))
@@ -1353,7 +1423,7 @@ class ProfessionalsHaveStandards():
 		# in here.
 		# We can only safely use countries.substring_match safely here; continents should be okay too but just to be safe let's not
 		# TODO: Check if later region extraction script manages to pull out "Sinfra" for Ivory Coast samples (see SRR18334007)
-		for nation, ISO3166 in tqdm(countries.substring_match.items(), desc="Finishing up", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
+		for nation, ISO3166 in tqdm(countries.substring_match.items(), desc="Finishing up countries", ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 			null_start = self.NeighLib.get_count_of_x_in_column_y(polars_df, None, 'country')
 			polars_df = polars_df.with_columns([
 				pl.when((pl.col("geoloc_info").list.eval(pl.element().str.contains(nation)).list.sum() != 0)
@@ -1385,16 +1455,21 @@ class ProfessionalsHaveStandards():
 		polars_df = polars_df.with_columns(pl.col("region").str.strip_chars_start(" "))
 
 		# manually deal with entries that have values for region but not country
-		polars_df = self.dictionary_match(polars_df, match_col="region", write_col="country", dictionary=regions.regions_to_countries, substrings=False, overwrite=True)
-		polars_df = self.dictionary_match(polars_df, match_col='region', write_col='country', dictionary=countries.substring_match, substrings=True, overwrite=False)
-		polars_df = self.dictionary_match(polars_df, match_col='region', write_col='country', dictionary=countries.exact_match, substrings=False, overwrite=True)
+		polars_df = self.dictionary_match(polars_df, match_col="region", write_col="country", dictionary=regions.regions_to_countries, 
+			substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Region to country")
+		polars_df = self.dictionary_match(polars_df, match_col='region', write_col='country', dictionary=countries.substring_match, 
+			substrings=True, overwrite=False, progress_bar=progress_bar, progress_bar_desc="Country substrings")
+		polars_df = self.dictionary_match(polars_df, match_col='region', write_col='country', dictionary=countries.exact_match, 
+			substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Country exact match")
 
 		# partial cleanup of the region column
-		polars_df = self.dictionary_match(polars_df, match_col="region", write_col="region", dictionary=regions.regions_to_smaller_regions, substrings=True, overwrite=True)
+		polars_df = self.dictionary_match(polars_df, match_col="region", write_col="region", dictionary=regions.regions_to_smaller_regions,
+			substrings=True, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Cleanup regions")
 
 		# Any matches for country names in geoloc_name, country, likely_country, and def_country have already been ISO3166'd
 		# Let's use that to convert some ISO3166'd countries into continents (this happens after region matching intentionally)
-		polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, substrings=False, overwrite=True)
+		polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents,
+			substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
 
 		self.validate_col_country(polars_df)
 		self.logging.info(f"Standardized countries in {time.time() - timer:.4f} seconds")
