@@ -17,8 +17,8 @@ storage1_bedgraph = Ranchero.from_tsv("/Users/aofarrel/INDEX_storage1_ash_bedgra
 storage1_bedgraph_height = storage1_bedgraph.shape[0]
 storage1_bedgraph = Ranchero.NeighLib.check_index(storage1_bedgraph, manual_index_column='path')
 assert storage1_bedgraph.shape[0] == storage1_bedgraph_height
-storage1_bedgraph = Ranchero.add_column_with_this_value(storage1_bedgraph, "disk", "storage1")
-storage1_bedgraph = Ranchero.add_column_with_this_value(storage1_bedgraph, "ext", "bedgraph")
+storage1_bedgraph = Ranchero.add_column_of_value(storage1_bedgraph, "disk", "storage1", if_already_exists='error')
+storage1_bedgraph = Ranchero.add_column_of_value(storage1_bedgraph, "ext", "bedgraph", if_already_exists='error')
 storage1_bedgraph = storage1_bedgraph.with_columns(pl.col("path").str.extract(r"([^/]+)$", 1).alias("basename"))
 storage1_bedgraph = storage1_bedgraph.with_columns(pl.col("basename").str.replace(r"_to_H37Rv_below_10x_coverage\.bedgraph$", "", literal=False).alias("sample"))
 storage1_bedgraph = storage1_bedgraph.with_columns(pl.col("sample").str.replace(r"\.to_H37Rv_below_10x_coverage\.bedgraph$", "", literal=False).alias("sample"))
@@ -29,8 +29,8 @@ storage1_diff = Ranchero.from_tsv("/Users/aofarrel/INDEX_storage1_ash_diff", che
 storage1_diff_height = storage1_diff.shape[0]
 storage1_diff = Ranchero.NeighLib.check_index(storage1_diff, manual_index_column='path')
 assert storage1_diff.shape[0] == storage1_diff_height
-storage1_diff = Ranchero.add_column_with_this_value(storage1_diff, "disk", "storage1")
-storage1_diff = Ranchero.add_column_with_this_value(storage1_diff, "ext", "diff")
+storage1_diff = Ranchero.add_column_of_value(storage1_diff, "disk", "storage1", if_already_exists='error')
+storage1_diff = Ranchero.add_column_of_value(storage1_diff, "ext", "diff", if_already_exists='error')
 storage1_diff = storage1_diff.with_columns(pl.col("path").str.extract(r"([^/]+)$", 1).alias("basename"))
 storage1_diff = storage1_diff.with_columns(pl.col("basename").str.replace(r"\.diff$", "", literal=False).alias("sample"))
 storage1_diff = storage1_diff.with_columns(pl.col('path').alias('diff_path'))
@@ -39,8 +39,8 @@ storage1_vcf = Ranchero.from_tsv("/Users/aofarrel/INDEX_storage1_ash_vcf", check
 storage1_vcf_height = storage1_vcf.shape[0]
 storage1_vcf = Ranchero.NeighLib.check_index(storage1_vcf, manual_index_column='path')
 assert storage1_vcf.shape[0] == storage1_vcf_height
-storage1_vcf = Ranchero.add_column_with_this_value(storage1_vcf, "disk", "storage1")
-storage1_vcf = Ranchero.add_column_with_this_value(storage1_vcf, "ext", "vcf")
+storage1_vcf = Ranchero.add_column_of_value(storage1_vcf, "disk", "storage1", if_already_exists='error')
+storage1_vcf = Ranchero.add_column_of_value(storage1_vcf, "ext", "vcf", if_already_exists='error')
 storage1_vcf = storage1_vcf.with_columns(pl.col("path").str.extract(r"([^/]+)$", 1).alias("basename"))
 storage1_vcf = storage1_vcf.with_columns(pl.col("basename").str.replace(r"\.vcf$", "", literal=False).alias("sample"))
 storage1_vcf = storage1_vcf.with_columns(pl.col('path').alias('vcf_path'))

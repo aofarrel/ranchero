@@ -683,6 +683,15 @@ class NeighLib:
 				raise ValueError(f"Could not generate temporary column called {name} as that name is already taken")
 		raise ValueError("Could not generate a temporary column")
 
+	def duplicate_col(self, polars_df, column, output_column, if_already_exists='error'):
+		assert if_already_exists in ['error', 'ignore', 'overwrite']
+		assert column in polars_df.columns
+		if if_already_exists == 'error':
+			assert output_column not in polars_df.columns
+		elif if_already_exists == 'ignore' and output_column in polars_df.columns:
+			return polars_df
+		return polars_df.with_columns(pl.col(column).alias(output_column))
+
 	def replace_substring_with_col_value(self, polars_df, sample_column, output_column, template):
 		"""
 		template: substring SAMPLENAME will be replaced by value in that row's sample_column 
@@ -2307,9 +2316,20 @@ class NeighLib:
 				polars_df = self.encode_as_str(polars_df, col)
 		return polars_df
 
-	def add_column_of_just_this_value(self, polars_df, column, value):
-		assert column not in polars_df.columns
-		return polars_df.with_columns(pl.lit(value).alias(column))
+	def add_column_of_value(self, polars_df, column, value, if_already_exists='ignore'):
+		"""
+		If you just need a temporary column, do this downstream of tempcol. We don't call
+		tempcol here because we'd be losing track of it, since we don't return its name.
+		"""
+		assert if_already_exists in ['error', 'ignore', 'overwrite']
+		if column not in polars_df.columns or if_already_exists == 'ignore':
+			self.logging.debug(f"Column {column} not in polars_df yet so we'll add it")
+		elif if_already_exists == 'overwrite':
+			self.logging.warning(f"Overwriting all values in {column} with {value}")
+		else:
+			self.logging.error(f"Could not add {column} to dataframe as that already exists and if_already_exists == 'error'")
+			raise ValueError
+		return polars_df.with_columns(pl.lit(value).alias(column)) # valid in ignore and overwrite case
 
 	def drop_column(self, polars_df, column):
 		assert column in polars_df.columns
