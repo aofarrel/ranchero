@@ -93,6 +93,9 @@ class ConfigParameters(TypedDict):
 	quote_style: CsvQuoteStyleOptions
 	rm_phages: bool
 	taxoncore_ruleset: None | str # not sure I like this...
+	tqdm_ascii: str
+	tqdm_bar_format: str
+	tqdm_disable: bool
 	unwanted: dict
 
 def _validate_against_annotation(option: str, value, expected_type) -> None:

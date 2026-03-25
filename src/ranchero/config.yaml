@@ -97,3 +97,9 @@ unwanted:
 # - always: Write the brackets even if a row's list has only one or zero values (better for other TSV parsers)
 # - len_gt_one: Only if the row's list len is greater than one (better for downstream ranchero analysis)
 list_bracket_style: 'len_gt_one'
+
+# Progress bar
+# I use tqdm for the progress bar, please see their docs for formatting information
+tqdm_ascii: '➖🌱🐄'
+tqdm_bar_format: '{desc:<30.29}{percentage:3.0f}%|{bar:15}{r_bar}'
+tqdm_disable: False
