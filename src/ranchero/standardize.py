@@ -63,7 +63,7 @@ class ProfessionalsHaveStandards():
 		
 		if 'host_disease' in polars_df.columns:
 			self.logging.info("Standardizing host diseases...")
-			polars_df = self.standardize_host_disease(polars_df)
+			polars_df = self.standardize_host_disease(polars_df, host_disease_col='host_disease')
 		
 		if any(column in polars_df.columns for column in ['genotype', 'lineage', 'strain', 'organism']):
 			self.logging.info("Standardizing lineage, strain, and mycobacterial scientific names... (this may take a while)")
@@ -126,7 +126,7 @@ class ProfessionalsHaveStandards():
 		TODO: move_lost_metadata should be a cfg option
 		"""
 		start = time.time()
-		if isolation_source_col is not 'isolation_source':
+		if isolation_source_col != 'isolation_source':
 			self.logging.warning(f"Isolation source column {isolation_source_col} is not isolation_source; this may not be a rancheroized dataframe")
 		assert 'isolation_source' in polars_df.columns
 		if retain_input:
@@ -135,6 +135,8 @@ class ProfessionalsHaveStandards():
 		if 'isolate_sam_ss_dpl100' in polars_df.columns:
 			polars_df = self.dictionary_match(polars_df, match_col='isolate_sam_ss_dpl100', write_col=isolation_source_col, dictionary=sample_sources.exact_replacements,
 				substrings=False, overwrite=False, progress_bar=progress_bar, progress_bar_desc="isolate_sam_ss_dpl100", remove_match_from_list=True)
+			if retain_input:
+				polars_df = self.NeighLib.duplicate_col(polars_df, 'isolate_sam_ss_dpl100', "isolate_sam_ss_dpl100_raw")
 			polars_df = polars_df.drop('isolate_sam_ss_dpl100')
 
 		if self.cfg.mycobacterial_mode and move_lost_metadata:
@@ -154,12 +156,12 @@ class ProfessionalsHaveStandards():
 				if destination_column in polars_df:
 					polars_df = self.dictionary_match_two_col(polars_df, isolation_source_col, isolation_source_col, write_column_2, dictionary=replacements, 
 						substrings=False, overwrite_1=True, overwrite_2=False, remove_match_from_list=True, 
-						progress_bar=progress_bar, progress_bar_desc=f"Wayward {destination_column} (exact)")
+						progress_bar=progress_bar, progress_bar_desc=f"Wayward {destination_column} (exact two col)")
 			for destination_column, replacements in sample_sources_wrong_column.substring_two_column_writes.items():
 				if destination_column in polars_df:
 					polars_df = self.dictionary_match_two_col(polars_df, isolation_source_col, isolation_source_col, write_column_2, dictionary=replacements, 
 						substrings=True, overwrite_1=True, overwrite_2=False, remove_match_from_list=True, 
-						progress_bar=progress_bar, progress_bar_desc=f"Wayward {destination_column} (substring)")
+						progress_bar=progress_bar, progress_bar_desc=f"Wayward {destination_column} (fuzzy two col)")
 
 		# Get rid of isolation source values that aren't actually helpful
 		if polars_df.schema[isolation_source_col] == pl.List:
@@ -191,7 +193,7 @@ class ProfessionalsHaveStandards():
 
 		# AFTER we have cleaned up very obvious things, from now on, write to a NEW COLUMN to help avoid accidentally overwriting past iterations (eg "culture from sputum" --> "sputum" or "culture")
 		temp_isolation_source = self.NeighLib.tempcol(polars_df, 'neo_isolation_source')
-		polars_df = self.NeighLib.add_column_of_value(polars_df, tempcol, None, if_already_exists='error')
+		polars_df = self.NeighLib.add_column_of_value(polars_df, temp_isolation_source, None, if_already_exists='error')
 
 		if polars_df.schema[isolation_source_col] == pl.List:
 			for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
@@ -211,11 +213,18 @@ class ProfessionalsHaveStandards():
 		else:
 			# TODO: ACTUALLY PUT THIS BACK IN!!
 			self.logging.warning("Skipping this-that-then matches as they're not supported when isolation_source is string")
+
+		#print(polars_df.filter(pl.col('sample_id') == pl.lit('SAMEA117586178')).select(['sample_id', 'isolation_source', 'isolation_source_raw', temp_isolation_source, 'isolate_sam_ss_dpl100_raw']))
 		
 		polars_df = self.dictionary_match(polars_df, match_col=isolation_source_col, write_col=temp_isolation_source, dictionary=sample_sources.exact_replacements, 
 			substrings=False, overwrite=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Checking for exact matches")
+		
+		#print(polars_df.filter(pl.col('sample_id') == pl.lit('SAMEA117586178')).select(['sample_id', 'isolation_source', 'isolation_source_raw', 'isolate_sam_ss_dpl100_raw']))
+
 		polars_df = self.dictionary_match(polars_df, match_col=isolation_source_col, write_col=temp_isolation_source, dictionary=sample_sources.comprehensive_fuzzy, 
 			substrings=True, overwrite=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Checking for fuzzy matches")
+
+		print(polars_df.filter(pl.col('sample_id') == pl.lit('SAMEA117586178')).select(['sample_id', 'isolation_source', 'isolation_source_raw', temp_isolation_source, 'isolate_sam_ss_dpl100_raw']))
 
 		self.logging.info("Cleaning up...")
 
@@ -226,7 +235,11 @@ class ProfessionalsHaveStandards():
 				.otherwise(pl.col(temp_isolation_source))
 				.alias(temp_isolation_source)
 			])
-		polars_df = polars_df.drop(isolation_source_col).rename({temp_isolation_source: isolation_source_col})
+		polars_df = polars_df.with_columns(pl.coalesce([temp_isolation_source, isolation_source_col]).alias(isolation_source_col)).drop(temp_isolation_source)
+		#polars_df = polars_df.drop(isolation_source_col).rename({temp_isolation_source: isolation_source_col})
+
+		#print(polars_df.filter(pl.col('sample_id') == pl.lit('SAMEA117586178')).select(['sample_id', 'isolation_source', 'isolation_source_raw', 'isolate_sam_ss_dpl100_raw']))
+
 		assert polars_df.schema[isolation_source_col] != pl.List
 		self.logging.info(f"Standardized {isolation_source_col} in {time.time()-start:.4f} seconds")
 		return polars_df
@@ -321,6 +334,9 @@ class ProfessionalsHaveStandards():
 		expr_write_col_is_empty,
 		progress_bar=TQDM_ENABLE,
 		progress_bar_desc="Parallel matching..."):
+		"""
+		This relies on asserts from calling function and should not be called on its own.
+		"""
 
 		# TODO: use tempcol function as fallback?
 		temp_write_cols = [f"{write_col}_{i}" for i in range(1, 6)]
@@ -328,7 +344,6 @@ class ProfessionalsHaveStandards():
 
 		progress_bar_max = len(dictionary) // 5 + (1 if len(dictionary) % 5 != 0 else 0)
 
-		#for batch in self.chunk_dict(dictionary, 5):
 		for batch in tqdm(self.chunk_dict(dictionary, 5), total=progress_bar_max, desc=progress_bar_desc, ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 			if len(batch) == 5:
 				items = list(batch.items())
@@ -492,8 +507,7 @@ class ProfessionalsHaveStandards():
 			self.logging.warning("Substrings false, experimental_contains_any true, but dictionary keys lacked regex anchors. Converted to anchors, will continue.")
 		return corrected_dict
 
-	@staticmethod
-	def _setup_kv_expressions(polars_df, match_col, write_col, key, value, substrings, overwrite, remove_match_from_list):
+	def _setup_kv_expressions(self, polars_df, match_col, write_col, key, value, substrings, overwrite, remove_match_from_list):
 		allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 		
 		# Not nesting these because this is easier to read (imho)
@@ -508,7 +522,7 @@ class ProfessionalsHaveStandards():
 			found_a_match = pl.col(match_col).list.eval(pl.element().str.to_lowercase() == key.lower()).list.any()
 		else:
 			# should never happen due to dictionary_match()'s assert
-			self.logging.error(f"Invalid type {polars[match_col].schema} for match_col named {match_col}, cannot do matching")
+			self.logging.error(f"Invalid type {polars_df.schema[match_col]} for match_col named {match_col}, cannot do matching")
 			raise TypeError
 
 		if remove_match_from_list and polars_df.schema[match_col] == pl.List(pl.Utf8):
@@ -585,7 +599,7 @@ class ProfessionalsHaveStandards():
 		substrings=False,             # True: "US Virgin Islands" matches "US", False: "US Virgin Islands" doesn't match "US"
 		overwrite=False,              # True: If write_col is not null, don't write dictionary value 
 		retain_input=False,           # True: Create f"{match_col}_raw" before doing anything
-		status_cols=False,            # True: Use 'matched'/'written' status columns (deprecated)
+	    status_cols=False,            # True: Use 'matched'/'written' status columns (deprecated)
 		status_cols_reset=True,       # True: If status columns already exist, clear them first (no-op if !status_cols)
 		remove_match_from_list=True,  # True: If match_col is pl.List, remove string matches from list (ex: ["foo", "bar"] -> matches "foo" -> ["bar"])
 		strict_write_col_type=False,  # True: If dictionary values (replacements) are str, write_col must be pl.Utf8; if values are list, write_col must be pl.List
@@ -601,7 +615,7 @@ class ProfessionalsHaveStandards():
 		assert match_col in polars_df.columns
 		assert ( (polars_df.schema[match_col] == pl.Utf8) or (polars_df.schema[match_col] == pl.List(pl.Utf8)) )
 		if retain_input:
-			polars_df = polars_df.with_columns(pl.col(match_col).alias(f"{match_col}_raw")) if f"{match_col}_raw" not in polars_df.columns else polars_df
+			polars_df = self.NeighLib.duplicate_col(polars_df, match_col, f"{match_col}_raw", if_already_exists='ignore')
 		if status_cols:
 			polars_df = polars_df.with_columns(pl.lit(False).alias('matched')) if 'matched' not in polars_df.columns else polars_df.with_columns(pl.col('matched').fill_null(False))
 			polars_df = polars_df.with_columns(pl.lit(False).alias('written')) if 'written' not in polars_df.columns else polars_df.with_columns(pl.col('written').fill_null(False))
@@ -713,22 +727,24 @@ class ProfessionalsHaveStandards():
 		#		print(polars_df.select(['run_id', write_col, 'geoloc_info']))
 		return polars_df
 
-	def standardize_host_disease(self, polars_df):
-		assert 'host_disease' in polars_df.columns
+	def standardize_host_disease(self, polars_df, host_disease_col):
+		assert host_disease_col in polars_df.columns
+		if host_disease_col != 'host_disease':
+			self.logging.warning(f"host disease column {host_disease_col} is not host_disease; this may not be a rancheroized dataframe")
 
 		# exact matches
 		if self.cfg.mycobacterial_mode:
-			for disease, simplified_disease in host_disease.host_disease_exact_match_mycobacterial.items():
-				polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
-		for disease, simplified_disease in host_disease.host_disease_exact_match.items():
-			polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=False, overwrite=True)
-		
+			polars_df = self.dictionary_match(polars_df, match_col=host_disease_col, write_col=host_disease_col, dictionary=host_disease.host_disease_exact_match_mycobacterial, 
+				substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="host_disease (mycobact exact)")
+		polars_df = self.dictionary_match(polars_df, match_col=host_disease_col, write_col=host_disease_col, dictionary=host_disease.host_disease_exact_match, 
+			substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="host_disease (exact)")
+	
 		# fuzzy matches
 		if self.cfg.mycobacterial_mode:
-			for disease, simplified_host_disease in host_disease.host_disease_substring_match_mycobacterial.items():
-				polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
-		for disease, simplified_host_disease in host_disease.host_disease_substring_match.items():
-			polars_df = self.kv_match(polars_df, match_col='host_disease', write_col='host_disease', key=disease, value=simplified_disease, substrings=True, overwrite=True)
+			polars_df = self.dictionary_match(polars_df, match_col=host_disease_col, write_col=host_disease_col, dictionary=host_disease.host_disease_substring_match_mycobacterial, 
+			substrings=True, overwrite=True, progress_bar=progress_bar, progress_bar_desc="host_disease (mycobact fuzzy)")
+		polars_df = self.dictionary_match(polars_df, match_col=host_disease_col, write_col=host_disease_col, dictionary=host_disease.host_disease_substring_match, 
+			substrings=True, overwrite=True, progress_bar=progress_bar, progress_bar_desc="host_disease (fuzzy)")
 		return polars_df
 	
 	def standarize_hosts(self, polars_df):
@@ -829,7 +845,7 @@ class ProfessionalsHaveStandards():
 				if err_on_list:
 					self.logging.error("Tried to flatten date_collected, but there seems to be some rows with unique values.")
 					print(self.NeighLib.get_rows_where_list_col_more_than_one_value(polars_df, 'date_collected').select([self.NeighLib.get_index_column(polars_df), 'date_collected']))
-					exit(1)
+					raise ValueError
 				else:
 					self.logging.warning("Tried to flatten date_collected, but there seems to be some rows with unique values. Will convert to string. This may be less accurate.")
 					polars_df = self.NeighLib.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=True, just_these_columns=['date_collected'])
@@ -1266,11 +1282,11 @@ class ProfessionalsHaveStandards():
 			# This DOES NOT force everything to be ISO standard in country column, since if you have stuff in that column already I assume you want it there
 
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.substring_match, 
-				substrings=True, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (substrings)")
+				substrings=True, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (substrings)")
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.exact_match, 
-				substrings=False, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (exact)")
+				substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (exact)")
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
-				substrings=False, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
+				substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
 
 			# TODO: why not call validate_col_country(polars_df)?
 
@@ -1285,11 +1301,11 @@ class ProfessionalsHaveStandards():
 			self.logging.debug("geoloc_info ✖️ country ✔️")
 			# This DOES force everything to be ISO standard in country column
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.substring_match, 
-				substrings=True, overwrite=True, status_cols=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (substrings)")
+				substrings=True, overwrite=True, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (substrings)")
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='country', dictionary=countries.exact_match, 
-				substrings=False, overwrite=True, status_cols=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (exact)")		
+				substrings=False, overwrite=True, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries (exact)")		
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
-				substrings=False, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
+				substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
 			self.validate_col_country(polars_df)
 			self.logging.debug("Returning early due to lack of geoloc_info column")
 			return polars_df
@@ -1299,9 +1315,9 @@ class ProfessionalsHaveStandards():
 			# To handle "country: region" metadata without overwriting the region metadata, first we attempt to extract countries by looking for non-substring matches,
 			# including the countries.substring_match stuff we usually just substring match upon.
 			polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='country', dictionary=united_nations, 
-				substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries")
+				substrings=False, overwrite=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Standardizing countries")
 			polars_df = self.dictionary_match(polars_df, match_col='country', write_col='continent', dictionary=countries.countries_to_continents, 
-				substrings=False, overwrite=True, status_cols=False, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
+				substrings=False, overwrite=True, progress_bar=progress_bar, progress_bar_desc="Countries to continents")
 		
 		else:
 			self.logging.warning("Neither 'country' nor 'geoloc_info' found in dataframe. Cannot standardize.")
@@ -1314,7 +1330,7 @@ class ProfessionalsHaveStandards():
 		
 		# Now let's try to pull continent information from geoloc_info 
 		polars_df = self.dictionary_match(polars_df, match_col='geoloc_info', write_col='continent', dictionary=regions.continents, 
-			substrings=False, overwrite=False, status_cols=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Continent from geoloc_info")
+			substrings=False, overwrite=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Continent from geoloc_info")
 
 		# Make sure we don't have junk from hypothetical previous runs, or weird columns
 		polars_df = self.NeighLib.add_column_of_value(polars_df, 'likely_country', None, if_already_exists='error')

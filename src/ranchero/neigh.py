@@ -2322,14 +2322,18 @@ class NeighLib:
 		tempcol here because we'd be losing track of it, since we don't return its name.
 		"""
 		assert if_already_exists in ['error', 'ignore', 'overwrite']
-		if column not in polars_df.columns or if_already_exists == 'ignore':
+		if column not in polars_df.columns:
 			self.logging.debug(f"Column {column} not in polars_df yet so we'll add it")
+			return polars_df.with_columns(pl.lit(value).alias(column)) # valid in ignore and overwrite case
 		elif if_already_exists == 'overwrite':
 			self.logging.warning(f"Overwriting all values in {column} with {value}")
+			return polars_df.with_columns(pl.lit(value).alias(column)) # valid in ignore and overwrite case
+		elif if_already_exists == 'ignore':
+			return polars_df
 		else:
 			self.logging.error(f"Could not add {column} to dataframe as that already exists and if_already_exists == 'error'")
 			raise ValueError
-		return polars_df.with_columns(pl.lit(value).alias(column)) # valid in ignore and overwrite case
+		
 
 	def drop_column(self, polars_df, column):
 		assert column in polars_df.columns
