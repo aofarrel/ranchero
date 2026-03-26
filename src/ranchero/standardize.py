@@ -514,7 +514,7 @@ class ProfessionalsHaveStandards():
 		elif substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
 			if overwrite_forbids is not None:
 				self.logging.warning("overwrite_forbids is ambigious when the match column is a list; will attempt to apply across entire list")
-				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null()).and_(~pl.col(match_col).list.contains(f"(?i){key}").any())
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null()).and_(~pl.col(match_col).list.contains(key).any())
 			else:
 				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 			#found_a_match = pl.col(match_col).list.contains(f"(?i){key}").any() # doesn't properly match substrings
@@ -528,7 +528,7 @@ class ProfessionalsHaveStandards():
 		elif not substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
 			if overwrite_forbids is not None:
 				self.logging.warning("overwrite_forbids is ambigious when the match column is a list; will attempt to apply across entire list")
-				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null()).and_(~pl.col(match_col).list.contains(f"(?i){key}").any())
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null()).and_(~pl.col(match_col).list.contains(key).any())
 			else:
 				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 			found_a_match = pl.col(match_col).list.eval(pl.element().str.to_lowercase() == key.lower()).list.any()
@@ -740,7 +740,7 @@ class ProfessionalsHaveStandards():
 		#		print(polars_df.select(['run_id', write_col, 'geoloc_info']))
 		return polars_df
 
-	def standardize_host_disease(self, polars_df, host_disease_col):
+	def standardize_host_disease(self, polars_df, host_disease_col='host_disease', progress_bar=TQDM_ENABLE):
 		assert host_disease_col in polars_df.columns
 		if host_disease_col != 'host_disease':
 			self.logging.warning(f"host disease column {host_disease_col} is not host_disease; this may not be a rancheroized dataframe")
