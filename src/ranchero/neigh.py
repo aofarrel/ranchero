@@ -818,14 +818,14 @@ class NeighLib:
 		# * anywhere-in-string matching
 		# * case insensitive
 		# * does not support regex
-		self.logging.debug("Running contains_any() on columns of type string...")
+		self.logging.debug(f"Running contains_any() on columns of type string: {string_cols}...")
 		polars_df = polars_df.with_columns([
 			pl.when(pl.col(col).str.contains_any(null_values.nulls_pl_contains_any, ascii_case_insensitive=True))
 			.then(None)
 			.otherwise(pl.col(col))
 			.alias(col) for col in string_cols])
 		
-		self.logging.debug("Running contains_any() on columns of type list...")
+		self.logging.debug(f"Running contains_any() on columns of type list: {list_cols}...")
 		polars_df = polars_df.with_columns([
 			pl.col(col).list.eval(
 				pl.element().filter(~pl.element().str.contains_any(null_values.nulls_pl_contains_any, ascii_case_insensitive=True))

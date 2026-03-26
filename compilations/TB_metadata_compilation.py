@@ -14,7 +14,8 @@ import polars as pl
 import time
 import gc  # only called once; not sure if it actually helps
 start = time.time()
-import ranchero as Ranchero
+#import ranchero as Ranchero
+from src import ranchero as Ranchero
 _b_ = "\033[1m"
 _bb_ = "\033[0m"
 _c_ = "\033[0;36m"
@@ -156,6 +157,7 @@ def check_stuff(polars_df, name=None):
 	
 
 def inital_file_parse():
+
 	#we don't immediately rancheroize as this is faster (probably)
 	start, tba6 = time.time(),Ranchero.from_bigquery("./inputs/BQ/tba6_no_tax_table_bq_2024-09-19.json_modified.json",
 		auto_rancheroize=False, auto_standardize=False)
@@ -210,7 +212,7 @@ def inital_file_parse():
 
 def inject_metadata(tba6):
 	check_stuff(tba6)
-	tba6 = Ranchero.add_column_with_this_value(tba6, "collection", None)
+	tba6 = Ranchero.add_column_of_value(tba6, "collection", None, if_already_exists='error')
 
 	bioproject_injector = Ranchero.injector_from_tsv("./inputs/overrides/injector_with_shorthands.tsv")
 	bovis_time = Ranchero.injector_from_tsv("./inputs/overrides/PRJEB18668 - good.tsv")
@@ -301,7 +303,7 @@ def run_merges(tba6):
 	# Coll
 	print(f"{_b_}Processing Coll{_bb_}")
 	coll = Ranchero.from_tsv("./inputs/publications/run_indexed/Coll_2018/coll_processed.tsv", auto_standardize=True)
-	coll = Ranchero.add_column_with_this_value(coll, "pheno_source", "Coll_2018")
+	coll = Ranchero.add_column_of_value(coll, "pheno_source", "Coll_2018", if_already_exists='error')
 	merged = Ranchero.merge_dataframes(merged, coll, 
 		merge_upon="__index__run_id", 
 		left_name="tba6", right_name="Coll_2018", 
@@ -322,7 +324,7 @@ def run_merges(tba6):
 		"AMI_PHENOTYPE_QUALITY","BDQ_PHENOTYPE_QUALITY","CFZ_PHENOTYPE_QUALITY","DLM_PHENOTYPE_QUALITY","EMB_PHENOTYPE_QUALITY","ETH_PHENOTYPE_QUALITY",
 		"INH_PHENOTYPE_QUALITY","KAN_PHENOTYPE_QUALITY","LEV_PHENOTYPE_QUALITY","LZD_PHENOTYPE_QUALITY","MXF_PHENOTYPE_QUALITY","RIF_PHENOTYPE_QUALITY",
 		"RFB_PHENOTYPE_QUALITY","ENA_SAMPLE","VCF","REGENOTYPED_VCF"], auto_standardize=True)
-	CRyPTIC = Ranchero.add_column_with_this_value(CRyPTIC, "pheno_source", "CRyPTIC_reuse_table") #PMC9363010
+	CRyPTIC = Ranchero.add_column_of_value(CRyPTIC, "pheno_source", "CRyPTIC_reuse_table", if_already_exists='error') #PMC9363010
 	merged = Ranchero.merge_dataframes(merged, CRyPTIC, 
 		merge_upon="__index__run_id", 
 		left_name="tba6", right_name="CRyPTIC_reuse_table", 
@@ -335,7 +337,7 @@ def run_merges(tba6):
 	#	drop_columns=["pheno_STREPTOMYCIN","pheno_ISONIAZID","pheno_RIFAMPICIN","pheno_ETHAMBUTOL","pheno_PYRAZINAMIDE",
 	#	"pheno_AMIKACIN","pheno_KANAMYCIN","pheno_CAPREOMYCIN","pheno_CYCLOSERINE","pheno_CLOFAZIMINE","pheno_OFLOXACIN",
 	#	"pheno_PAS","pheno_RIFABUTIN","pheno_MOXIFLOXACIN","pheno_LINEZOLID","pheno_ETHIONAMIDE","pheno_BEDAQUILINE"]) # turns out these are genotypic
-	#merker = Ranchero.add_column_with_this_value(merker, "pheno_source", "Merker_2022") #PMC9426364
+	#merker = Ranchero.add_column_of_value(merker, "pheno_source", "Merker_2022", if_already_exists='error') #PMC9426364
 	#merged = Ranchero.merge_dataframes(merged, merker, merge_upon="__index__run_id", left_name="tba6", right_name="Merker_2022", drop_exclusive_right=True)
 	# DONT FORGET THE OTHER MERKER PAPER, AND ALSO THE SAMPLE-INDEXED PART
 	#check_stuff(merged)
@@ -355,10 +357,10 @@ def run_merges(tba6):
 	# Nimmo
 	print(f"{_b_}Processing Nimmo{_bb_}")
 	nimmo_L2 = Ranchero.from_tsv("./inputs/publications/run_indexed/Nimmo_2024/L2.tsv", auto_standardize=False)
-	nimmo_L2 = Ranchero.add_column_with_this_value(nimmo_L2, "lineage", "L2")
+	nimmo_L2 = Ranchero.add_column_of_value(nimmo_L2, "lineage", "L2", if_already_exists='error')
 	nimmo_L2 = Ranchero.standardize_everything(nimmo_L2) # AFTER adding lineage column
 	nimmo_L4 = Ranchero.from_tsv("./inputs/publications/run_indexed/Nimmo_2024/L4.tsv", auto_standardize=False)
-	nimmo_L4 = Ranchero.add_column_with_this_value(nimmo_L4, "lineage", "L4")
+	nimmo_L4 = Ranchero.add_column_of_value(nimmo_L4, "lineage", "L4", if_already_exists='error')
 	nimmo_L4 = Ranchero.standardize_everything(nimmo_L4) # AFTER adding lineage column
 	merged = Ranchero.merge_dataframes(merged, nimmo_L2, 
 		merge_upon="__index__run_id", 
@@ -384,7 +386,7 @@ def run_merges(tba6):
 	# Walker (CRyPTIC cross-study pheno table, NOT THE REUSE TABLE!!)
 	print(f"{_b_}Processing Walker pheno data (WHO2021, CRyPTIC-associated, PMC7612554, only the run-indexed samples){_bb_}")
 	walker = Ranchero.from_tsv("./inputs/publications/run_indexed/Walker_2022-CRyPTIC-run/runindexed_Walker2022_pheno_WHO2021_CRyPTIC_PMC7612554.tsv")
-	walker = Ranchero.add_column_with_this_value(walker, "pheno_source", "Walker_2022") #PMC7612554
+	walker = Ranchero.add_column_of_value(walker, "pheno_source", "Walker_2022", if_already_exists='error') #PMC7612554
 	walker = Ranchero.standardize_countries(walker)
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, walker, 
 		merge_upon="__index__run_id", 
@@ -446,7 +448,7 @@ def sample_id_merges(swapped_index):
 	# Andres
 	print(f"{_b_}Processing Andres{_bb_}")
 	Andres_pheno = Ranchero.from_tsv("./inputs/publications/sample_indexed/Andres_2019/Andres_cleaned.tsv", drop_columns=['Ethambutol_MIC'], auto_standardize=True)
-	Andres_pheno = Ranchero.add_column_with_this_value(Andres_pheno, "pheno_source", "Andres_2019") # PMC6355586
+	Andres_pheno = Ranchero.add_column_of_value(Andres_pheno, "pheno_source", "Andres_2019", if_already_exists='error') # PMC6355586
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, Andres_pheno, 
 		merge_upon="__index__sample_id", 
 		left_name="tba6", right_name="Andres_2019", 
@@ -461,7 +463,7 @@ def sample_id_merges(swapped_index):
 	Finci_pheno = Ranchero.from_tsv("./inputs/publications/sample_indexed/Finci_2022 (PRJEB48275)/PRJEB48275_Finci_plus_pheno.tsv",
 		auto_standardize=False, # needs to be false or the merge gets hella cringe
 		drop_columns=["pheno_WHO_resistance"])
-	Finci_pheno = Ranchero.add_column_with_this_value(Finci_pheno, "pheno_source", "Finci_2022") #PMC9436784
+	Finci_pheno = Ranchero.add_column_of_value(Finci_pheno, "pheno_source", "Finci_2022", if_already_exists='error') #PMC9436784
 	#Finci_pheno = Finci_pheno.drop(['country', 'pheno_AMIKACIN', 'pheno_CAPREOMYCIN', 'pheno_ETHAMBUTOL', 'pheno_ISONIAZID',
 	#	'pheno_KANAMYCIN', 'pheno_MOXIFLOXACIN', 'pheno_PYRAZINAMIDE', 'pheno_RIFAMPICIN', 'pheno_LEVOFLOXACIN', 'lineage'])
 	start, merged = time.time(), Ranchero.standardize_everything(
@@ -594,7 +596,7 @@ def sample_id_merges(swapped_index):
 			explode_upon=" "
 		)
 	)
-	walker = Ranchero.add_column_with_this_value(walker, "pheno_source", "CRyPTIC_WHO2021_PMC7612554")
+	walker = Ranchero.add_column_of_value(walker, "pheno_source", "CRyPTIC_WHO2021_PMC7612554", if_already_exists='error')
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, walker, 
 		merge_upon="__index__sample_id", 
 		right_name="Walker_2022", 
@@ -619,6 +621,17 @@ def sample_id_merges(swapped_index):
 	Fran_non_sra = Ranchero.Standardizer.continent_from_country(Fran_non_sra, "country", "continent")
 	Fran_sra = Ranchero.Standardizer.continent_from_country(Fran_sra, "country", "continent")
 
+	# the non-SRA samples need to be translated in newer versions of the TB tree
+	Fran_may_2025_translator = Ranchero.tsv_to_dictionary("./inputs/overrides/metadata_ENA_VLC_2013_2019-Hoja1-edit.tsv")
+	merged = Ranchero.translate_column(Fran_non_sra, "__index__sample_id", "__index__sample_id", Fran_may_2025_translator)
+	print(Fran_non_sra)
+	Ranchero.NeighLib.assert_no_values_start_with(Fran_non_sra, "__index__sample_id", "G")
+	
+	# we haven't check this one yet, skip it for now
+	#Fran_may_2025_metadata = Ranchero.injector_from_tsv("./inputs/other/metadata_ENA_VLC_2013_2019 - Hoja 1.tsv", drop_columns=
+	#	['Project_accession', 'Run_accession', 'Location']).rename({'Date': 'date_collected'})
+	#merged = Ranchero.inject_metadata(merged, Fran_may_2025_metadata, overwrite=True)
+
 	start, merged = time.time(), Ranchero.merge_dataframes(merged, Fran_non_sra, 
 		merge_upon="__index__sample_id", 
 		right_name="TGU", 
@@ -635,6 +648,7 @@ def sample_id_merges(swapped_index):
 
 	print(f"{_b_}Processing inputs, outputs, denylist, and what's on the tree{_bb_}")
 	inputs = Ranchero.from_tsv("./inputs/pipeline/probable_inputs.txt")
+	inputs = Ranchero.translate_column(inputs, "__index__sample_id", "__index__sample_id", Fran_may_2025_translator)
 	merged = Ranchero.merge_dataframes(merged, inputs, merge_upon="__index__sample_id", 
 		right_name="input", 
 		indicator="collection", 
@@ -642,27 +656,27 @@ def sample_id_merges(swapped_index):
 	print(f"Merged with input list")
 
 	diffs = Ranchero.from_tsv("./inputs/pipeline/probable_diffs.txt")
+	diffs = Ranchero.translate_column(diffs, "__index__sample_id", "__index__sample_id", Fran_may_2025_translator)
 	merged = Ranchero.merge_dataframes(merged, diffs, merge_upon="__index__sample_id", 
 		right_name="diff", 
 		indicator="collection", 
 		drop_exclusive_right=False)
 	print(f"Merged with diffs list")
 
-	tree = Ranchero.from_tsv("./ranchero_output_archive/2025-07-08-FINAL_ranchero_rc17.subset.annotated.tsv", 
-		list_columns=['run_index'])
-	for column in tree.columns:
-		if column in merged and column != "__index__sample_id":
-			# coinfection and tbprofiler_lineage_usher will get added too
-			tree = tree.drop(column)
+	# Previously we had coinfection status, but currently I don't have that since we changed which tree 
+	# we are using. I dumped this from matUtils summarize of "mtb.20240912.mask10 (4)" as in the supplemental
+	# Google Drive.
+	tree = Ranchero.from_tsv("./ranchero_output_archive/mtb.20240912.mask10 (4).sample_clades.tsv")
 	merged = Ranchero.merge_dataframes(merged, tree, 
 		merge_upon="__index__sample_id", 
 		right_name="tree", 
-		indicator="collection", 
+		indicator="collection",
 		drop_exclusive_right=False)
 	print(f"Merged with phylogenetic tree membership")
 
 	tbprofiler = Ranchero.from_tsv("./inputs/tbprofiler/tbprofiler_basically_everything_rancheroized_lesscolumns_FIXMISSINGDATA.tsv")
 	tbprofiler = tbprofiler.drop(['tbprof_family', 'superbatch'], strict=False)
+	tbprofiler = Ranchero.translate_column(tbprofiler, "__index__sample_id", "__index__sample_id", Fran_may_2025_translator)
 	merged = Ranchero.merge_dataframes(merged, tbprofiler, 
 		merge_upon="__index__sample_id", 
 		right_name="tbprofiler", 

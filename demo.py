@@ -156,11 +156,11 @@ print(s1+s2+s3+s4)
 input("\n\nPress enter to continue...\n\n")
 
 print('Finally, let\'s standardize what tissue/environment your samples are taken from. This is very open to interpretation, so unlike country metadata, Ranchero doesn\'t try to cover *absolutely everything* in the Mycobacterium genus and will leave some values "as reported" (not shown in this example). Additionally, since some people use this column for geographic or host information, Ranchero will attempt to pull that information if present here and put it in the appropriate column.')
-Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'isolation_source']), "sample source information after rancheroize, but before standardize_sample_source()")
+Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'isolation_source']), "sample source information after rancheroize, but before standardize_isolation_source()")
 input("\n\nPress enter to standardize sample source...\n\n")
 
 start = time.time()
-mycobact_from_BigQuery = Ranchero.standardize_sample_source(mycobact_from_BigQuery)
+mycobact_from_BigQuery = Ranchero.standardize_isolation_source(mycobact_from_BigQuery)
 Ranchero.super_print(mycobact_from_BigQuery.select(['__index__run', 'isolation_source']), f"sample source information after standardization -- completed in {time.time() - start} seconds")
 input("\n\nPress enter to contine...\n\n")
 
