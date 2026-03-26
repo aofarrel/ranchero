@@ -212,20 +212,11 @@ class ProfessionalsHaveStandards():
 				])
 		else:
 			# TODO: ACTUALLY PUT THIS BACK IN!!
-			self.logging.warning("Skipping this-that-then matches as they're not supported when isolation_source is string")
-
-		#print(polars_df.filter(pl.col('sample_id') == pl.lit('SAMEA117586178')).select(['sample_id', 'isolation_source', 'isolation_source_raw', temp_isolation_source, 'isolate_sam_ss_dpl100_raw']))
-		
-		polars_df = self.dictionary_match(polars_df, match_col=isolation_source_col, write_col=temp_isolation_source, dictionary=sample_sources.exact_replacements, 
-			substrings=False, overwrite=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Checking for exact matches")
-		
-		#print(polars_df.filter(pl.col('sample_id') == pl.lit('SAMEA117586178')).select(['sample_id', 'isolation_source', 'isolation_source_raw', 'isolate_sam_ss_dpl100_raw']))
-
-		polars_df = self.dictionary_match(polars_df, match_col=isolation_source_col, write_col=temp_isolation_source, dictionary=sample_sources.comprehensive_fuzzy, 
-			substrings=True, overwrite=False, remove_match_from_list=True, progress_bar=progress_bar, progress_bar_desc="Checking for fuzzy matches")
-
-		print(polars_df.filter(pl.col('sample_id') == pl.lit('SAMEA117586178')).select(['sample_id', 'isolation_source', 'isolation_source_raw', temp_isolation_source, 'isolate_sam_ss_dpl100_raw']))
-
+			self.logging.warning("Skipping this-that-then matches as they're not supported when isolation_source is string")		
+		polars_df = self.dictionary_match(polars_df, match_col=isolation_source_col, write_col=isolation_source_col, dictionary=sample_sources.exact_replacements, 
+			substrings=False, overwrite=True, remove_match_from_list=True, overwrite_forbids=sample_sources.standardized_values, progress_bar=progress_bar, progress_bar_desc="Checking for exact matches")
+		polars_df = self.dictionary_match(polars_df, match_col=isolation_source_col, write_col=isolation_source_col, dictionary=sample_sources.comprehensive_fuzzy, 
+			substrings=True, overwrite=True, remove_match_from_list=True, overwrite_forbids=sample_sources.standardized_values, progress_bar=progress_bar, progress_bar_desc="Checking for fuzzy matches")
 		self.logging.info("Cleaning up...")
 
 		if collapse_culture:
@@ -237,8 +228,6 @@ class ProfessionalsHaveStandards():
 			])
 		polars_df = polars_df.with_columns(pl.coalesce([temp_isolation_source, isolation_source_col]).alias(isolation_source_col)).drop(temp_isolation_source)
 		#polars_df = polars_df.drop(isolation_source_col).rename({temp_isolation_source: isolation_source_col})
-
-		#print(polars_df.filter(pl.col('sample_id') == pl.lit('SAMEA117586178')).select(['sample_id', 'isolation_source', 'isolation_source_raw', 'isolate_sam_ss_dpl100_raw']))
 
 		assert polars_df.schema[isolation_source_col] != pl.List
 		self.logging.info(f"Standardized {isolation_source_col} in {time.time()-start:.4f} seconds")
@@ -332,6 +321,7 @@ class ProfessionalsHaveStandards():
 		retain_input,
 		remove_match_from_list,
 		expr_write_col_is_empty,
+		overwrite_forbids,
 		progress_bar=TQDM_ENABLE,
 		progress_bar_desc="Parallel matching..."):
 		"""
@@ -354,15 +344,15 @@ class ProfessionalsHaveStandards():
 				k5, v5 = items[4]
 
 				expr_allowed_to_overwrite_1, expr_filter_exp_1, expr_found_a_match_1 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k1, value=v1, 
-				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list, overwrite_forbids=overwrite_forbids)
 				expr_allowed_to_overwrite_2, expr_filter_exp_2, expr_found_a_match_2 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k2, value=v2, 
-				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list, overwrite_forbids=overwrite_forbids)
 				expr_allowed_to_overwrite_3, expr_filter_exp_3, expr_found_a_match_3 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k3, value=v3, 
-				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list, overwrite_forbids=overwrite_forbids)
 				expr_allowed_to_overwrite_4, expr_filter_exp_4, expr_found_a_match_4 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k4, value=v4, 
-				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list, overwrite_forbids=overwrite_forbids)
 				expr_allowed_to_overwrite_5, expr_filter_exp_5, expr_found_a_match_5 = self._setup_kv_expressions(polars_df, match_col, write_col, key=k5, value=v5, 
-				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+				substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list, overwrite_forbids=overwrite_forbids)
 
 				if polars_df.schema[write_col] == pl.List(pl.Utf8) and type(v1) == str:
 					# Calling function dictionary_match already asserted all values are of same type to each other,
@@ -507,22 +497,44 @@ class ProfessionalsHaveStandards():
 			self.logging.warning("Substrings false, experimental_contains_any true, but dictionary keys lacked regex anchors. Converted to anchors, will continue.")
 		return corrected_dict
 
-	def _setup_kv_expressions(self, polars_df, match_col, write_col, key, value, substrings, overwrite, remove_match_from_list):
-		allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
+	def _setup_kv_expressions(self, polars_df, match_col, write_col, key, value, substrings, overwrite, remove_match_from_list, overwrite_forbids=None):
+		"""
+		We actually handle overwrite_forbids in found_a_match. I don't love that but it makes this function simpler.
+		"""
+		if (overwrite_forbids is None) or (overwrite_forbids == []):
+			overwrite_forbids = None
 		
 		# Not nesting these because this is easier to read (imho)
 		if substrings and polars_df.schema[match_col] == pl.Utf8:
+			if overwrite_forbids is not None:
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null()).and_(~pl.col(match_col).is_in(overwrite_forbids))
+			else:
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 			found_a_match = pl.col(match_col).str.contains(f"(?i){key}")
 		elif substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
+			if overwrite_forbids is not None:
+				self.logging.warning("overwrite_forbids is ambigious when the match column is a list; will attempt to apply across entire list")
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null()).and_(~pl.col(match_col).list.contains(f"(?i){key}").any())
+			else:
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 			#found_a_match = pl.col(match_col).list.contains(f"(?i){key}").any() # doesn't properly match substrings
 			found_a_match = pl.col(match_col).list.eval(pl.element().str.contains(f"(?i){key}")).list.any()
 		elif not substrings and polars_df.schema[match_col] == pl.Utf8:
+			if overwrite_forbids is not None:
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null()).and_(~pl.col(match_col).is_in(overwrite_forbids))
+			else:
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 			found_a_match = pl.col(match_col).str.to_lowercase() == key.lower()
 		elif not substrings and polars_df.schema[match_col] == pl.List(pl.Utf8):
+			if overwrite_forbids is not None:
+				self.logging.warning("overwrite_forbids is ambigious when the match column is a list; will attempt to apply across entire list")
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null()).and_(~pl.col(match_col).list.contains(f"(?i){key}").any())
+			else:
+				allowed_to_overwrite = (pl.lit(overwrite) == True).and_(pl.lit(value).is_not_null())
 			found_a_match = pl.col(match_col).list.eval(pl.element().str.to_lowercase() == key.lower()).list.any()
 		else:
 			# should never happen due to dictionary_match()'s assert
-			self.logging.error(f"Invalid type {polars_df.schema[match_col]} for match_col named {match_col}, cannot do matching")
+			self.logging.error(f"Invalid schema {polars_df.schema[match_col]} for match_col named {match_col}, cannot do matching")
 			raise TypeError
 
 		if remove_match_from_list and polars_df.schema[match_col] == pl.List(pl.Utf8):
@@ -606,6 +618,7 @@ class ProfessionalsHaveStandards():
 		progress_bar=TQDM_ENABLE,     # True: Show a cute little progress bar (can turn off universally in configuration)
 		progress_bar_desc="Standardizing...", # Progress bar description (no-op if !progress_bar)
 		parallelize=True,              # True: Batch searches in groups of five (experimental but way quicker)
+		overwrite_forbids=[],          # If overwrite, do not overwrite if write_col equals a value in this list
 		only_replace_substring=False): # True: Use polars contains_any() and replace_many() behavior, NOT RECOMMENDED FOR MOST USE CASES
 		"""
 		Replace a pl.Utf8 or pl.List(pl.Utf8) column's values with the values in a dictionary per its key-value pairs.
@@ -649,11 +662,11 @@ class ProfessionalsHaveStandards():
 		# actually do the matching
 		if parallelize and not status_cols:
 			polars_df = self._parallelize(polars_df, match_col, write_col, dictionary, 
-				substrings, overwrite, retain_input, remove_match_from_list, expr_write_col_is_empty, progress_bar=progress_bar, progress_bar_desc=progress_bar_desc)
+				substrings, overwrite, retain_input, remove_match_from_list, expr_write_col_is_empty, overwrite_forbids, progress_bar=progress_bar, progress_bar_desc=progress_bar_desc)
 		else:
 			for key, value in tqdm(dictionary.items(), desc=progress_bar_desc, ascii=TQDM_MOO, bar_format=TQDM_FRMT, disable=(not progress_bar)):
 				expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match = self._setup_kv_expressions(polars_df, match_col, write_col, key=key, value=value, 
-					substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list)
+					substrings=substrings, overwrite=overwrite, remove_match_from_list=remove_match_from_list, overwrite_forbids=overwrite_forbids)
 				polars_df = self._kv_match(polars_df, match_col, write_col, key, value, status_cols,
 					expr_allowed_to_overwrite, expr_filter_exp, expr_found_a_match, expr_matched_false, expr_write_col_is_empty, expr_written_false)
 		return polars_df
