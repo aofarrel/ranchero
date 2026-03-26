@@ -10,6 +10,7 @@
 
 # 1) Whole-string matching, case sensitive, no regex
 nulls_CSV = [
+	'-',
 	'missing','Missing','MISSING',
 	'n/a','N/A',
 	'nan','Nan','NaN','NAN',
@@ -19,18 +20,17 @@ nulls_CSV = [
 	'Not available','Not Available','not available',
 	'not available: not collected',
 	'not collected','Not collected','Not Collected','NOT COLLECTED',
+	'not determined',
 	'not known','Not Known', 'Not known',
 	'not present',
 	'Not Provided','Not provided',
 	'Not recorded',
 	'Not specified','not specified',
 	'null','Null',
-    'nan',
-    'not determined',
-	'-',
 	'uncalculated',
 	'Unknown','unknown',
 	'unspecified','Unspecified',
+    'nan'
 ]
 
 # 2) Anywhere-in-string matching, case insensitive, no regex
@@ -39,16 +39,16 @@ nulls_pl_contains_any = [
 	'missing',
 	'n/a',
 	'no data',
-    'none',
-	'not abblicable',
-	'not applicable',
-	'Non applicable',
+	'No source specified',
+	'none',
+	'not abblicable','not applicable','Non applicable',
 	'Not available',
 	'not collected',
 	'not determined',
 	'not known',
 	'Not Provided',
 	'Not recorded',
+	'Not reported',
 	'Not specified',
 	'null',
 	'uncalculated',

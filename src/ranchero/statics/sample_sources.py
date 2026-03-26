@@ -4,13 +4,14 @@ exact_replacements = {
 	'abdomen': 'abdomen',
 	'back': 'back',
 	'BAL': 'bronchoalveolar lavage',
-	'Bed': 'environmental (bed)',
+	'Bed': 'bed',
 	'Blood C&S': 'blood (C&S)',
 	'blood': 'blood',
 	'bone': 'bone',
 	'brain': 'brain',
 	'breast': 'breast',
 	'bronchial': 'bronchial',
+	'Bronchial Wash (Lavage)': 'bronchial wash', # this one is ambigious but I'm gonna assume wash
 	'clinic': 'hospital',
 	'Clinical': 'clinical',
 	'Coastline': 'coastline',
@@ -36,6 +37,8 @@ exact_replacements = {
 	'leg': 'leg',
 	'Lip': 'lip',
 	'lung': 'lung', # also in more generic match since specifics of lobes hella common
+	'Medical Device': 'medical device (unspecified)',
+	'Nares/Axilla': 'nares and/or axilla', # very common for Candida, prevent fuzzy match for Nares/Axilla/Groin
 	'ocean': 'ocean',
 	'Ostomy': 'ostomy',
 	'Pleural Fluid': 'pleural fluid',
@@ -54,6 +57,7 @@ exact_replacements = {
 	'toe': 'foot',
 	'Toenail': 'foot',
 	'Urine': 'urine',
+	'Urine, Catheter': 'urine (catheter)',
 	'wastewater': 'wastewater',
 	'water': 'water',
 	'whole organism': 'whole organism',
@@ -67,6 +71,7 @@ if_this_and_that_then = [
 	['(?i)single colony', '(?i)lab', 'culture (single-colony) from lab stock'],
 
 	# generic culture + tissue
+	['(?i)culture', '(?i)cell', 'culture (cell)'],
 	['(?i)culture', '(?i)sputum', 'culture from sputum'],
 	['(?i)culture', '(?i)blood', 'culture from blood'],
 	['(?i)culture', '(?i)\bbronch.*lavage', 'culture from bronchoalveolar lavage'],
@@ -126,20 +131,11 @@ comprehensive_fuzzy = {
 	'Laboratory experiment': 'experimental (unspecified)',
 	'laboratory evolution': 'experimental evolution',
 
-	# tubes
-	'nephrostomy': 'nephrostomy',
-	'tracheostomy': 'tracheostomy',
-	'cholecystostomy': 'cholecystostomy',
-	'exit site (dialysis)': 'dialysis exit site',
-	'dialysis catheter': 'catheter (dialysis)',
-	'Catheter': 'catheter',
-	'Catheter Tip': 'catheter',
-	'Driveline': 'driveline',
-
 	# miscellanous highly specific stuff
 	'Aquarium': 'aquarium',
 	'Archaeological': 'archaeological',
 	'biofilm': 'biofilm',
+	'Bed rails': 'bed rails',
 
 
 	### The Fluid Zone ###
@@ -152,6 +148,7 @@ comprehensive_fuzzy = {
 	'BAL RUL': 'bronchoalveolar lavage',
 	'BAL_RUL': 'bronchoalveolar lavage',
 	'BAL fluid': 'bronchoalveolar lavage',
+	'Lavage - Bronchial': 'bronchoalveolar lavage',
 	'\bbronch.*lavage': 'bronchoalveolar lavage',
 	'bronchialLavage': 'bronchoalveolar lavage',
 	'broncho-alveolar lavage': 'bronchoalveolar lavage',
@@ -162,14 +159,17 @@ comprehensive_fuzzy = {
 	'Bronch_Asp': 'bronchoalveolar aspirate',
 	'tracheal aspirate': 'tracheal aspirate', # TODO: why is "Trachael Aspirate" not matching?
 	'Trach_Asp': 'tracheal aspirate',
+	'Trac Asp': 'tracheal aspirate',
 	'aspirate trachy': 'tracheal aspirate',
 	'BRONCH_WSH': 'bronchial wash',
+	'Washing, Bronchial': 'bronchial wash',
 	'bronchial wash': 'bronchial wash',
 	# CSF
 	'Cerebospinal fluid': 'cerebrospinal fluid',
 	'cerebrospinal fluid': 'cerebrospinal fluid',
 	'cerebrospinalFluid': 'cerebrospinal fluid',
 	'cerebral spinal fluid': 'cerebrospinal fluid',
+	'Deep fluid spine': 'cerebrospinal fluid (deep puncture)',
 	# gastric
 	'Gastric lavage': 'gastric lavage',
 	'aspirate gastric': 'gastric aspirate',
@@ -179,7 +179,7 @@ comprehensive_fuzzy = {
 	'gastric fluid': 'gastric fluid',
 	# snot
 	'mucus': 'mucus',
-	'nasal swab': 'mucus (nasal swab)',
+	'nasal swab': 'mucus (nasal swab)', # i mean this could be external I guess?
 	# sputum
 	'AFB sputum smear': 'sputum (AFB smear)',
 	'sputum throat swab': 'sputum (throat swab)',
@@ -197,7 +197,7 @@ comprehensive_fuzzy = {
 	# blood
 	'Blood C&S': 'blood (C&S)',
 	'blood': 'blood',
-	# piss
+	# piss ('Urine, Catheter' already considered in exact match)
 	'urine': 'urine',
 	'Urine, Clean Catch': 'urine',
 	'Uriine': 'urine',
@@ -207,18 +207,22 @@ comprehensive_fuzzy = {
 	'phlegm': 'phlegm',
 	'Peritoneal dialysate': 'dialysate (peritoneal)',
 	'dialysate': 'dialysate',
+	'Respiratory secretions': 'secretion (respiratory)',
+	'Liver Perfusate': 'perfusate (liver)',
 
 	# candida-specific body parts, in a specific body part
-	'Nares/Axilla': 'nares and/or axilla',
 	'Nares/Axilla/Groin': 'nares/axilla/groin',
+	'axilla, groin and nares': 'nares/axilla/groin',
+	'axilla/groin': 'axilla and/or groin', # very common for Candida
 	'axilla and groin': 'axilla and/or groin', # very common for Candida
-	'axilla/groin': 'axilla and/or groin',     # very common for Candida
 	'Axilliae': 'axilla',
 	'axilla': 'axilla',
 	'underarm': 'axilla',
 	'groin': 'groin',
 	'Scrotal': 'groin (scrotum)',
+	'scrotum': 'groin (scrotum)',
 	'nares': 'nares',
+	'SWAB_SKIN': 'skin swab',
 
 	# lab stuff
 	'laboratory reference strain': 'laboratory strain (reference)',
@@ -236,9 +240,11 @@ comprehensive_fuzzy = {
 	'abscess': 'abscess',
 	'caseum': 'caseous mass',
 	'CaseousMasses': 'caseous mass',
+	'Decubitus': 'decubitus', # needs to be before ulcer
 	'lesion': 'lesion',
 	'wound': 'wound',
 	'Ulcer': 'ulcer',
+	'cyst': 'cyst',
 
 	# lymph nodes (specific)
 	'Cervical lymph': 'lymph node (cervical)',
@@ -265,36 +271,80 @@ comprehensive_fuzzy = {
 	'Psoas': 'muscle (psoas)',
 	'muscle': 'muscle',
 
+	# incisions
+	'icd pocket': 'ICD pocket',
+	'incision': 'incision',
+
 	# i dont even want to know
 	'Drainage': 'drainage',
 	'excreted bodily substance': 'excreted bodily substance (unspecified)',
 	'body fluid': 'bodily fluid (unspecified)',
 	'Biofluids': 'bodily fluid (unspecified)',
-
-	# lungscore?
-	'PULMONARY': 'pulmonary',
+	'BODY_FLUID': 'bodily fluid (unspecified)',
+	'Fluid, Body, NOS': 'bodily fluid (unspecified)',
+	'Fluid body': 'bodily fluid (unspecified)',
 
 	# locations
 	'farmland': 'farm',
 	'ocean': 'ocean',
-	'hospital': 'hospital', # also matches "hospitalized"
+	'hospitalized': 'clinical', # avoid 'hospital' fuzzy matching 'hospitalized'
+	'hospital': 'hospital',
 	'air from': 'air',
 
-	'Negative Control': 'negative control',
-	'PCR product': 'PCR product',
+	# tubes
+	'nephrostomy': 'nephrostomy',
+	'tracheostomy': 'tracheostomy',
+	'cholecystostomy': 'cholecystostomy',
+	'exit site (dialysis)': 'dialysis exit site',
+	'Exit site (dialysis)': 'dialysis exit site',
+	'dialysis catheter': 'catheter (dialysis)',
+	'Catheter': 'catheter', # ('Urine, Catheter' already considered in exact match)
+	'Catheter Tip': 'catheter',
+	'Driveline': 'driveline',
+	'stent': 'stent', # beware in-word matches
 
 	### Everything here is last for good reason ###
 	# organs / body parts
+	'bladder': 'bladder',
 	'Testicle': 'testes',
 	'Intra-abdominal tissue': 'intra-abdominal tissue',
 	'homogenized mouse spleen': 'homogenized mouse spleens', # standardize singular/plural
 	'Vaginal': 'vaginal',
 	'spleen': 'spleen',
 	'lung': 'lung',
+	# head
+	'Scalp': 'scalp',
+	'sphenoid': 'head (sphenoid)', # reclassify to bone?
+	# leg 
+	'foot': 'foot',
+	'toe': 'foot',
+	'heel': 'foot',
+	'ankle': 'foot',
+	'Metatarsal': 'foot (metatarsal)', # reclassify to bone?
+	'knee': 'leg (knee)',
+	'leg': 'leg',
+	'buttock': 'buttock',
+	'hip': 'hip',
+	'thigh': 'thigh',
+	# arm -- MUST come after "underarm" and "farm"
+	'elbow': 'arm (elbow)',
+	'arm': 'arm',
+	'wrist': 'hand',
+	'Thumb': 'hand',
+	'Shoulder': 'shoulder',
 
 	# fungus/culture
 	'mycleia': 'mycelium',
 	'spherule': 'spherule',
+
+	# doesn't really name the source
+	'Negative Control': 'negative control',
+	'PCR product': 'PCR product',
+
+	# lungscore?
+	'PULMONARY': 'pulmonary',
+	'Respiratory': 'pulmonary',
+	'Resp': 'pulmonary',
 
 	# super generic
 	'clinical strain': 'clinical strain',
@@ -304,28 +354,31 @@ comprehensive_fuzzy = {
 	'patient': 'clinical',
 	#'hospital': 'clinical', # could be patient, could be environmental
 	'diagnostic sample': 'clincal (diagnostic sample)',
-	'culture': 'culture',
+	'culture': 'culture (unspecified)',
 	'Environmental': 'environmental',
 	'Biopsy': 'biopsy',
 	'Biopsie': 'biopsy',
 	'Secretion': 'secretion',
 	'swab': 'swab',
+	'bone': 'bone',
+	'tissue': 'tissue (unspecified)',
 
 	# culture stuff -- should be done last, as many pathogens are "culture from X body part"
 	'lawn on agar plate': 'culture (lawn/sweep)',
 	'sweep': 'culture (lawn/sweep)',
 	'single colony': 'culture (single colony)',
 	'single cell': 'single cell',
-	'in vitro': 'culture',
-	'in-vitro': 'culture',
-	'bacterial suspension': 'culture',
+	'in vitro': 'culture (unspecified)',
+	'in-vitro': 'culture (unspecified)',
+	#'bacterial suspension': 'culture', # let's just leave that one as is
 	
 }
 
+standardized_values = set(list(exact_replacements.values()) + list(comprehensive_fuzzy.values()) + [lst[2] for lst in if_this_and_that_then])
+
 # Anything isolation_source that wholestring exact matches a value in these lists
 # will have that match nulled.
-
-exact_null_this_silliness = [
+exact_null_nonsensical = [
 	'1',
 	'?',
 	'DNA',
@@ -340,6 +393,7 @@ exact_null_this_silliness = [
 	'no date',
 	'no source',
 	'other',
+	'other source',
 	'strain',
 	'Specimen',
 	'Systemic',
@@ -348,7 +402,7 @@ exact_null_this_silliness = [
 # If you are comparing multiple genra at once, and don't know what genus a particular
 # sample comes from, but somehow have isolation_source, this might be worth not nulling.
 # But by default, these are nulled.
-exact_null_this_generic_stuff = [
+exact_null_generic = [
 
 	# generic bacteria
 	'bacteria',
@@ -361,8 +415,10 @@ exact_null_this_generic_stuff = [
 	'Fungal isolate',
 	'fungal strain',
 	'fungal cell',
+	'fungal isolate, other',
 
 	# Candida / Candidozyma 
+	'Candida auris',
 	'auris',
 	
 	# tuberculosis/MTBC/Mycobacterium genus

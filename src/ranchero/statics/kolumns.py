@@ -34,7 +34,7 @@ equivalence_standard = {
 		'host_commonname': ['host_commonname', 'host_streetname'],
 		'host_scienname': ['host_scienname'],
 		'instrument': ['instrument', 'Instrument'],
-		'isolation_source': ['isolation_source', 'sample_type_sam_ss_dpl131', 'sample_source', 'tissue_sam_ss_dpl145', 'env_medium_sam', 'host_tissue_sampled_sam_s_dpl239', 'isolation_source_sam', 'isolation_type_sam', 'isolation_source_sam_ss_dpl261', 'isolation_source_host_associated_sam_s_dpl264', 'specimen_sam', 'culture_collection_sam_ss_dpl468', 'host_body_product_sam', 'bio_material_sam', 'tissue_source_sam', 'subsource_note_sam', 'env_biome_sam', 'env_feature_sam', 'env_material_sam', 'source_name_sam', 'isolation_source_host_associated_sam_s_dpl263', 'plant_product_sam', 'isolation_source_run', 'sample_type_run_s_dpl517', 'isolate_run', 'sample_type_exp'],
+		'isolation_source': ['isolation_source', 'sample_type_sam_ss_dpl131', 'sample_source', 'organism_part_sam', 'tissue_sam_ss_dpl145', 'env_medium_sam', 'host_tissue_sampled_sam_s_dpl239', 'isolation_source_sam', 'isolation_type_sam', 'isolation_source_sam_ss_dpl261', 'isolation_source_host_associated_sam_s_dpl264', 'specimen_sam', 'culture_collection_sam_ss_dpl468', 'host_body_product_sam', 'bio_material_sam', 'tissue_source_sam', 'subsource_note_sam', 'env_biome_sam', 'env_feature_sam', 'env_material_sam', 'source_name_sam', 'isolation_source_host_associated_sam_s_dpl263', 'plant_product_sam', 'isolation_source_run', 'sample_type_run_s_dpl517', 'isolate_run', 'sample_type_exp'],
 		'isolation_source_cleaned': ['isolation_source_cleaned'],
 		'isolation_source_raw': ['isolation_source_raw'],
 		'isolate_sam_ss_dpl100': ['isolate_sam_ss_dpl100'], # this has special handling due to usually being a sample name, but sometimes being actually useful isolation source information
@@ -46,7 +46,7 @@ equivalence_standard = {
 		'libraryselection': ['libraryselection', 'LibrarySelection'],
 		'librarysource': ['librarysource', 'LibrarySource'],
 		'lineage': ['lineage', 'lineage_sam', 'linege_sam', 'mtb_lineage_sam', 'subspecf_gen_lin_sam', 'literature_lineage', 'note_sam'],
-		'organism': ['organism', 'sub_species_sam', 'organism_sciname', 'organism_common', 'organism_sam', 'tax_id_sam_ss_dpl29', 'subspecies_sam', 'Organism', 'scientific_name_sam', 'species_sam', 'common_name_sam', 'type_material_sam', 'mycobacterium_type_result_result_sam', 'phenotype_sam', 'scientific_name_run', 'common_name_run'],
+		'organism': ['organism', 'sub_species_sam', 'organism_sciname', 'organism_common', 'organism_sam', 'tax_id_sam_ss_dpl29', 'subspecies_sam', 'Organism', 'scientific_name_sam', 'species_sam', 'common_name_sam', 'type_material_sam', 'mycobacterium_type_result_result_sam', 'phenotype_sam', 'scientific_name_run', 'common_name_run', 'component_organism_sam'],
 		'platform': ['platform', 'Platform'], # platform_sam and platform_run seem to be something else
 		'primary_search': ['primary_search'],
 		'region': ['region'],

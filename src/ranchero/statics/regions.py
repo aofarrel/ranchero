@@ -52,7 +52,7 @@ regions_to_smaller_regions = {
 	"AKAROA": "Akaroa",
 	"AMBERLEYHILLS": "Amberley Hills",
 	"Beijing-": "Beijing",
-	"Blood - human Isolation date: September 26, 1989": None,
+	#"Blood - human Isolation date: September 26, 1989": None,
 	"BRONX": "Bronx", # not necessarily new york
 	"Capetown_": "Capetown",
 	"CHEVIOTHILLS": "Cheviot Hills",
@@ -117,9 +117,9 @@ regions_to_smaller_regions = {
 	"Zoo-": "Zoo",
 
 	# DO THESE ONES LAST
-	"Cote d'Ivoire": None,
-	"Côte d'Ivoire": None,
-	"Cote d''Ivoire": None
+	#"Cote d'Ivoire": None,
+	#"Côte d'Ivoire": None,
+	#"Cote d''Ivoire": None
 
 }
 

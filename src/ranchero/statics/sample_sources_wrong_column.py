@@ -49,7 +49,8 @@ exact_two_column_writes = {
 		'human': ['patient', 'Homo sapiens'],
 		'patient': ['patient', 'patient'], # mid-confidence
 		'isolate frome children': ['patient (pediatric)', 'Homo sapiens'],
-		'Otaria flavescens': ['vetrinary', 'Otaria flavescens']}
+		'Otaria flavescens': ['vetrinary', 'Otaria flavescens'],
+		'Locustana pardilana (brown locust)': ['vetrinary', 'Locustana pardilana']}
 }
 
 substring_two_column_writes = {
