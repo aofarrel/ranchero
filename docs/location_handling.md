@@ -19,7 +19,6 @@ In attempt to handle the complexity of these situations, Ranchero first uses a l
 	* We convert a handful of commonly used non-ISO 3166 acronyms
 	* If a country's name has changed sometime after the late-20th century, match upon the old and new name
 3. Continents are assigned according to NCBI standards, which means every country is assigned to precisely one continent
-	* For example, NCBI considers Russia to be in the continent of Europe and Panama to be in the continent of North America
 4. We use "region" as a generic term to mean anything smaller than a country, including state, county, city, village, etc
 5. Any location-based data that fails to match a country or continent, that isn't otherwise eliminated for ambiguity, is considered a region
 6. Ambiguity is handled on a case-by-case basis (see below for specific examples)
@@ -32,20 +31,25 @@ For more information about precisely how matching is performed, such as the orde
 ### "Take the submitter at their word" exceptions
 A small handful of common typos (or variations arising from language differences) are converted to their most likely intended value. For example, "Ethopia" is considered a typo for "Ethiopia".
 
-#### Special handling for [Côte d'Ivoire (Ivory Coast)](https://en.wikipedia.org/wiki/Ivory_Coast)
+### NCBI Continent Standards
+NCBI only assigns one continent to country. Russia is considered to be in Europe, and Panama is considered to be in North America. NCBI declares Oceania to be a continent that includes Australia as well as many nearby islands.
+
+### Special handling for [Côte d'Ivoire (Ivory Coast)](https://en.wikipedia.org/wiki/Ivory_Coast)
 There is an apostrophe, a space, and an ô in Côte d'Ivoire (CIV), which a lot of software struggle to handle -- including the software used by submitters. As such, there are many variations in this particular country's name, such as `Cote D Ivoire`, `Cote d\'Ivoire` (with literal \ included in the plaintext file), and `IVORY_COAST`. In attempt to cover all possible variations, and with the knowledge "Ivory" is not common in location names, Ranchero will convert anything matching the substring `Ivory` or `Ivoire` to CIV.
 
-#### Special handling for countries with substring matches
+### Special handling for countries with substring matches
 Substring matches are surprisingly important for NCBI data, which quite frequently is in "Country: Region" or "Country, Region" or "Region (Country)" format, and due to the limitations of polars' interpretation of regular expressions. However, extra care is needed for a handful of countries with problematic substring matches, for example:
 * `Guinea` --> wholestring match is assumed to be Guinea (GIN), avoid substring matches to Papua New Guinea (PNG), Guinea-Bissau (GNB), and Equatorial Guinea (GNQ)
 * `Mali` --> avoids substring matches to avoid matches with So**mali**a and So**mali**land
 * `Mexico` --> avoids substring matches to avoid matches with the US state New Mexico
 
-#### Special handling for Democratic Republic of the Congo/Republic of Congo
+Similar logic applies to [Sudan](https://en.wikipedia.org/wiki/Sudan) and [South Sudan](https://en.wikipedia.org/wiki/South_Sudan), the Virgin Islands, [Samoa](https://en.wikipedia.org/wiki/Samoa) and [American Samoa](https://en.wikipedia.org/wiki/American_Samoa), etc
+
+### Special handling for Democratic Republic of the Congo/Republic of Congo
 The [Democratic Republic of the Congo](https://en.wikipedia.org/wiki/Democratic_Republic_of_the_Congo) (henceforth COD) and the [Republic of Congo](https://en.wikipedia.org/wiki/Republic_of_the_Congo) (henceforth COG) are frequently confused. Further complicating matters is the fact that COG's full name is a substring of COD's full name, and "the Congo" is sometimes informally used to mean either. As such we need special rules for this region.
-* We assume submitters who write "Republic of Congo" do indeed mean COG, even though it is possible they actually meant "Democratic Republic of Congo" (COD)
+* We assume submitters who write "Republic of Congo" (exact match, no "Democratic" in front) do indeed mean COG, even though it is possible they actually meant "Democratic Republic of Congo" (COD)
 	* Justification: If we do not do this, essentially no COG samples will be identified. Furthermore, this follows the principle of "take the submitter at their word."
-* We consider "Republic of Congo" and "Republic of the Congo" (without "Democratic" in front) to both be COG
-* We consider "DRC" to be Democratic Republic of the Congo (COD)
+* We consider exact wholestring matches to "Republic of Congo" and "Republic of **the** Congo" to both be COG
+* We consider "DRC" to be a shorthand for **D**emocratic **R**epublic of the **C**ongo and per our ISO 3166 rules convert it to COD
 * We consider "Congo" and "the Congo" on its own to be too ambiguous and assign them no country code, even though "Congo" is often used for COG and "the Congo" is often used for COD, as these names are too frequently flipped to assign with confidence
 
