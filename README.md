@@ -4,7 +4,7 @@ Is your mycobacterial metadata a mess? Grab the *M. bovis* by the horns with Ran
 Ranchero is a Python solution to the dozens of different metadata formats used in genomic datasets. While it is specifically focused on NCBI's collection of *Mycobacterium tuberculosis complex* metadata, it still has utility for other organisms. For information on what Ranchero considers "a sample" and the like, see [./docs/data_structure.md](./docs/data_structure.md). 
 
 > [!NOTE]  
-> Ranchero should be considered pre-release software, and is currently undergoing a cleanup/refactor. More extensive documentation and examples will be provided once this cleanup is complete.
+> Ranchero should be considered pre-release software, and is undergoing a cleanup/refactor as time allows. More extensive documentation and examples will be provided once this cleanup is complete.
 
 In addition to housing Ranchero itself, this repo also contains the scripts used to generate metadata TSVs for various pathogens UCSC is keeping an eye on, such as the metadata used to annotated [the Taxonium SRA tree for *Mycobacterium tuberculosis complex*](https://taxonium.org/tuberculosis/SRA?xType=x_dist). You can find those scripts in [./compilations](./compilations). 
 
@@ -18,12 +18,12 @@ In addition to housing Ranchero itself, this repo also contains the scripts used
     * (MTBC only) Convert old-school strain names (Beijing, LAM, etc) to the modern lineage system (L2.2.1, L4.3, etc)
  * Input a TSV of metadata to "inject" into an existing dataframe, optionally overriding metadata already present
  * Convert all of those "missing," "not collected," and "Not Applicable" strings into proper null values
- * Convert countries into three-letter country codes per [ISO 3166](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes)
+ * Convert countries into three-letter country codes per [ISO 3166](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes), following [a consistent set of standards](./docs/location_handling.md), with special handling for tricky cases (such as all four countries that contain the word "Guinea")
  * Convert dates to YYYY-MM-DD format into an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)-like format
  * Convert common host animal names to the standardized *Genus species* format when possible, as well a common name and confidence score
 
  ## Installation
- Because ranchero currently relies on a very specific version of polars, it is recommended to install it a [venv](https://docs.python.org/3/library/venv.html) like this:
+ Because ranchero currently relies on a very specific version of polars for consistent handling of null values, it is recommended to install it a [venv](https://docs.python.org/3/library/venv.html) like this:
  ```
  python3 -m venv ./buildvenv
  source buildvenv/bin/activate
