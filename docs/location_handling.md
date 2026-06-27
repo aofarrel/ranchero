@@ -12,7 +12,7 @@ Standardizing location-based metadata has several headaches:
 * Some countries (such as Russia) are often considered part of multiple continents
 * Sometimes, NCBI uploaders will interpret commonly used NCBI fields referencing "location" to mean the location of the body a sample was isolated, rather than geographic location
 
-In attempt to handle the complexity of these situations, Ranchero first uses a list of common NCBI column names to gather all of the most common columns used for geographic location, as determined by statics/kolumns.py, then does string matching along these principles:
+In attempt to handle the complexity of these situations, Ranchero first uses a list of common NCBI column names to gather all of the most common columns used for geographic location, as classified in [/src/ranchero/statics/kolumns.py](/src/ranchero/statics/kolumns.py), then does string matching along these principles:
 1. Take the submitter at their word, unless it's too ambiguous or a clear mistake
   * That is to say: If a submitter says a sample is from location X, we treat it as if it is from location X, regardless of current borders
 2. If we find a match to a geopolitical entity with a widely-used ISO 3166 country code, we consider that to be the value of "country," and convert it to that ISO 3166 code
