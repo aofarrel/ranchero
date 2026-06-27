@@ -26,7 +26,7 @@ equivalence_standard = {
 		'date_collected_month': ['date_collected_month', 'collection_month_sam'],
 		'date_collected_day': ['date_collected_day', 'samplingday_sam'],
 		'date_sequenced': ['run_file_create_date', 'run_date_run'],
-		'genotype': ['genotype', 'genotype_sam_ss_dpl92', 'genotype_variation_sam', 'spoligotype_sam',  'mlva___spoligotype_sam', 'vntr_sam', 'serotype_sam', 'serovar_sam', 'orgmod_note_sam_s_dpl305', 'atpe_mutation_sam', 'rv0678_mutation_sam', 'mutant_sam', 'subtype_sam', 'pathotype_sam', 'subgroup_sam', 'arrayexpress_species_sam'],
+		'genotype': ['genotype', 'genotype_sam_ss_dpl92', 'genotype_variation_sam', 'spoligotype_sam',  'mlva___spoligotype_sam', 'vntr_sam', 'serotype_sam', 'serovar_sam', 'orgmod_note_sam_s_dpl305', 'atpe_mutation_sam', 'rv0678_mutation_sam', 'mutant_sam', 'subtype_sam', 'pathotype_sam', 'subgroup_sam', 'cultivar'],
 		'geoloc_info': ['geo_loc_name_country', 'geo_loc_name_country_calc', 'geoloc_country_calc', 'isolation_country_sam', 'country_sam', 'geographic_location__country_and_or_sea__sam', 'geoloc_country_or_sea', 'geo_loc_name_country_continent', 'geographic_location_sam_s_dpl93', 'geo_loc_name_country_continent_calc', 'geo_loc_name_sam', 'geographical_location_sam', 'geo_loc_name_sam_s_dpl209', 'geographic_location__region_and_locality__sam', 'geographic_location__country_and_or_sea__region__sam', 'geographic_location__countryand_orsea_region__sam', 'region_sam', 'geoloc_country_or_sea_region', 'isolation_site_sam', 'geo_loc_name_run', 'geographic_location__country_and_or_sea__run'], # doi_location_sam and geo_accession_exp should be lowest priority
 		'host': ['host', 'host_sciname', 'host_sam', 'host_taxid_sam', 'specific_host_sam', 'host_common', 'host_common_name_sam', 'host_run', 'host_scientific_name_sam', 'host_taxon_id_sam', 'host_common_name_run', 'host_scientific_name_run'],
 		'host_disease': ['host_disease', 'disease', 'disease_sam', 'host_disease_sam'],
@@ -46,10 +46,10 @@ equivalence_standard = {
 		'libraryselection': ['libraryselection', 'LibrarySelection'],
 		'librarysource': ['librarysource', 'LibrarySource'],
 		'lineage': ['lineage', 'lineage_sam', 'linege_sam', 'mtb_lineage_sam', 'subspecf_gen_lin_sam', 'literature_lineage', 'note_sam'],
-		'organism': ['organism', 'sub_species_sam', 'organism_sciname', 'organism_common', 'organism_sam', 'tax_id_sam_ss_dpl29', 'subspecies_sam', 'Organism', 'scientific_name_sam', 'species_sam', 'common_name_sam', 'type_material_sam', 'mycobacterium_type_result_result_sam', 'phenotype_sam', 'scientific_name_run', 'common_name_run', 'component_organism_sam'],
+		'organism': ['organism', 'sub_species_sam', 'organism_sciname', 'organism_common', 'organism_sam', 'tax_id_sam_ss_dpl29', 'arrayexpress_species_sam', 'subspecies_sam', 'Organism', 'scientific_name_sam', 'species_sam', 'common_name_sam', 'type_material_sam', 'mycobacterium_type_result_result_sam', 'phenotype_sam', 'scientific_name_run', 'common_name_run', 'component_organism_sam'],
 		'platform': ['platform', 'Platform'], # platform_sam and platform_run seem to be something else
 		'primary_search': ['primary_search'],
-		'region': ['region'],
+		'region': ['region', 'city_sam'],
 		'sra_study': ['sra_study', 'SRA Study'], # SRP ID
 		'strain': ['strain', 'strain_sam_ss_dpl139', 'strain_name_alias_sam', 'strain_geno', 'sub_strain_sam_s_dpl389', 'strain_genotype_sam_s_dpl382', 'cell_line_sam', 'cell_line_run'],
 }

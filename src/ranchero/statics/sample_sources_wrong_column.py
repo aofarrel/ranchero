@@ -9,7 +9,7 @@ exact_one_column_writes = {
 	# hit, remove that match from isolation_source, and put "NZL", "PAK", or "VNM"
 	# respectively in the "country" column.
 
-	"country": {'New Zealand':'NZL', 'Pakistan':'PAK', 'Viet Nam':'VNM'},
+	"country": {'Colombia':'COL', 'New Zealand':'NZL', 'Pakistan':'PAK', 'South Africa': 'ZAF', 'Viet Nam':'VNM'},
 	"region": {'Lima':'Lima', 'veracruz':'Veracruz'},
 	"host_disease":
 		{'TB': 'unspecified TB',

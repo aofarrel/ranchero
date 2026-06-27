@@ -505,16 +505,27 @@ class FileReader():
 
 	def fix_bigquery_file(self, bq_file):
 		out_file_path = f"{os.path.basename(bq_file)}_modified.json"
-		with open(bq_file, 'r') as in_file:
+		with open(bq_file, 'r', encoding='utf-8', errors='replace') as in_file:
 			lines = in_file.readlines()
-		with open(out_file_path, 'w') as out_file:
-			out_file.write("[\n")
+		with open(out_file_path, 'w', encoding='utf-8') as out_file:
+			if lines[0] != '[\n':
+				out_file.write("[\n")
+			else: # avoid writing extra comma
+				out_file.write(lines[0])
+				lines = lines[1:]
+			dont = False
 			for i, line in enumerate(lines):
-				if i < len(lines) - 1:
+				if line == ']\n':
+					if i == len(lines) or i ==len(lines)-1:
+						out_file.write("]\n")
+						dont = True
+						break
+				if i < len(lines) - 2 and not line.endswith(',\n'):
 					out_file.write(line.strip() + ",\n")
 				else:
 					out_file.write(line.strip() + "\n")
-			out_file.write("]\n")
+			if not dont:
+				out_file.write("]\n")
 		self.logging.warning(f"Reformatted JSON saved to {out_file_path}")
 		return out_file_path
 
@@ -531,15 +542,15 @@ class FileReader():
 		auto_standardize = self._default_fallback("auto_standardize", auto_standardize)
 
 		try:
-			polars_df = pl.read_json(bq_file)
+			polars_df = pl.read_ndjson(bq_file)
 			self.logging.debug(f"{bq_file} has {polars_df.width} columns and {len(polars_df)} rows")
-		except pl.exceptions.ComputeError:
-			self.logging.warning("Caught exception reading JSON file. Attempting to reformat it...")
+		except pl.exceptions.ComputeError as e:
+			self.logging.warning(f"Caught {e} reading JSON file. Attempting to reformat it...")
 			try:
 				polars_df = pl.read_json(self.fix_bigquery_file(bq_file))
 				self.logging.debug(f"Fixed input file has {polars_df.width} columns and {len(polars_df)} rows")
-			except pl.exceptions.ComputeError:
-				self.logging.error("Caught exception reading JSON file after attempting to fix it. Giving up!")
+			except pl.exceptions.ComputeError as e:
+				self.logging.error(f"Caught {e} reading JSON file after attempting to fix it. Giving up!")
 				exit(1)
 		polars_df = polars_df.drop(drop_columns)
 

@@ -14,6 +14,7 @@ sample_ids_that_are_not_uuids = [
 	'uniqueidentifier_sam',
 	'gold_stamp_id_sam',
 	'UNIQUEID',
+	'original_replicate_key_sam'
 	'seek_uid_sam',
 	'doi_location_sam',
 	'sequencing_id_sam',
@@ -111,6 +112,13 @@ sample_ids_that_are_not_uuids = [
 	'uniqueid_sam',
 ]
 
+genetic_material = [
+	'a260_a230_sam',
+	'a260_a280_sam',
+	'ng_ul_sam_s_dpl50',
+	'total_volume_sam',
+]
+
 redundant = [
 	'accession_run',
 	'analysis_type_exp',
@@ -142,6 +150,7 @@ submitter = [
 	'initiative_run',
 	'insdc_center_alias_sam',
 	'insdc_status_sam',
+	'fasta_file_sam',
 	'lab_host_sam_s_dpl270',
 	'sequencing_funding_program_name_run',
 	'submitter_id_sam',
@@ -156,6 +165,10 @@ submitter = [
 	'valentine_gantul_sam',
 	'ranjan_kumar_nanda_sam',
 	'zainal_arifin_mustapha_sam'
+]
+
+sequencing_details = [
+	'adapter_library_sam',
 ]
 
 
@@ -175,6 +188,10 @@ cell_growth_stuff = [
 	'exposure_time_sam',
 	'experimental_factor__growth_condition_exp',
 	'experimental_factor__phenotype_exp',
+	'experimental_factor__adapter_library_exp',
+	'experimental_factor__developmental_stage_exp',
+	'design_description_sam',
+	'condition_sam_ss_dpl69',
 	'extraction_sam',
 	'forward_seq_sam',
 	'growth_condition_sam',
@@ -183,11 +200,14 @@ cell_growth_stuff = [
 	'experimental_factor__dose_exp',
 	'growth_media_sam',
 	'growth_phase_sam_s_dpl215',
+	'medium_type_sam',
 	'growth_protocol_sam_s_dpl216',
+	'time_point_sam',
 	'batch_sam_s_dpl12',
 	'host_subject_id_sam',
 	'individual_sam',
 	'isol_growth_condt_sam',
+	'temperature_sam',
 	'culture_collection_sam_ss_dpl150',
 	'library_id_sam',
 	'num_replicons_sam',
@@ -233,8 +253,11 @@ other = [
 	'arrayexpress_strain_or_line_sam',
 	'nominal_length_run',
 	'generations_sam',
+	'sequenced_by_sam',
 	'additional_information_sam',
 	'sequencing_method_sam',
+	'treated_sam',
+	'replicates_sam_s_dpl124',
 	'experimental_factor__immunoprecipitate_exp',
 	'exp_sam_s_dpl45',
 	'conc_sam',
@@ -259,6 +282,7 @@ other = [
 	'sample_condition_sam',
 	'aliquot_sam_s_dpl57',
 	'analysis_type_run',
+	'dangling_references_run',
 	'sampling_platform_sam',
 	'antibody_manufacturer_sam',
 	'quality_control_method_version_run',
@@ -393,7 +417,7 @@ other = [
 	'zmw_set_run',
 ]
 
-silly_columns = other + redundant + mildly_problematic + tb_but_not_used + datastore + metadata_dates + sample_ids_that_are_not_uuids + submitter + cell_growth_stuff
+silly_columns = other + redundant + mildly_problematic + tb_but_not_used + genetic_material + sequencing_details + datastore + metadata_dates + sample_ids_that_are_not_uuids + submitter + cell_growth_stuff
 
 clearly_not_tuberculosis = [
 	'abiotrophia_defectiva_species_sam',

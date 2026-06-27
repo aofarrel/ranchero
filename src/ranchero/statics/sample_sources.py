@@ -415,11 +415,13 @@ exact_null_generic = [
 	'Fungal isolate',
 	'fungal strain',
 	'fungal cell',
+	'fungal cells',
 	'fungal isolate, other',
 
 	# Candida / Candidozyma 
 	'Candida auris',
 	'auris',
+	'Candida cells',
 	
 	# tuberculosis/MTBC/Mycobacterium genus
 	'DNA from M. tuberculosis',

@@ -4,6 +4,11 @@
 # * Exact match doesn't need regex flags at it uses pl.when(pl.col(match_column) == f"(?i){key}")
 # * Fuzzy match uses pl.when(pl.col(match_column).str.contains(f"(?i){key}")) 
 
+#exactmatch_ambigious
+# exactmatch_countries_to_continents
+# Called after converting to ISO country codes, this creates a continent column
+#exactmatch_countries_to_continents
+
 exact_match = {
 	'Europe': None,
 	'Guinea': 'GIN',                   # prevent match with PNG, GNB, and GNQ
@@ -143,6 +148,7 @@ countries_to_continents = {
 	'PRK': 'Asia',
 	'PRT': 'Europe',
 	'PRY': 'South America',
+	'QAT': 'Asia',
 	'ROU': 'Europe',
 	'RUS': 'Europe', # per NCBI standard
 	'RWA': 'Africa',
@@ -268,7 +274,6 @@ substring_match = {
 	'Indonesia': 'IDN',
 	'Iran': 'IRN',
 	'Iraq': 'IRQ',
-	'Ireland': 'IRL',
 	'Israel': 'ISR',
 	'Italy': 'ITA',
 	'Ivoire': 'CIV', # workaround for O'Farrell's wrath
@@ -310,7 +315,6 @@ substring_match = {
 	'Nigeria': 'NGA',
 	'North Korea': 'PRK',
 	'North Macedonia': 'MKD',
-	'Northern Ireland': 'GBR',
 	'Northern Mariana Islands': 'MNP',
 	'Norway': 'NOR',
 	'Oman': 'OMN',
@@ -321,9 +325,10 @@ substring_match = {
 	'Papua New Guinea': 'PNG',
 	'Paraguay': 'PRY',
 	'Peru': 'PER',
-	'Philippines': 'PHL', # substring matches The Philipines
+	'Philippines': 'PHL', # substring matches The Philippines
 	'Poland': 'POL',
 	'Portugal': 'PRT',
+	'Qatar': 'QAT',
 	'Romania': 'ROU',
 	'Russia': 'RUS', # substring matches Russian Federation
 	'Rwanda': 'RWA',
@@ -344,12 +349,12 @@ substring_match = {
 	'Swaziland': 'SWZ',
 	'Sweden': 'SWE',
 	'Switzerland': 'CHE',
-	'Syria': 'SYR', # substring matches Syrian Arab Republic
+	'Syria': 'SYR', # substring also matches Syrian Arab Republic
 	'Taiwan': 'TWN',
 	'Tajikistan': 'TJK',
 	'Tanzania': 'TZA',
 	'Thailand': 'THA',
-	'The former Yugoslav Republic of Macedonia': 'MKD', # allows pulling region from SRR9614686 and the like
+	'The former Yugoslav Republic of Macedonia': 'MKD', # already has a substring match but this allows pulling region from SRR9614686 and the like
 	'The Gambia': 'GMB',
 	'Timor Leste': 'TLS',
 	'Timor-Leste': 'TLS',
@@ -375,6 +380,10 @@ substring_match = {
 	'Zambia': 'ZMB',
 	'Zimbabwe': 'ZWE',
 
-	# done last to avoid improper matches to the general continent region of southern africa
-	'South Africa': 'ZAF'
+	# done second-to-last to avoid improper matches to the general continent region of southern africa
+	'South Africa': 'ZAF',
+
+	# please don't get mad at me
+	'Northern Ireland': 'GBR',
+	'Ireland': 'IRL'
 }
