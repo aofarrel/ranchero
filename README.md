@@ -53,3 +53,11 @@ In addition to housing Ranchero itself, this repo also contains the scripts used
  * [polars](https://github.com/pola-rs/polars) for Python == 1.27.0
  * [tqdm](https://github.com/tqdm/tqdm)
  * xmltodict for working with Enterz Direct files
+
+ ## Configuration
+ Ranchero has a lot of options and supports reading a configuration file provided by the user. You can use `ranchero.Configuration.update_config()` to read a yaml file with the expected format (see src/config.yaml for the default config), which will update that instance of Ranchero's options.
+ ```
+ import ranchero
+ ranchero.Configuration.update_config("./src/config.yaml")
+ ```
+
