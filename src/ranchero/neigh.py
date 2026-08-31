@@ -2307,34 +2307,45 @@ class NeighLib:
 				polars_df = self.encode_as_str(polars_df, col)
 		return polars_df
 
-	def add_column(self, polars_df, column, value=None, strict=True, no_warn_on_already_present=False):
-		"""Verbose wrapper for polars_df.with_columns((value).alias(column)), previously called add_column_of_just_this_value()
-		Also replaces older add-column-if-not-there functionality
-		TODO: combine strict and no_warn_on_already_present into ['warn', 'error', 'ignore'] mayhaps"""
+	def add_column(self, polars_df, column, value=None, strict=True, silent=False):
+		"""
+		Essentially a verbose wrapper for polars_df.with_columns((value).alias(column)) that replaces add_column_of_just_this_value()
+		and an older add-column-if-not-there functionality
+
+		strict: behavior if column of that name already exists
+		silent: do not warn if column of that name exists (if existing_column = error that error still fires)
+		--> silent currently is enabled by standardize.py calls to this function
+
+		Does not have an option to call overwrite_column() because type change stuff gets complicated
+		"""
+		expr_value = value if isinstance(value, pl.Expr) else pl.lit(value)
 		if column in polars_df.columns:
 			if strict:
-				self.logging.error(f"Column {column} already in dataframe (pass strict=False to allow this)")
+				self.logging.error(f"Column {column} already in dataframe, erroring due to existing_column='error'")
 				raise ValueError
-			if not no_warn_on_already_present:
-				self.logging.warning(f"Column {column} already in dataframe, no changes will be made -- to overwrite an existing column, use overwrite_column() instead")
-			return polars_df
-		expr_value = value if isinstance(value, pl.Expr) else pl.lit(value)
+			if not silent:
+				self.logging.warning(f"Column {column} already in dataframe, doing nothing due to existing_column='ignore_warn'")
+			return polars_df		
 		return polars_df.with_columns(expr_value).alias(column)
 
-	def drop_column(self, polars_df, column, strict=True):
+	def drop_column(self, polars_df, column, strict=True, silent=False):
 		"""Verbose wrapper for polars.drop()"""
 		if column not in polars_df.columns:
 			if strict:
 				self.logging.error(f"Column {column} not in dataframe (pass strict=False to allow this)")
 				raise ValueError
-			self.logging.warning(f"Column {column} not in dataframe, no changes will be made")
+			if not silent:
+				self.logging.warning(f"Column {column} not in dataframe, no changes will be made")
 			return polars_df
 		return polars_df.drop(column, strict=strict)
 
 	def overwrite_column(self, polars_df, column, value=None, strict=True, allow_type_change=False, no_warn_on_none=False, no_warn_on_type_change=False):
-		"""Overwrite an existing column. This might change the columns polars type."""
-		# TODO: Although polars-style variable name "strict" makes sense for add_column() and drop_column()
-		# in this function it kinda implies allow_type_change() too?
+		"""
+		Overwrite an existing column. This might change the columns polars type.
+		
+		TODO: Although polars-style variable name "strict" makes sense for add_column() and drop_column()
+		in this function it kinda implies allow_type_change() too?
+		"""
 		if column not in polars_df.columns:
 			if strict:
 				self.logging.error(f"Column {column} not in dataframe (pass strict=False to allow this)")

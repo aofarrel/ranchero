@@ -52,8 +52,8 @@ class ProfessionalsHaveStandards():
 			self.logging.info("Standardizing lineage, strain, and mycobacterial scientific names... (this may take a while)")
 			polars_df = self.sort_out_taxoncore_columns(polars_df, force_strings=force_strings)
 		elif add_expected_nulls:
-			polars_df = self.NeighLib.add_column(polars_df, 'organism', value=assume_organism, strict=False, no_warn_on_already_present=True)
-			polars_df = self.NeighLib.add_column(polars_df, 'clade', value=assume_clade, strict=False, no_warn_on_already_present=True)
+			polars_df = self.NeighLib.add_column(polars_df, 'organism', value=assume_organism, strict=False, silent=True)
+			polars_df = self.NeighLib.add_column(polars_df, 'clade', value=assume_clade, strict=False, silent=True)
 
 		if organism_fallback is not None:
 			polars_df = polars_df.with_columns(pl.col('organism').fill_null(organism_fallback))
@@ -453,7 +453,7 @@ class ProfessionalsHaveStandards():
 		])
 
 		# AFTER we have cleaned up very obvious things, from now on, write to a NEW COLUMN to help avoid accidentally overwriting past iterations (eg "culture from sputum" --> "sputum" or "culture")
-		polars_df = self.NeighLib.add_column(polars_df, 'neo_isolation_source', value=None)
+		polars_df = self.NeighLib.add_column(polars_df, 'neo_isolation_source', value=None, strict=True, silent=False)
 
 		for this, that, then in tqdm(sample_sources.if_this_and_that_then, desc="Checking for combo matches", ascii='➖🌱🐄', bar_format='{desc:<25.24}{percentage:3.0f}%|{bar:15}{r_bar}'):
 			this_and_that = pl.col('isolation_source').list.eval(pl.element().str.contains(this)).list.any().and_(pl.col('isolation_source').list.eval(pl.element().str.contains(that)).list.any())
@@ -1033,8 +1033,7 @@ class ProfessionalsHaveStandards():
 		return polars_df
 
 	def continent_from_country(self, polars_df, country_col, continent_col, overwrite=True): # overwrite is true to match standardize_countries() but maybe shouldn't be
-		if continent_col not in polars_df:
-			polars_df = self.NeighLib.add_column(polars_df, continent_col, value=None)
+		polars_df = self.NeighLib.add_column(polars_df, continent_col, value=None, strict=False, silent=True)
 		self.validate_col_country(polars_df, country_col)
 		for ISO3166, continent in countries.countries_to_continents.items():
 			polars_df = self.dictionary_match(polars_df, match_col=country_col, write_col=continent_col, key=ISO3166, value=continent, substrings=False, overwrite=overwrite)
