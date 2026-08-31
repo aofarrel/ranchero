@@ -1312,7 +1312,7 @@ class NeighLib:
 			.select("BioProject").unique().to_series().to_list()
 		)
 	
-	def rancheroize_polars(self,
+	def rancheroize(self,
 			polars_df:  pl.DataFrame,
 			drop_non_mycobact_columns=False,
 			nullify=True,
@@ -1352,8 +1352,8 @@ class NeighLib:
 		output_index:
 			Name of a column currently NOT IN dataframe that you want to rename the index to. If you provide a value that doesn't have INDEX_PREFIX, it
 			will be added on for compatibility purposes. For example:
-			rancheroize_polars(index="run", output_index="runacc")          --> renames "run" to "__index__runacc" (assuming INDEX_PREFIX is __index__)
-			rancheroize_polars(index="run", output_index="__index__runacc") --> renames "run" to "__index__runacc" (assuming INDEX_PREFIX is __index__)
+			rancheroize(index="run", output_index="runacc")          --> renames "run" to "__index__runacc" (assuming INDEX_PREFIX is __index__)
+			rancheroize(index="run", output_index="__index__runacc") --> renames "run" to "__index__runacc" (assuming INDEX_PREFIX is __index__)
 		standardize_index:
 			If index column seems to match something in kolumns.id_columns, rename it to its standardized name in the same way you would rename anything
 			else per kolumns.equivalence.items(). For more examples, see documentation in kolumns.py
@@ -2307,13 +2307,56 @@ class NeighLib:
 				polars_df = self.encode_as_str(polars_df, col)
 		return polars_df
 
-	def add_column_of_just_this_value(self, polars_df, column, value):
-		assert column not in polars_df.columns
-		return polars_df.with_columns(pl.lit(value).alias(column))
+	def add_column(self, polars_df, column, value=None, strict=True, no_warn_on_already_present=False):
+		"""Verbose wrapper for polars_df.with_columns((value).alias(column)), previously called add_column_of_just_this_value()
+		Also replaces older add-column-if-not-there functionality
+		TODO: combine strict and no_warn_on_already_present into ['warn', 'error', 'ignore'] mayhaps"""
+		if column in polars_df.columns:
+			if strict:
+				self.logging.error(f"Column {column} already in dataframe (pass strict=False to allow this)")
+				raise ValueError
+			if not no_warn_on_already_present:
+				self.logging.warning(f"Column {column} already in dataframe, no changes will be made -- to overwrite an existing column, use overwrite_column() instead")
+			return polars_df
+		expr_value = value if isinstance(value, pl.Expr) else pl.lit(value)
+		return polars_df.with_columns(expr_value).alias(column)
 
-	def drop_column(self, polars_df, column):
-		assert column in polars_df.columns
-		return polars_df.drop(column)
+	def drop_column(self, polars_df, column, strict=True):
+		"""Verbose wrapper for polars.drop()"""
+		if column not in polars_df.columns:
+			if strict:
+				self.logging.error(f"Column {column} not in dataframe (pass strict=False to allow this)")
+				raise ValueError
+			self.logging.warning(f"Column {column} not in dataframe, no changes will be made")
+			return polars_df
+		return polars_df.drop(column, strict=strict)
+
+	def overwrite_column(self, polars_df, column, value=None, strict=True, allow_type_change=False, no_warn_on_none=False, no_warn_on_type_change=False):
+		"""Overwrite an existing column. This might change the columns polars type."""
+		# TODO: Although polars-style variable name "strict" makes sense for add_column() and drop_column()
+		# in this function it kinda implies allow_type_change() too?
+		if column not in polars_df.columns:
+			if strict:
+				self.logging.error(f"Column {column} not in dataframe (pass strict=False to allow this)")
+				raise ValueError
+			self.logging.warning(f"Column {column} not in dataframe, no changes will be made -- to add a new column, use add_column() instead")
+			return polars_df
+		if value is None and not no_warn_on_none:
+			self.logging.warning(f"overwrite_column() called with value=None, this will completely null {column}")
+		# actually overwrite
+		# instead of drop and re-add, we will use with_columns() to avoid shuffling columns around
+		original_dtype = polars_df.schema[column]
+		expr_value = value if isinstance(value, pl.Expr) else pl.lit(value)
+		polars_df = polars_df.with_columns(expr_value.alias(column))
+		if original_dtype != polars_df.schema[column]:
+			if not allow_type_change:
+				raise TypeError(
+					f"Setting {column} to value {value} would have changed {column}'s type from {original_dtype} to {new_dtype}, "
+					f"set allow_type_change=True to allow this behavior"
+				)
+			if not no_warn_on_type_change:
+				self.logging.warning(f"Column {column} type changed from {original_dtype} to {new_dtype}")
+		return polars_df
 
 	def drop_null_columns(self, polars_df, and_non_null_type_full_of_nulls=False):
 		polars_df = polars_df.drop(cs.by_dtype(pl.Null))
