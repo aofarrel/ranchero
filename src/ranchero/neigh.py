@@ -2326,7 +2326,7 @@ class NeighLib:
 			if not silent:
 				self.logging.warning(f"Column {column} already in dataframe, doing nothing due to existing_column='ignore_warn'")
 			return polars_df		
-		return polars_df.with_columns(expr_value).alias(column)
+		return polars_df.with_columns(expr_value.alias(column))
 
 	def drop_column(self, polars_df, column, strict=True, silent=False):
 		"""Verbose wrapper for polars.drop()"""
