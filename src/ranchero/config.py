@@ -188,7 +188,6 @@ class RancheroConfig:
 		defaults = self.read_config()
 		self._check_and_set_parameters(defaults)
 		self.logger = self._setup_logger()
-		self.taxoncore_ruleset = self.prepare_taxoncore_dictionary()
 
 	def update_config(self, path) -> None:
 		"""
@@ -243,27 +242,7 @@ class RancheroConfig:
 		else:
 			return getattr(self, option)
 			
-	def prepare_taxoncore_dictionary(self, tsv=None):
-		if tsv is None:
-			tsv_path = resources.files(__package__).joinpath(
-				"statics/taxoncore_v4.tsv"
-			)
-		else:
-			tsv_path = tsv
-
-		with open(tsv_path, 'r') as tsvfile:
-			taxoncore_rules = []
-			for row in csv.DictReader(tsvfile, delimiter='\t'):
-				rule = {
-					"when": row["when"],
-					"strain": pl.Null if row["strain"] == "None" else row["strain"],
-					"lineage": pl.Null if row["lineage"] == "None" else row["lineage"],
-					"organism": row["organism"],
-					"group": row["bacterial group"],
-					"comment": row["comment"]
-				}
-				taxoncore_rules.append(rule)
-		return taxoncore_rules
+	
 
 	def _setup_logger(self) -> logging.Logger:
 		"""Sets up a logger instance"""
