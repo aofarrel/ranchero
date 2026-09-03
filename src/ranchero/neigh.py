@@ -605,16 +605,17 @@ class NeighLib:
 				print(polars_df.filter(pl.col(column).is_not_null()).select(cols_to_print))
 
 	def print_value_counts(self, polars_df, only_these_columns=None, skip_ids=True):
-		for column in polars_df.columns:
-			if skip_ids and column not in kolumns.id_columns:
-				if only_these_columns is None or column in only_these_columns:
-					with pl.Config(fmt_str_lengths=500, tbl_rows=50, set_tbl_hide_column_data_types=True):
-						counts = polars_df.select([pl.col(column).value_counts(sort=True)])
-						print(counts)
+		with pl.Config(fmt_str_lengths=500, tbl_rows=50, set_tbl_hide_column_data_types=True, set_tbl_hide_dataframe_shape=True):
+			for column in polars_df.columns:
+				if skip_ids and column not in kolumns.id_columns:
+					if only_these_columns is None or column in only_these_columns:
+							counts = polars_df.select([pl.col(column).value_counts(sort=True)])
+							print(f"Value counts for the {counts.height} unique values in {column}:")
+							print(counts)
+					else:
+						continue
 				else:
 					continue
-			else:
-				continue
 
 	@staticmethod
 	def wide_print_polars(polars_df, header, these_columns):
@@ -2156,7 +2157,7 @@ class NeighLib:
 					dropped.append(column)
 					polars_df = polars_df.drop(column)
 		
-		self.logging.info(f"Removed {starting_columns - polars_df.shape[1]} columns")
+		self.logging.info(f"Removed {starting_columns - polars_df.shape[1]} columns for having too many null values")
 		self.logging.debug(f"Dropped columns: {dropped}")
 		return polars_df
 
