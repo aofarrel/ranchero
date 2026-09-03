@@ -37,7 +37,7 @@ def inital_file_parse():
 	print(f"Standardized in {time.time() - start:.4f} seconds")
 	print("Standardization allows us to properly determine what organisms are at play here:")
 	Ranchero.NeighLib.print_value_counts(tba6, ['organism', 'clade'])
-	start, tba6 = time.time(), Ranchero.NeighLib.drop_mostly_null_cols(tba6, minimum_pct=9) # we want latlon and strain
+	start, tba6 = time.time(), Ranchero.NeighLib.drop_mostly_null_cols(tba6, minimum_pct=0.09) # we want latlon and strain
 
 	print(f"Removed columns with few values in {time.time() - start:.4f}s seconds") # should be done last
 	Ranchero.NeighLib.report(tba6)
