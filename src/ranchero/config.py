@@ -183,11 +183,19 @@ def _validate_against_annotation(option: str, value, expected_type) -> None:
 
 class RancheroConfig:
 
+	# TODO: update_config() should maybe just call this with a new path?
 	def __init__(self):
 		defaults = self.read_config()
 		self._check_and_set_parameters(defaults)
 		self.logger = self._setup_logger()
 		self.taxoncore_ruleset = self.prepare_taxoncore_dictionary()
+
+	def update_config(self, path) -> None:
+		"""
+		For updating config based on config.yaml passed in by the user
+		"""
+		new_parameters = self.read_config()
+		self.set_config(new_parameters)
 
 	def set_config(self, parameter_dictionary) -> None:
 		"""

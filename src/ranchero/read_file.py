@@ -84,7 +84,7 @@ class FileReader():
 		polars_df = polars_df.drop(drop_columns)
 		if check_index: polars_df = self.NeighLib.check_index(polars_df, df_name=os.path.basename(csv))
 		if auto_rancheroize: 
-			polars_df = self.NeighLib.rancheroize_polars(polars_df)
+			polars_df = self.NeighLib.rancheroize(polars_df)
 			if auto_standardize:
 				polars_df = self.Standardizer.standardize_everything(polars_df)	
 		return polars_df
@@ -157,7 +157,7 @@ class FileReader():
 				delimiter=explode_upon, drop_new_non_unique=check_index)
 		if auto_rancheroize:
 			self.logging.info(f"Rancheroizing dataframe from {df_name}...")
-			polars_df = self.NeighLib.rancheroize_polars(polars_df, input_index=index)
+			polars_df = self.NeighLib.rancheroize(polars_df, input_index=index)
 			if auto_standardize:
 				self.logging.info(f"Standardizing dataframe from {df_name}...")
 				polars_df = self.Standardizer.standardize_everything(polars_df)
@@ -543,15 +543,15 @@ class FileReader():
 				exit(1)
 		polars_df = polars_df.drop(drop_columns)
 
-		if normalize_attributes and "attributes" in polars_df.columns:  # if column doesn't exist, return false
-			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df, rancheroize=auto_rancheroize)
+		if normalize_attributes and "attributes" in polars_df.columns:
+			self.logging.info("Found attributes column. Exploding on this column for metadata...")
+			polars_df = self.polars_fix_attributes_and_json_normalize(polars_df, rancheroize=False) # will do so later
 		if auto_rancheroize:
-			if self.NeighLib.get_index(polars_df) == self.NeighLib.get_hypothetical_index_fullname('run_id'):
-				# in case json_normalize also ran rancheroize
-				# TODO: should we really allow rancheroize to run twice like that?
-				polars_df = self.NeighLib.rancheroize_polars(polars_df)
+			if 'acc' in polars_df.columns:
+				polars_df = self.NeighLib.rancheroize(polars_df, input_index='acc')
 			else:
-				polars_df = self.NeighLib.rancheroize_polars(polars_df, input_index='acc')
+				self.logging.warning("polars_from_bigquery() got a dataframe without column 'acc', this file might have the expected NCBI format")
+				polars_df = self.NeighLib.rancheroize(polars_df)
 		if auto_standardize:
 			polars_df = self.Standardizer.standardize_everything(polars_df)
 		return polars_df
@@ -582,7 +582,7 @@ class FileReader():
 			bq_jnorm = pl.concat([polars_df.drop('attributes'), just_attributes_df], how="horizontal")
 		self.logging.info(f"An additional {len(just_attributes_df.columns)} columns were added from split 'attributes' column, for a total of {len(bq_jnorm.columns)}")
 		if self.logging.getEffectiveLevel() == 10: self.logging.debug(f"Columns added: {just_attributes_df.columns}")
-		if rancheroize: bq_jnorm = self.NeighLib.rancheroize_polars(bq_jnorm)
+		if rancheroize: bq_jnorm = self.NeighLib.rancheroize(bq_jnorm)
 		if self.cfg.intermediate_files: self.NeighLib.polars_to_tsv(bq_jnorm, f'./intermediate/normalized_pure_polars.tsv')
 		return bq_jnorm
 
@@ -725,7 +725,7 @@ class FileReader():
 
 		if not skip_rancheroize:
 			self.logging.info("Rancheroizing run-indexed dataframe first (skip this by setting skip_rancheroize)...")
-			polars_df = self.NeighLib.rancheroize_polars(polars_df) # runs check_index() too, and converts __index__acc
+			polars_df = self.NeighLib.rancheroize(polars_df) # runs check_index() too, and converts __index__acc
 
 		# try to reduce the number of lists being concatenated -- this does mean running group_by() twice
 		version_with_nested_lists = self.run_to_sample_grouping_clever_method(polars_df, current_run_id, current_sample_id)
@@ -768,7 +768,7 @@ class FileReader():
 		* intermediate_files (set)
 		* verbose (set)
 		"""
-		self.logging.warning("Temporarily converting polars dataframe to pandas (this requires importing pandas which may add >10 seconds)")
+		self.logging.debug("Temporarily converting polars dataframe to pandas (this requires importing pandas which may add >10 seconds)")
 		temp_pandas_df = polars_df.to_pandas()  # TODO: probably faster to just convert the attributes column
 		cast_types = self._default_fallback('auto_cast_types', auto_cast_types)
 		rancheroize = self._default_fallback('auto_rancheroize', rancheroize)
@@ -784,8 +784,10 @@ class FileReader():
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].progress_apply(self.NeighLib.concat_dicts)
 			else:
 				temp_pandas_df['attributes'] = temp_pandas_df['attributes'].apply(self.NeighLib.concat_dicts)
-		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'], rancheroize=rancheroize)
-		if rancheroize: normalized = self.NeighLib.rancheroize_polars(normalized)
+		normalized = self.polars_json_normalize(polars_df, temp_pandas_df['attributes'], rancheroize=False) # don't do it twice
+		if rancheroize: normalized = self.NeighLib.rancheroize(normalized)
 		if cast_types: normalized = self.NeighLib.cast_politely(normalized)
-		if self.cfg.intermediate_files: self.NeighLib.polars_to_tsv(normalized, f'./intermediate/flatdicts.tsv')
+		if self.cfg.intermediate_files: 
+			self.logging.info("Per config, writing intermediate file ./intermediate/flatdicts.tsv")
+			self.NeighLib.polars_to_tsv(normalized, './intermediate/flatdicts.tsv')
 		return normalized

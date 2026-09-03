@@ -1312,7 +1312,7 @@ class NeighLib:
 			.select("BioProject").unique().to_series().to_list()
 		)
 	
-	def rancheroize_polars(self,
+	def rancheroize(self,
 			polars_df:  pl.DataFrame,
 			drop_non_mycobact_columns=False,
 			nullify=True,
@@ -1352,8 +1352,8 @@ class NeighLib:
 		output_index:
 			Name of a column currently NOT IN dataframe that you want to rename the index to. If you provide a value that doesn't have INDEX_PREFIX, it
 			will be added on for compatibility purposes. For example:
-			rancheroize_polars(index="run", output_index="runacc")          --> renames "run" to "__index__runacc" (assuming INDEX_PREFIX is __index__)
-			rancheroize_polars(index="run", output_index="__index__runacc") --> renames "run" to "__index__runacc" (assuming INDEX_PREFIX is __index__)
+			rancheroize(index="run", output_index="runacc")          --> renames "run" to "__index__runacc" (assuming INDEX_PREFIX is __index__)
+			rancheroize(index="run", output_index="__index__runacc") --> renames "run" to "__index__runacc" (assuming INDEX_PREFIX is __index__)
 		standardize_index:
 			If index column seems to match something in kolumns.id_columns, rename it to its standardized name in the same way you would rename anything
 			else per kolumns.equivalence.items(). For more examples, see documentation in kolumns.py
@@ -1377,21 +1377,22 @@ class NeighLib:
 			self.logging.warning(warnL1+warnL2)
 
 		# 1: Do we know what the index actually is?
+		self.logging.debug("[1] Define/Check index")
 		
 		# Dataframe does not have a marked index (or it has multiple marked indeces)
 		if not self.has_one_index_column(polars_df):
-			self.logging.debug("[!has_one_index_column] Stripping any and all index markers")
+			self.logging.debug("Dataframe has non-1 number of marked indeces")
 			polars_df = self.strip_index_markers(polars_df) # strips ALL marked index columns (in case there's multiple)
 			
 			# We have not-1 index, and user didn't define an index
 			if input_index is None:
-				self.logging.debug("[!has_one_index_column] User did not provide an index so we have to guess the correct one")
-				self.logging.warning(f"Guessing {df_name}'s index...")
+				self.logging.debug("Dataframe had non-1 number of marked indeces, and user did not provide an index")
 				current_index = self.get_index(polars_df, guess=True)
+				self.logging.warning(f"Index was not provided for {df_name}, but it seems to be {current_index}")
 			
 			# We have not-1 index, but user defined an index
 			else:
-				self.logging.debug(f"[!has_one_index_column] User did provide index={input_index}")
+				self.logging.debug(f"Dataframe had non-1 number of marked indeces, and user provided index={input_index}")
 				# Because we cleared all INDEX_PREFIX-marked columns, if user included INDEX_PREFIX, then
 				# input_index will not be in the dataframe at the moment
 				current_index = self.get_hypothetical_index_basename(input_index)
@@ -1403,7 +1404,7 @@ class NeighLib:
 			assert marked_index == expected_index
 			index = marked_index
 			current_index, marked_index, expected_index = None, None, None
-			self.logging.debug(f"[!has_one_index_column] Index is now {index}")
+			self.logging.debug(f"Dataframe had non-1 number of marked indeces, but now index is {index}")
 
 		# Dataframe seems to have one marked index, and there is an input_index
 		elif input_index is not None:
@@ -1421,10 +1422,11 @@ class NeighLib:
 
 		# No input_index provided but there is a marked index (has_one_index_column() is only true if one marked index col)
 		else:
-			self.logging.debug(f"No input_index provided, but there is a marked index already at {self.get_index(polars_df, guess=False)}")
 			index = self.get_index(polars_df, guess=False)
-
+			self.logging.debug(f"No input_index provided, but there is a single marked index already at {index}")
+			
 		# 2. Okay, we know what the index is, but do we have to change it?
+		self.logging.debug("[2] Do we have to change the index?")
 		index_could_be_standardized = any(self.get_hypothetical_index_basename(index) in v for v in kolumns.equivalence_id_columns.values())
 		self.logging.debug(f"index_could_be_standardized: {index_could_be_standardized}")
 
@@ -1478,9 +1480,9 @@ class NeighLib:
 			# check we didn't mess with the index, which can happen with null stuff
 			if check_index and index is not None:
 				assert index in polars_df.columns
-				assert self.get_null_count_in_column(polars_df, index) == 0
+				assert self.get_null_count_in_column(polars_df, index, warn=False) == 0
 			elif check_index:
-				assert self.get_null_count_in_column(polars_df, self.guess_index_column(polars_df)) == 0
+				assert self.get_null_count_in_column(polars_df, self.guess_index_column(polars_df), warn=False) == 0
 		if flatten:
 			polars_df = self.flatten_all_list_cols_as_much_as_possible(polars_df, force_strings=False, skip_taxoncore_entirely=True) # this makes merging better for "geo_loc_name_sam"
 		if disallow_right:
@@ -1492,7 +1494,7 @@ class NeighLib:
 		for column in polars_df.columns:
 			if column in kolumns.equivalence['date_collected']:
 				if polars_df[column].dtype is not pl.Date:
-					self.logging.warning(f"Found likely date column {column}, but it has type {polars_df[column].dtype} (will take no action)")
+					self.logging.info(f"Found likely date column {column}, but it has type {polars_df[column].dtype} (will take no action)")
 				else:
 					self.logging.debug(f"Likely date column {column} has pl.Date type")
 
@@ -1574,14 +1576,14 @@ class NeighLib:
 		if polars_df.schema[column] == pl.List:
 			polars_df = self.null_list_of_len_zero(polars_df, column)
 			if len(self.get_rows_where_list_col_more_than_one_value(polars_df, column)) == 0:
-				if self.get_null_count_in_column(polars_df, column) == polars_df.shape[0]:
+				if self.get_null_count_in_column(polars_df, column, warn=False) == polars_df.shape[0]:
 					self.logging.error(f"{column} seems to already be full of nulls?")
 					self.dfprint(polars_df.select(column), rows=20, loglevel=40)
 					exit(1)
 				self.logging.debug(f"{arrow}Can delist {column} (and it's not currently full of nulls)")
 				self.dfprint(polars_df.select(column), rows=5, loglevel=10)
 				polars_df = polars_df.with_columns(pl.col(column).list.first().alias(column))
-				if self.get_null_count_in_column(polars_df, column) == polars_df.shape[0]:
+				if self.get_null_count_in_column(polars_df, column, warn=False) == polars_df.shape[0]:
 					self.logging.error(f"Oops, we converted everything in {column} to null")
 					self.dfprint(polars_df.select(column), rows=20, loglevel=40)
 					exit(1)
@@ -1898,10 +1900,9 @@ class NeighLib:
 					for kolumn in kolumns.special_taxonomic_handling:
 						if kolumn in polars_df.columns and polars_df.schema[kolumn] == pl.List:
 							polars_df = polars_df.with_columns(pl.col(kolumn).list.unique())
-							dataframe_height = polars_df.shape[1]
+							shape_before_drop_nulls = polars_df.shape
 							polars_df = self.drop_nulls_from_possible_list_column(polars_df, kolumn)
-							current_dataframe_height = polars_df.shape[1]
-							assert dataframe_height == current_dataframe_height
+							assert polars_df.shape == shape_before_drop_nulls
 							polars_df = self.coerce_to_not_list_if_possible(polars_df, kolumn, prefix_arrow=True)
 					
 					if polars_df.schema[col] == pl.List: # since it might not be after coerce_to_not_list_if_possible()
@@ -2038,7 +2039,7 @@ class NeighLib:
 						self.logging.debug(f"Column ran through coerce, is now type {polars_df.schema[col]}")
 				else:
 					# list.unique() does not work on nested lists so you better hope you removed them earlier!
-					self.logging.warning(f"{col} (type {type(polars_df.schema[col])})-->Not sure how to handle, will treat it as a set")
+					self.logging.debug(f"{col} (type {type(polars_df.schema[col])})-->Not sure how to handle, will treat it as a set")
 					assert polars_df.schema[col] == pl.List
 					polars_df = polars_df.with_columns(pl.col(col).list.unique().alias(f"{col}"))
 					polars_df = self.coerce_to_not_list_if_possible(polars_df, col, prefix_arrow=True)
@@ -2307,13 +2308,67 @@ class NeighLib:
 				polars_df = self.encode_as_str(polars_df, col)
 		return polars_df
 
-	def add_column_of_just_this_value(self, polars_df, column, value):
-		assert column not in polars_df.columns
-		return polars_df.with_columns(pl.lit(value).alias(column))
+	def add_column(self, polars_df, column, value=None, strict=True, silent=False):
+		"""
+		Essentially a verbose wrapper for polars_df.with_columns((value).alias(column)) that replaces add_column_of_just_this_value()
+		and an older add-column-if-not-there functionality
 
-	def drop_column(self, polars_df, column):
-		assert column in polars_df.columns
-		return polars_df.drop(column)
+		strict: behavior if column of that name already exists
+		silent: do not warn if column of that name exists (if existing_column = error that error still fires)
+		--> silent currently is enabled by standardize.py calls to this function
+
+		Does not have an option to call overwrite_column() because type change stuff gets complicated
+		"""
+		expr_value = value if isinstance(value, pl.Expr) else pl.lit(value)
+		if column in polars_df.columns:
+			if strict:
+				self.logging.error(f"Column {column} already in dataframe, erroring due to existing_column='error'")
+				raise ValueError
+			if not silent:
+				self.logging.warning(f"Column {column} already in dataframe, doing nothing due to existing_column='ignore_warn'")
+			return polars_df		
+		return polars_df.with_columns(expr_value.alias(column))
+
+	def drop_column(self, polars_df, column, strict=True, silent=False):
+		"""Verbose wrapper for polars.drop()"""
+		if column not in polars_df.columns:
+			if strict:
+				self.logging.error(f"Column {column} not in dataframe (pass strict=False to allow this)")
+				raise ValueError
+			if not silent:
+				self.logging.warning(f"Column {column} not in dataframe, no changes will be made")
+			return polars_df
+		return polars_df.drop(column, strict=strict)
+
+	def overwrite_column(self, polars_df, column, value=None, strict=True, allow_type_change=False, no_warn_on_none=False, no_warn_on_type_change=False):
+		"""
+		Overwrite an existing column. This might change the columns polars type.
+		
+		TODO: Although polars-style variable name "strict" makes sense for add_column() and drop_column()
+		in this function it kinda implies allow_type_change() too?
+		"""
+		if column not in polars_df.columns:
+			if strict:
+				self.logging.error(f"Column {column} not in dataframe (pass strict=False to allow this)")
+				raise ValueError
+			self.logging.warning(f"Column {column} not in dataframe, no changes will be made -- to add a new column, use add_column() instead")
+			return polars_df
+		if value is None and not no_warn_on_none:
+			self.logging.warning(f"overwrite_column() called with value=None, this will completely null {column}")
+		# actually overwrite
+		# instead of drop and re-add, we will use with_columns() to avoid shuffling columns around
+		original_dtype = polars_df.schema[column]
+		expr_value = value if isinstance(value, pl.Expr) else pl.lit(value)
+		polars_df = polars_df.with_columns(expr_value.alias(column))
+		if original_dtype != polars_df.schema[column]:
+			if not allow_type_change:
+				raise TypeError(
+					f"Setting {column} to value {value} would have changed {column}'s type from {original_dtype} to {new_dtype}, "
+					f"set allow_type_change=True to allow this behavior"
+				)
+			if not no_warn_on_type_change:
+				self.logging.warning(f"Column {column} type changed from {original_dtype} to {new_dtype}")
+		return polars_df
 
 	def drop_null_columns(self, polars_df, and_non_null_type_full_of_nulls=False):
 		polars_df = polars_df.drop(cs.by_dtype(pl.Null))
