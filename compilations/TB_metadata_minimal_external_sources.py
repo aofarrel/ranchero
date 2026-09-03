@@ -22,6 +22,7 @@ module_start = time.time()
 
 def inital_file_parse():
 	#we don't immediately rancheroize as this is faster (probably)
+	print("Parsing file from BigQuery...")
 	start, tba6 = time.time(),Ranchero.from_bigquery("./inputs/BQ/tba6_no_tax_table_bq_2024-09-19.json_modified.json")
 	print(f"Parsed tba6 file from bigquery in {time.time() - start:.4f} seconds")  # should be under five minutes for tba5, less for tba6
 	start, tba6 = time.time(), Ranchero.drop_non_tb_columns(tba6)
@@ -29,13 +30,13 @@ def inital_file_parse():
 	tba6 = tba6.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'mbytes_sum_sum', 'geoloc_name'], strict=False)
 	Ranchero.NeighLib.print_value_counts(tba6, ['librarylayout', 'platform'])
 
-	start, tba6 = time.time(), Ranchero.rancheroize(tba6)
+	start, tba6 = time.time(), Ranchero.rancheroize(tba6, input_index="__index__run_id")
 	print(f"Rancheroized in {time.time() - start:.4f} seconds")
 
 	start, tba6 = time.time(), Ranchero.standardize_everything(tba6)
 	print(f"Standardized in {time.time() - start:.4f} seconds")
 
-	start, tba6 = time.time(), Ranchero.NeighLib.drop_mostly_null_cols(tba6)
+	start, tba6 = time.time(), Ranchero.NeighLib.drop_mostly_null_cols(tba6, minimum_count=5)
 	print(f"Removed columns with few values in {time.time() - start:.4f}s seconds") # should be done last
 	Ranchero.NeighLib.report(tba6)
 	return tba6
