@@ -28,15 +28,17 @@ def inital_file_parse():
 	start, tba6 = time.time(), Ranchero.drop_non_tb_columns(tba6)
 	print(f"Dropped non-TB-related columns in {time.time() - start:.4f} seconds")
 	tba6 = tba6.drop(['lat', 'lon', 'date_collected_year', 'date_collected_month', 'reason', 'host_info', 'geoloc_info', 'mbytes_sum_sum', 'geoloc_name'], strict=False)
-	Ranchero.NeighLib.print_value_counts(tba6, ['librarylayout', 'platform', 'clade', 'organism'])
+	Ranchero.NeighLib.print_value_counts(tba6, ['librarylayout', 'platform'])
 
 	start, tba6 = time.time(), Ranchero.rancheroize(tba6, input_index="__index__run_id")
 	print(f"Rancheroized in {time.time() - start:.4f} seconds")
 
 	start, tba6 = time.time(), Ranchero.standardize_everything(tba6)
 	print(f"Standardized in {time.time() - start:.4f} seconds")
+	print("Standardization allows us to properly determine what organisms are at play here:")
+	Ranchero.NeighLib.print_value_counts(tba6, ['organism', 'clade'])
+	start, tba6 = time.time(), Ranchero.NeighLib.drop_mostly_null_cols(tba6, minimum_pct=9) # we want latlon and strain
 
-	start, tba6 = time.time(), Ranchero.NeighLib.drop_mostly_null_cols(tba6, minimum_count=50)
 	print(f"Removed columns with few values in {time.time() - start:.4f}s seconds") # should be done last
 	Ranchero.NeighLib.report(tba6)
 	return tba6

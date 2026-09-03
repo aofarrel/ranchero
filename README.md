@@ -27,11 +27,11 @@ For information on what Ranchero considers "a sample" and the like, see [./docs/
  ## Installation
  Because ranchero currently relies on a very specific version of polars for consistent handling of null values, it is recommended to install it a [venv](https://docs.python.org/3/library/venv.html) like this:
  ```
- python3 -m venv ./buildvenv
- source buildvenv/bin/activate
+ python3 -m venv ./rancherovenv
+ source rancherovenv/bin/activate
  pip install ranchero
  ```
- If you are pip-installing as recommended above, all dependencies will be included.
+ For development branches not currently on pypi, `git clone` this repo, `cd` into top-level folder, switch to the branch you want, then `pip install -e src`
  
  ## Supported inputs
 
